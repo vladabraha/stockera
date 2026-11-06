@@ -37,10 +37,11 @@ Formát je popsán v [docs/xtb-format.md](docs/xtb-format.md), zdroje tržních 
 Ruční doplnění (ISIN, země akcie, složení ETF bez dat, zdroj cen): zkopíruj `config/instruments.example.json` do `data/instruments.json`.
 
 ## Přenos na jiný počítač (i Windows)
-Vše potřebné je ve složce projektu, nic se neinstaluje globálně ani nemění v systému.
+Vše potřebné je ve složce projektu; mimo ni jsou jen Node.js a pnpm.
 1. Zkopíruj celou složku **včetně `data/`** (databáze, výpisy, ruční konfigurace; `out/` a `node_modules/` není potřeba).
-2. Na cílovém počítači nainstaluj Node.js ≥ 24 a pnpm (`corepack enable` nebo instalátor pnpm).
-3. Ve složce spusť `pnpm install` a pak libovolný příkaz výše – skripty i cesty jsou multiplatformní.
+2. Spusť `instalace-windows.cmd` / `instalace-mac.command`: doinstaluje Node.js ≥ 24 (winget / Homebrew),
+   pnpm 10.18.1 (`npm install -g`) a závislosti projektu. Ručně: Node.js z nodejs.org, `npm install -g pnpm@10.18.1`, `pnpm install`.
+3. Aktualizace dvojklikem `aktualizovat-windows.cmd` / `aktualizovat-mac.command`, nebo libovolný příkaz výše.
 
 ## Vývoj
 ```bash
@@ -65,6 +66,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
 | `out/` | **výstupy – v .gitignore** (`stockera.html` zašifrovaně; `analysis.json` jen s `pnpm analyze --json`, nešifrovaně – po použití smazat) |
 | `config/` | vzor ruční konfigurace instrumentů |
+| `instalace-*`, `aktualizovat-*`, `scripts/` | dvojklikací skripty pro Windows (`.cmd` → `scripts/instalace.ps1`) a macOS (`.command`) |
 | `data/` | **osobní data – v .gitignore**: `input/` výpisy, `stockera.db` databáze, `instruments.json`, `logs/network.log` |
 
 ## Bezpečnost

@@ -37,6 +37,16 @@ Související: `docs/ZADANI.md` (zadání), `docs/xtb-format.md` (formát export
 Quirky `node:sqlite`: řádky mají null prototype (před `deepEqual` spread), `.all()` občas potřebuje `as unknown as T[]`,
 SQL řetězce v jednoduchých uvozovkách.
 
+### Instalační a spouštěcí skripty
+- `instalace-windows.cmd` (→ `scripts/instalace.ps1`) a `instalace-mac.command` jsou výjimka z pravidla „nic mimo
+  složku“: na výslovné přání uživatele doinstalují Node.js (winget `OpenJS.NodeJS.LTS` / Homebrew) a pnpm
+  (`npm install -g pnpm@10.18.1` – přesná verze kvůli `packageManager`). Bez winget/brew jen odkážou na nodejs.org.
+- `aktualizovat-*.cmd/.command` spouští `pnpm update-data`; `.cmd` obchází blokaci `pnpm.ps1` execution policy
+  v PowerShellu (nic v systému se nemění, `-ExecutionPolicy Bypass` platí jen pro daný proces).
+- `.cmd` soubory jen ASCII + CRLF (kódová stránka cmd), `.ps1` UTF-8 **s BOM** + CRLF (jinak PowerShell 5.1 rozbije
+  diakritiku), `.command` LF + spustitelný bit; hlídá `.gitattributes`. PowerShell skript nebyl spuštěn na Windows
+  (vývoj probíhal na macOS) – při první chybě opravit.
+
 ## 2. Vstup (XTB)
 
 - Hlavní zdroj = **export historie účtu z xStation (XLSX)**, každý subúčet (EUR, CZK) zvlášť. Listy
