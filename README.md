@@ -1,6 +1,6 @@
 # Stockera
 
-Lokální analýza portfolia z výpisů XTB. Data i výpočty zůstávají na tomto počítači – viz [zadání](docs/ZADANI.md).
+Lokální analýza portfolia z výpisů XTB. Data i výpočty zůstávají na tomto počítači – viz [zadání](docs/ZADANI.md) a [rozhodnutí](docs/ROZHODNUTI.md).
 
 ## Požadavky
 - Node.js ≥ 24 (vestavěné `node:sqlite`, `node:test`, spouštění TypeScriptu bez kompilace)
