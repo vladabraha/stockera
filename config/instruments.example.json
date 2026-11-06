@@ -1,0 +1,17 @@
+{
+  "$comment": "Zkopíruj do data/instruments.json a uprav. Klíč = ticker z XTB. Všechna pole jsou volitelná.",
+  "CSG.NL": {
+    "$comment": "Akcie: ISIN a země firmy (ISO kód). Bez nich se země odhadne podle ISIN nebo burzy.",
+    "isin": "NL0015073TS8",
+    "country": "CZ"
+  },
+  "XYZ.DE": {
+    "$comment": "ETF bez dat na justETF: ruční složení podle zemí v %, XX = ostatní.",
+    "countries": { "US": 60, "JP": 6, "GB": 4, "XX": 30 }
+  },
+  "ABC.US": {
+    "$comment": "priceSource: justetf | yahoo | none (none = hodnota jen z výpisu XTB).",
+    "priceSource": "yahoo",
+    "yahooSymbol": "ABC"
+  }
+}
