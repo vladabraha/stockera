@@ -1,0 +1,22 @@
+{
+  "name": "stockera",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lokální analýza portfolia z výpisů XTB",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "ingest": "node --disable-warning=ExperimentalWarning src/cli/import.ts",
+    "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm typecheck && pnpm test",
+    "audit": "pnpm audit"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  },
+  "packageManager": "pnpm@10.18.1"
+}

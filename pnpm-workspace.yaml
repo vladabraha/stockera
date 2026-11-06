@@ -1,0 +1,7 @@
+# Ochrana dodavatelského řetězce
+# Žádné install/postinstall skripty závislostí
+ignoreScripts: true
+# Instalovat jen verze publikované aspoň 3 dny (1440 min = 1 den)
+minimumReleaseAge: 4320
+# Přesné verze v package.json
+saveExact: true
