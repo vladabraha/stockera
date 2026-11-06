@@ -11,7 +11,7 @@
     "ingest": "node --disable-warning=ExperimentalWarning src/cli/import.ts",
     "market": "node --disable-warning=ExperimentalWarning src/cli/market.ts",
     "analyze": "node --disable-warning=ExperimentalWarning src/cli/analyze.ts",
-    "update-data": "pnpm -s ingest && pnpm -s market && pnpm -s analyze && pnpm -s report",
+    "update-data": "pnpm -s ingest && pnpm -s market && pnpm -s report",
     "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test",

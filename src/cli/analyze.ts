@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { openDatabase } from '../db/database.ts';
 import { analyze, type Analysis } from '../analysis/portfolio.ts';
@@ -17,12 +17,17 @@ const db = openDatabase(dbPath);
 const a = analyze(db);
 db.close();
 
-mkdirSync(outDir, { recursive: true });
 const jsonPath = join(outDir, 'analysis.json');
-writeFileSync(jsonPath, JSON.stringify(a, null, 2));
-
 print(a);
-console.log(`\nKompletní výsledek: ${jsonPath}`);
+if (process.argv.includes('--json')) {
+  mkdirSync(outDir, { recursive: true });
+  writeFileSync(jsonPath, JSON.stringify(a, null, 2), { mode: 0o600 });
+  console.log(`\nKompletní výsledek: ${jsonPath}`);
+  console.log('⚠ Soubor je NEŠIFROVANÝ (celé portfolio i čísla účtů) – po použití ho smaž.');
+} else if (existsSync(jsonPath)) {
+  rmSync(jsonPath);
+  console.log(`\nSmazán starý nešifrovaný ${jsonPath} (nový vytvoří \`pnpm analyze --json\`).`);
+}
 
 function print(a: Analysis): void {
   const asOf = a.summary.valueDate ? ` (ocenění k ${czDate(a.summary.valueDate)})` : '';

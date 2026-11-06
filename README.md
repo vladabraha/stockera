@@ -12,9 +12,9 @@ pnpm install          # jen vývojové nástroje (typescript, @types/node)
 # vlož export historie účtu z xStation (XLSX) do data/input/
 pnpm ingest           # import do data/stockera.db (opakovatelné, bez duplicit)
 pnpm market           # stažení kurzů ČNB, cen a složení ETF (jediný krok se sítí)
-pnpm analyze          # výpočty → výpis do terminálu + out/analysis.json
+pnpm analyze          # výpočty → výpis do terminálu (--json uloží i NEŠIFROVANÝ out/analysis.json)
 pnpm report           # zašifrovaný report out/stockera.html (zeptá se na heslo)
-pnpm update-data      # vše najednou: ingest + market + analyze + report
+pnpm update-data      # vše najednou: ingest + market + report
 ```
 
 ### HTML report
@@ -27,7 +27,8 @@ akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v 
   dešifrují se až v prohlížeči po zadání hesla. Heslo se nikam neukládá, tlačítko *Zamknout* data zahodí z paměti.
 - Content-Security-Policy zakazuje stránce jakoukoli síťovou komunikaci, povolený je jen vlastní vložený skript a styl.
 - Heslo: interaktivně (skryté zadání, 2×), nebo proměnnou `STOCKERA_PASSWORD`
-  (macOS/Linux `STOCKERA_PASSWORD=… pnpm report`, PowerShell `$env:STOCKERA_PASSWORD='…'; pnpm report`). Min. 8 znaků.
+  (macOS/Linux `STOCKERA_PASSWORD=… pnpm report`, PowerShell `$env:STOCKERA_PASSWORD='…'; pnpm report`). Min. 12 znaků.
+  Heslo z proměnné může zůstat v historii příkazů – bezpečnější je interaktivní zadání.
 - Zapomenuté heslo nevadí – report se dá kdykoli vygenerovat znovu z databáze s novým heslem.
 
 Export z xStation: **Historie účtu → zvolit celé období → Export (XLSX)**, pro každý subúčet zvlášť.
@@ -62,7 +63,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `src/report/` | HTML report: šifrování (`crypto`), frontend (`app.ts`, `styles.css`, bez knihoven), sestavení (`build`) |
 | `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`, `pnpm report`) |
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
-| `out/` | **výstupy – v .gitignore** (`analysis.json` nešifrovaně, `stockera.html` zašifrovaně) |
+| `out/` | **výstupy – v .gitignore** (`stockera.html` zašifrovaně; `analysis.json` jen s `pnpm analyze --json`, nešifrovaně – po použití smazat) |
 | `config/` | vzor ruční konfigurace instrumentů |
 | `data/` | **osobní data – v .gitignore**: `input/` výpisy, `stockera.db` databáze, `instruments.json`, `logs/network.log` |
 
@@ -72,7 +73,12 @@ pnpm audit        # kontrola zranitelností závislostí
 - Import ani výpočty nekomunikují po síti. Síť používá jen `pnpm market`, výhradně přes `src/net/http.ts`:
   - povolené servery: `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`, `query1/query2.finance.yahoo.com` (jiné, i při přesměrování, se zablokují),
   - posílá jen tickery, ISINy a data (ověřeno testem `tests/market.test.ts`), bez cookies,
-  - každý požadavek se zapíše do `data/logs/network.log`.
+  - každý požadavek se zapíše do `data/logs/network.log`,
+  - ceny se stahují od 1. 12. roku před prvním nákupem pro všechny tickery stejně (z požadavků nejde vyčíst, kdy jsi co koupil),
+  - odpovědi nad 20 MB se zahodí.
+- `data/stockera.db` a `network.log` mají na macOS/Linuxu práva jen pro vlastníka (600); na Windows platí oprávnění uživatelského profilu.
+- Nešifrovaný `out/analysis.json` vzniká jen na vyžádání (`pnpm analyze --json`); bez přepínače se starý smaže.
+- Bezpečnostní revize (security review) celého projektu: žádná zneužitelná chyba; doporučená zpevnění výše jsou zapracovaná.
 
 ## Fáze
 1. ✅ Import XLSX → SQLite, testy

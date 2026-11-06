@@ -70,6 +70,8 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     )
     .all() as { ticker: string; first_open: string }[];
   const firstDate = tickers.map((t) => t.first_open.slice(0, 10)).sort()[0];
+  // One shared, coarse start date for all tickers: price requests then don't reveal when each instrument was bought.
+  const priceStart = firstDate ? `${Number(firstDate.slice(0, 4)) - 1}-12-01` : '';
 
   // --- ČNB rates ------------------------------------------------------------
   if (firstDate) {
@@ -126,7 +128,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     return xetra?.get(mnemonic) ?? null;
   };
 
-  for (const { ticker, first_open } of tickers) {
+  for (const { ticker } of tickers) {
     const o = config[ticker] ?? {};
     const prev = metaStmt.get(ticker) as
       | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; updated_at: string }
@@ -185,7 +187,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     if (source !== 'none') {
       symbol = source === 'justetf' ? isin : (o.yahooSymbol ?? yahooSymbol(ticker));
       const last = (lastPriceStmt.get(ticker, source) as { d: string | null }).d;
-      const from = last ? addDays(last, -PRICE_OVERLAP_DAYS) : addDays(first_open.slice(0, 10), -PRICE_OVERLAP_DAYS);
+      const from = last ? addDays(last, -PRICE_OVERLAP_DAYS) : priceStart;
       if (!symbol) warnings.push(`${ticker}: neznámý symbol pro ${source} – doplň do data/instruments.json.`);
       else if (from <= opts.today) {
         log(`${ticker}: ceny (${source}) od ${from}…`);

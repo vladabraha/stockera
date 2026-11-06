@@ -7,7 +7,7 @@ import { buildReport } from '../report/build.ts';
 const root = resolve(import.meta.dirname, '../..');
 const dbPath = join(root, 'data/stockera.db');
 const outPath = join(root, 'out/stockera.html');
-const MIN_LENGTH = 8;
+const MIN_LENGTH = 12;
 
 if (!existsSync(dbPath)) {
   console.error('Databáze neexistuje – nejdřív spusť `pnpm ingest`.');
@@ -28,7 +28,11 @@ console.log('Soubor otevři v prohlížeči (funguje offline, i na mobilu). Hesl
 
 async function getPassword(): Promise<string> {
   const fromEnv = process.env.STOCKERA_PASSWORD;
-  if (fromEnv) return check(fromEnv);
+  delete process.env.STOCKERA_PASSWORD;
+  if (fromEnv) {
+    console.warn('⚠ Heslo z proměnné STOCKERA_PASSWORD může zůstat v historii příkazů – bezpečnější je zadat ho interaktivně.');
+    return check(fromEnv);
+  }
   if (!process.stdin.isTTY) {
     console.error('Chybí heslo: spusť příkaz v terminálu, nebo nastav proměnnou STOCKERA_PASSWORD.');
     process.exit(1);

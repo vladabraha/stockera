@@ -1,3 +1,4 @@
+import { chmodSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
 const MIGRATIONS: string[] = [
@@ -135,6 +136,7 @@ export type Db = DatabaseSync;
 
 export function openDatabase(path: string): Db {
   const db = new DatabaseSync(path);
+  if (path !== ':memory:') restrictToOwner(path);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   migrate(db);
   return db;
@@ -159,5 +161,14 @@ export function transaction<T>(db: Db, fn: () => T): T {
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
+  }
+}
+
+/** Owner-only access on macOS/Linux; a no-op on Windows (files there inherit the user-profile ACLs). */
+export function restrictToOwner(path: string): void {
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // best effort
   }
 }

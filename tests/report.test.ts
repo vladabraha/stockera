@@ -79,4 +79,6 @@ test('frontend script is plain JavaScript without module syntax', async () => {
   assert.ok(!/^\s*(import|export)\s/m.test(script));
   assert.ok(script.includes('decryptPayload'));
   assert.equal(toBrowserScript("import type { A } from './a.ts';\nexport const x: A = 1;\n").trim(), 'const x    = 1;');
+  assert.equal(toBrowserScript("import { a } from './a.ts'\nconst b = a;\n").trim(), 'const b = a;');
+  assert.throws(() => toBrowserScript("import {\n  a,\n} from './a.ts';\nconst b = a;\n"), /import\/export/);
 });

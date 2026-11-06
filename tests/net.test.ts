@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BlockedRequestError, Http, HttpError } from '../src/net/http.ts';
+import { BlockedRequestError, Http, HttpError, MAX_BODY_BYTES } from '../src/net/http.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
 import {
   countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, yahooSymbol,
@@ -52,6 +52,23 @@ test('Http follows allowed redirects, throws on errors and writes the audit log'
   } finally {
     rmSync(dir, { recursive: true });
   }
+});
+
+test('Http rejects oversized responses even without Content-Length', async () => {
+  const chunk = new Uint8Array(1024 * 1024);
+  const huge = () =>
+    new ReadableStream<Uint8Array>({
+      pull(c) {
+        c.enqueue(chunk);
+      },
+    });
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(() => new Response(huge())) });
+  await assert.rejects(http.getText('https://www.cnb.cz/huge'), /příliš velká/);
+  const declared = new Http({
+    minIntervalMs: 0,
+    fetch: fakeFetch(() => new Response('x', { headers: { 'content-length': String(MAX_BODY_BYTES + 1) } })),
+  });
+  await assert.rejects(declared.getText('https://www.cnb.cz/big'), /příliš velká/);
 });
 
 test('parseCnbYear handles amounts, decimal commas and repeated headers', () => {

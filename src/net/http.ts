@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 /**
@@ -15,6 +15,7 @@ export const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 60_000;
+export const MAX_BODY_BYTES = 20 * 1024 * 1024;
 const MIN_INTERVAL_MS = 400;
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
 
@@ -83,7 +84,7 @@ export class Http {
         current = new URL(location, current).toString();
         continue;
       }
-      const body = await res.text();
+      const body = await readLimited(res, current);
       this.audit({ url: current, status: res.status, bytes: Buffer.byteLength(body), ms: Date.now() - started });
       if (!res.ok) throw new HttpError(current, res.status);
       return body;
@@ -110,9 +111,38 @@ export class Http {
     this.lastRequest.set(host, Date.now());
   }
 
+  private logRestricted = false;
+
   private audit(e: Omit<AuditEntry, 'time'>): void {
     const entry: AuditEntry = { time: new Date().toISOString(), ...e };
     this.log.push(entry);
-    if (this.opts.auditLog) appendFileSync(this.opts.auditLog, JSON.stringify(entry) + '\n');
+    if (!this.opts.auditLog) return;
+    appendFileSync(this.opts.auditLog, JSON.stringify(entry) + '\n', { mode: 0o600 });
+    if (!this.logRestricted) {
+      this.logRestricted = true;
+      try {
+        chmodSync(this.opts.auditLog, 0o600);
+      } catch {
+        // best effort (no-op on Windows)
+      }
+    }
   }
+}
+
+/** Reads the body as text, aborting once it exceeds MAX_BODY_BYTES (protects against huge/hostile responses). */
+async function readLimited(res: Response, url: string): Promise<string> {
+  const declared = Number(res.headers.get('content-length') ?? 0);
+  if (declared > MAX_BODY_BYTES) throw new Error(`Odpověď je příliš velká (${declared} B): ${url}`);
+  if (!res.body) return '';
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
+    size += chunk.byteLength;
+    if (size > MAX_BODY_BYTES) {
+      await res.body.cancel().catch(() => {});
+      throw new Error(`Odpověď je příliš velká (> ${MAX_BODY_BYTES} B): ${url}`);
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }

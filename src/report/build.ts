@@ -9,10 +9,11 @@ const dir = import.meta.dirname;
 
 /** Type-strips a frontend source file and turns it into plain script code (no imports/exports). */
 export function toBrowserScript(source: string): string {
-  const js = stripTypeScriptTypes(source, { mode: 'strip' });
-  return js
-    .replace(/^\s*import\s[^;]*;/gm, '')
+  const js = stripTypeScriptTypes(source, { mode: 'strip' })
+    .replace(/^import\s[^;\n]*\sfrom\s+'[^'\n]+';?[ \t]*$/gm, '')
     .replace(/^export\s+/gm, '');
+  if (/^\s*(import|export)\b/m.test(js)) throw new Error('Frontend obsahuje import/export, který nejde převést na skript.');
+  return js;
 }
 
 /** Bundled frontend: crypto helpers + app, wrapped so nothing leaks into the global scope. */
