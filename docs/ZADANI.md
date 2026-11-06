@@ -40,6 +40,15 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 - Akciové splity.
 - Vklady/výběry → výnos vs. vložené peníze.
 
+### Podrobnosti daňových výpočtů (implementováno ve fázi 2, `src/analysis/`)
+- Časový test se posuzuje **po lotech**: první den bez daně = 3. výročí nákupu + 1 den (29. 2. → 28. 2. + 1 den).
+- Limit 100 000 Kč: součet **hrubých příjmů z prodejů** v roce (ne zisků), vše-nebo-nic. Konzervativně se započítávají všechny prodeje včetně těch po časovém testu.
+- Při překročení limitu: základ = zisky − ztráty z prodejů bez časového testu v daném roce, nejméně 0; ztráty se nepřevádějí do dalších let.
+- Strop 40 mil. Kč pro příjmy osvobozené časovým testem se hlídá jen pro rok 2025 (od 2026 u cenných papírů zrušen).
+- Kurzy: náklad kurzem ČNB ke dni nákupu, příjem ke dni prodeje; víkend/svátek = poslední fixing (max. 7 dní starý). Bez kurzu jsou částky v Kč/EUR `null` a limit má stav „nelze posoudit“.
+- Hodnota pořízení/prodeje: přednostně částka peněžní operace XTB, jinak sloupce XTB, jinak cena × objem.
+- Kontrola úplnosti: pokud peněžní operace začínají později než nejstarší nákup, analýza varuje (vklady a zůstatek by nesouhlasily).
+
 ## Frontend
 - Přepínání měny zobrazení **CZK / EUR**.
 - **Tab 1 – Aktuální portfolio**

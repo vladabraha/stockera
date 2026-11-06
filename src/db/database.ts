@@ -91,6 +91,16 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (account_number, position_id)
   );
   `,
+  `
+  -- Exchange rates: CZK per 1 unit of currency, valid from the given date (ČNB daily fixing)
+  CREATE TABLE fx_rates (
+    currency     TEXT NOT NULL,
+    date         TEXT NOT NULL,
+    czk_per_unit REAL NOT NULL,
+    source       TEXT NOT NULL,
+    PRIMARY KEY (currency, date)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

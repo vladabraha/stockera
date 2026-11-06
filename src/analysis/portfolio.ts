@@ -1,0 +1,442 @@
+import type { Db } from '../db/database.ts';
+import { daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
+import { checkFifo, type FifoMismatch } from './fifo.ts';
+import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
+import { loadLots, type ValueSource } from './lots.ts';
+
+/** Annual tax-exempt limit for gross income from selling securities (§4(1)(w) ZDP). */
+export const SALES_LIMIT_CZK = 100_000;
+/** 2025 only: cap on income exempted by the time test. */
+export const TIME_TEST_CAP_CZK = 40_000_000;
+export const TIME_TEST_CAP_YEARS = new Set([2025]);
+
+export interface HoldingLot {
+  accountNumber: string;
+  positionId: string;
+  openTime: string;
+  openDate: string;
+  quantity: number;
+  openPrice: number;
+  cost: Money;
+  costSource: ValueSource | 'xtb-profit';
+  value: Money | null;
+  profit: Money | null;
+  profitPct: Percent | null;
+  taxFreeFrom: string;
+  taxFree: boolean;
+  daysUntilTaxFree: number;
+}
+
+export interface Holding {
+  ticker: string;
+  name: string | null;
+  category: string | null;
+  quantity: number;
+  cost: Totals;
+  value: Totals;
+  profit: Totals;
+  profitPct: Percent;
+  taxFreeQuantity: number;
+  nextTaxFreeDate: string | null;
+  lots: HoldingLot[];
+}
+
+export interface RealizedLot {
+  accountNumber: string;
+  positionId: string;
+  quantity: number;
+  openTime: string;
+  closeTime: string;
+  openDate: string;
+  closeDate: string;
+  openPrice: number;
+  closePrice: number;
+  holdingDays: number;
+  timeTestMet: boolean;
+  cost: Money;
+  proceeds: Money;
+  profit: Money;
+  profitPct: Percent;
+  xtbProfit: number;
+}
+
+export interface RealizedInstrument {
+  ticker: string;
+  name: string | null;
+  category: string | null;
+  quantity: number;
+  cost: Totals;
+  proceeds: Totals;
+  profit: Totals;
+  profitPct: Percent;
+  firstSale: string;
+  lastSale: string;
+  lots: RealizedLot[];
+}
+
+export interface TaxYear {
+  year: number;
+  salesCount: number;
+  /** Gross proceeds of all sales (counts towards the 100 000 Kč limit). */
+  proceeds: Totals;
+  limitStatus: 'within' | 'exceeded' | 'unknown';
+  limitRemainingCzk: number | null;
+  timeTestedProceeds: Totals;
+  /** Sales that are neither time-tested nor covered by the limit. */
+  taxable: { count: number; proceeds: Totals; cost: Totals; profit: Totals; baseCzk: number | null };
+  timeTestCapExceeded: boolean | null;
+}
+
+export type CashKind =
+  | 'deposit' | 'withdrawal' | 'dividend' | 'withholding-tax' | 'interest' | 'interest-tax' | 'fee' | 'trade' | 'other';
+
+export interface CashFlow {
+  accountNumber: string;
+  currency: string;
+  firstOperation: string | null;
+  lastOperation: string | null;
+  /** Cash operations cover the whole history (start before the first known purchase). */
+  historyComplete: boolean;
+  balance: number;
+  byKind: Partial<Record<CashKind, Totals>>;
+}
+
+export interface DividendSummary {
+  ticker: string;
+  name: string | null;
+  year: number;
+  gross: Totals;
+  withholdingTax: Totals;
+  net: Totals;
+}
+
+export interface Summary {
+  value: Totals;
+  cost: Totals;
+  unrealizedProfit: Totals;
+  unrealizedPct: Percent;
+  realizedProfit: Totals;
+  dividendsNet: Totals;
+  deposits: Totals;
+  withdrawals: Totals;
+}
+
+export interface Analysis {
+  generatedAt: string;
+  today: string;
+  snapshotAsOf: string | null;
+  accounts: { accountNumber: string; currency: string | null }[];
+  summary: Summary;
+  holdings: Holding[];
+  realized: RealizedInstrument[];
+  taxYears: TaxYear[];
+  dividends: DividendSummary[];
+  cashFlows: CashFlow[];
+  checks: { fifoMismatches: FifoMismatch[]; missingRates: string[]; warnings: string[] };
+}
+
+export interface AnalyzeOptions {
+  /** Reference day (YYYY-MM-DD, Prague) for time-test countdowns. Defaults to today. */
+  today?: string;
+  fx?: FxRates;
+}
+
+export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
+  const today = options.today ?? pragueDate(new Date().toISOString());
+  const conv = new Converter(options.fx ?? new DbFxRates(db));
+  const loaded = loadLots(db);
+  const warnings = [...loaded.warnings];
+
+  const instruments = new Map(
+    (db.prepare('SELECT ticker, name, category FROM instruments').all() as {
+      ticker: string;
+      name: string | null;
+      category: string | null;
+    }[]).map((i) => [i.ticker, i]),
+  );
+  const info = (ticker: string) => ({
+    name: instruments.get(ticker)?.name ?? null,
+    category: instruments.get(ticker)?.category ?? null,
+  });
+
+  // --- holdings -------------------------------------------------------------
+  const valueDate = loaded.snapshotAsOf ? pragueDate(loaded.snapshotAsOf) : today;
+  const holdingLots = new Map<string, HoldingLot[]>();
+  for (const l of loaded.open) {
+    const openDate = pragueDate(l.openTime);
+    const free = taxFreeFrom(openDate);
+    const cost = conv.money(l.cost, l.currency, openDate);
+    const value = l.value == null ? null : conv.money(l.value, l.currency, valueDate);
+    const profit = value ? diffMoney(value, cost) : null;
+    const lot: HoldingLot = {
+      accountNumber: l.accountNumber,
+      positionId: l.positionId,
+      openTime: l.openTime,
+      openDate,
+      quantity: l.volume,
+      openPrice: l.openPrice,
+      cost,
+      costSource: l.costSource,
+      value,
+      profit,
+      profitPct: profit ? percent(sumMoney([profit]), sumMoney([cost])) : null,
+      taxFreeFrom: free,
+      taxFree: today >= free,
+      daysUntilTaxFree: Math.max(0, daysBetween(today, free)),
+    };
+    holdingLots.set(l.ticker, [...(holdingLots.get(l.ticker) ?? []), lot]);
+  }
+  const holdings: Holding[] = [...holdingLots.entries()].map(([ticker, lots]) => {
+    const cost = sumMoney(lots.map((l) => l.cost));
+    const value = sumMoney(lots.flatMap((l) => (l.value ? [l.value] : [])));
+    const profit = subTotals(value, cost);
+    const pending = lots.filter((l) => !l.taxFree).map((l) => l.taxFreeFrom).sort();
+    return {
+      ticker,
+      ...info(ticker),
+      quantity: lots.reduce((a, l) => a + l.quantity, 0),
+      cost,
+      value,
+      profit,
+      profitPct: percent(profit, cost),
+      taxFreeQuantity: lots.filter((l) => l.taxFree).reduce((a, l) => a + l.quantity, 0),
+      nextTaxFreeDate: pending[0] ?? null,
+      lots: lots.sort((a, b) => a.openTime.localeCompare(b.openTime)),
+    };
+  });
+  holdings.sort((a, b) => nativeTotal(b.value) - nativeTotal(a.value));
+
+  // --- realized -------------------------------------------------------------
+  const realizedLots = new Map<string, RealizedLot[]>();
+  for (const c of loaded.closed) {
+    const openDate = pragueDate(c.openTime);
+    const closeDate = pragueDate(c.closeTime);
+    const cost = conv.money(c.cost, c.currency, openDate);
+    const proceeds = conv.money(c.proceeds, c.currency, closeDate);
+    const profit = diffMoney(proceeds, cost);
+    realizedLots.set(c.ticker, [
+      ...(realizedLots.get(c.ticker) ?? []),
+      {
+        accountNumber: c.accountNumber,
+        positionId: c.positionId,
+        quantity: c.volume,
+        openTime: c.openTime,
+        closeTime: c.closeTime,
+        openDate,
+        closeDate,
+        openPrice: c.openPrice,
+        closePrice: c.closePrice,
+        holdingDays: daysBetween(openDate, closeDate),
+        timeTestMet: closeDate >= taxFreeFrom(openDate),
+        cost,
+        proceeds,
+        profit,
+        profitPct: percent(sumMoney([profit]), sumMoney([cost])),
+        xtbProfit: c.xtbProfit,
+      },
+    ]);
+  }
+  const realized: RealizedInstrument[] = [...realizedLots.entries()].map(([ticker, lots]) => {
+    lots.sort((a, b) => b.closeTime.localeCompare(a.closeTime) || a.openTime.localeCompare(b.openTime));
+    const cost = sumMoney(lots.map((l) => l.cost));
+    const proceeds = sumMoney(lots.map((l) => l.proceeds));
+    const profit = subTotals(proceeds, cost);
+    return {
+      ticker,
+      ...info(ticker),
+      quantity: lots.reduce((a, l) => a + l.quantity, 0),
+      cost,
+      proceeds,
+      profit,
+      profitPct: percent(profit, cost),
+      firstSale: lots[lots.length - 1]!.closeDate,
+      lastSale: lots[0]!.closeDate,
+      lots,
+    };
+  });
+  realized.sort((a, b) => b.lastSale.localeCompare(a.lastSale));
+
+  const taxYears = computeTaxYears(realized.flatMap((r) => r.lots));
+
+  // --- cash flows & dividends ----------------------------------------------
+  const ops = db
+    .prepare(
+      `SELECT o.account_number, a.currency, o.type, o.ticker, o.time_utc, o.amount
+       FROM cash_operations o JOIN accounts a USING (account_number) ORDER BY o.time_utc`,
+    )
+    .all() as { account_number: string; currency: string | null; type: string; ticker: string | null; time_utc: string; amount: number }[];
+
+  const earliestLot = new Map<string, string>();
+  for (const l of [...loaded.open, ...loaded.closed]) {
+    const prev = earliestLot.get(l.accountNumber);
+    if (!prev || l.openTime < prev) earliestLot.set(l.accountNumber, l.openTime);
+  }
+
+  const flows = new Map<string, { currency: string; ops: typeof ops; byKind: Map<CashKind, Money[]> }>();
+  const dividendParts = new Map<string, { ticker: string; year: number; gross: Money[]; tax: Money[] }>();
+  for (const o of ops) {
+    const currency = o.currency ?? '???';
+    let f = flows.get(o.account_number);
+    if (!f) flows.set(o.account_number, (f = { currency, ops: [], byKind: new Map() }));
+    f.ops.push(o);
+    const kind = classifyCashOperation(o.type);
+    const date = pragueDate(o.time_utc);
+    const m = conv.money(o.amount, currency, date);
+    f.byKind.set(kind, [...(f.byKind.get(kind) ?? []), m]);
+    if ((kind === 'dividend' || kind === 'withholding-tax') && o.ticker) {
+      const year = Number(date.slice(0, 4));
+      const key = `${o.ticker}|${year}`;
+      let d = dividendParts.get(key);
+      if (!d) dividendParts.set(key, (d = { ticker: o.ticker, year, gross: [], tax: [] }));
+      (kind === 'dividend' ? d.gross : d.tax).push(m);
+    }
+  }
+  const cashFlows: CashFlow[] = [...flows.entries()].map(([accountNumber, f]) => {
+    const first = f.ops[0]?.time_utc ?? null;
+    const lotStart = earliestLot.get(accountNumber);
+    const historyComplete = first != null && (!lotStart || first <= lotStart);
+    if (!historyComplete) {
+      warnings.push(
+        `Účet ${accountNumber}: peněžní operace začínají ${first ? pragueDate(first) : '?'}, ale nejstarší nákup je ` +
+          `${lotStart ? pragueDate(lotStart) : '?'} – nahraj export za celé období, jinak vklady a zůstatek nesedí.`,
+      );
+    }
+    return {
+      accountNumber,
+      currency: f.currency,
+      firstOperation: first,
+      lastOperation: f.ops[f.ops.length - 1]?.time_utc ?? null,
+      historyComplete,
+      balance: f.ops.reduce((a, o) => a + o.amount, 0),
+      byKind: Object.fromEntries([...f.byKind.entries()].map(([k, v]) => [k, sumMoney(v)])),
+    };
+  });
+  const dividends: DividendSummary[] = [...dividendParts.values()]
+    .map((d) => {
+      const gross = sumMoney(d.gross);
+      const withholdingTax = sumMoney(d.tax);
+      return { ticker: d.ticker, name: info(d.ticker).name, year: d.year, gross, withholdingTax, net: addTotals(gross, withholdingTax) };
+    })
+    .sort((a, b) => b.year - a.year || a.ticker.localeCompare(b.ticker));
+
+  const unsupported = new Set(ops.filter((o) => classifyCashOperation(o.type) === 'other').map((o) => o.type));
+  if (unsupported.size) warnings.push(`Nezpracované typy peněžních operací: ${[...unsupported].join(', ')}`);
+
+  // --- summary --------------------------------------------------------------
+  const all = (f: (h: Holding) => Totals) => holdings.map(f).reduce(addTotals, emptyTotals());
+  const kindTotal = (k: CashKind) => cashFlows.map((c) => c.byKind[k] ?? emptyTotals()).reduce(addTotals, emptyTotals());
+  const value = all((h) => h.value);
+  const cost = all((h) => h.cost);
+  const unrealizedProfit = subTotals(value, cost);
+  const summary: Summary = {
+    value,
+    cost,
+    unrealizedProfit,
+    unrealizedPct: percent(unrealizedProfit, cost),
+    realizedProfit: realized.map((r) => r.profit).reduce(addTotals, emptyTotals()),
+    dividendsNet: dividends.map((d) => d.net).reduce(addTotals, emptyTotals()),
+    deposits: kindTotal('deposit'),
+    withdrawals: kindTotal('withdrawal'),
+  };
+
+  return {
+    generatedAt: new Date().toISOString(),
+    today,
+    snapshotAsOf: loaded.snapshotAsOf,
+    accounts: db.prepare('SELECT account_number AS accountNumber, currency FROM accounts').all().map((a) => ({ ...a })) as {
+      accountNumber: string;
+      currency: string | null;
+    }[],
+    summary,
+    holdings,
+    realized,
+    taxYears,
+    dividends,
+    cashFlows,
+    checks: {
+      fifoMismatches: checkFifo(loaded.closed, loaded.open),
+      missingRates: [...conv.missing].sort(),
+      warnings,
+    },
+  };
+}
+
+export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
+  const byYear = new Map<number, RealizedLot[]>();
+  for (const l of lots) {
+    const y = Number(l.closeDate.slice(0, 4));
+    byYear.set(y, [...(byYear.get(y) ?? []), l]);
+  }
+  return [...byYear.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([year, ls]) => {
+      const proceeds = sumMoney(ls.map((l) => l.proceeds));
+      const limitStatus = proceeds.czk == null ? 'unknown' : proceeds.czk <= SALES_LIMIT_CZK ? 'within' : 'exceeded';
+      const timeTested = ls.filter((l) => l.timeTestMet);
+      const timeTestedProceeds = sumMoney(timeTested.map((l) => l.proceeds));
+      const taxableLots = limitStatus === 'within' ? [] : ls.filter((l) => !l.timeTestMet);
+      const tCost = sumMoney(taxableLots.map((l) => l.cost));
+      const tProceeds = sumMoney(taxableLots.map((l) => l.proceeds));
+      const tProfit = subTotals(tProceeds, tCost);
+      return {
+        year,
+        salesCount: ls.length,
+        proceeds,
+        limitStatus,
+        limitRemainingCzk: proceeds.czk == null ? null : SALES_LIMIT_CZK - proceeds.czk,
+        timeTestedProceeds,
+        taxable: {
+          count: taxableLots.length,
+          proceeds: tProceeds,
+          cost: tCost,
+          profit: tProfit,
+          baseCzk: limitStatus === 'unknown' || tProfit.czk == null ? null : Math.max(0, tProfit.czk),
+        },
+        timeTestCapExceeded: !TIME_TEST_CAP_YEARS.has(year)
+          ? false
+          : timeTestedProceeds.czk == null
+            ? null
+            : timeTestedProceeds.czk > TIME_TEST_CAP_CZK,
+      };
+    });
+}
+
+export function classifyCashOperation(type: string): CashKind {
+  const t = type.trim().toLowerCase();
+  if (/interest tax/.test(t)) return 'interest-tax';
+  if (/interest/.test(t)) return 'interest';
+  if (/withholding/.test(t)) return 'withholding-tax';
+  if (/divid/.test(t)) return 'dividend';
+  if (/deposit/.test(t)) return 'deposit';
+  if (/withdraw/.test(t)) return 'withdrawal';
+  if (/^stock (purchase|sell)$/.test(t)) return 'trade';
+  if (/fee|commission|swap|rollover/.test(t)) return 'fee';
+  return 'other';
+}
+
+function diffMoney(a: Money, b: Money): Money {
+  return {
+    native: a.native - b.native,
+    currency: a.currency,
+    czk: a.czk == null || b.czk == null ? null : a.czk - b.czk,
+    eur: a.eur == null || b.eur == null ? null : a.eur - b.eur,
+  };
+}
+
+function emptyTotals(): Totals {
+  return { czk: 0, eur: 0, native: {} };
+}
+
+function addTotals(a: Totals, b: Totals): Totals {
+  const native = { ...a.native };
+  for (const [c, v] of Object.entries(b.native)) native[c] = (native[c] ?? 0) + v;
+  return {
+    czk: a.czk == null || b.czk == null ? null : a.czk + b.czk,
+    eur: a.eur == null || b.eur == null ? null : a.eur + b.eur,
+    native,
+  };
+}
+
+function nativeTotal(t: Totals): number {
+  return t.czk ?? Object.values(t.native).reduce((a, v) => a + v, 0);
+}
