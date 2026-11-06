@@ -1,17 +1,15 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname } from 'node:path';
+import { fail, paths } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { analyze } from '../analysis/portfolio.ts';
 import { buildReport } from '../report/build.ts';
 
-const root = resolve(import.meta.dirname, '../..');
-const dbPath = join(root, 'data/stockera.db');
-const outPath = join(root, 'out/stockera.html');
+const { db: dbPath, report: outPath } = paths;
 const MIN_LENGTH = 12;
 
 if (!existsSync(dbPath)) {
-  console.error('Databáze neexistuje – nejdřív spusť `pnpm ingest`.');
-  process.exit(1);
+  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
 }
 
 const password = await getPassword();
@@ -21,10 +19,9 @@ db.close();
 
 console.log('Šifruji report…');
 const html = await buildReport(analysis, password);
-mkdirSync(join(root, 'out'), { recursive: true });
+mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, html);
-console.log(`Hotovo: ${outPath} (${(html.length / 1024).toFixed(0)} kB)`);
-console.log('Soubor otevři v prohlížeči (funguje offline, i na mobilu). Heslo se nikam neukládá.');
+console.log(`✓ Report je uložený: ${outPath} (${(html.length / 1024).toFixed(0)} kB)`);
 
 async function getPassword(): Promise<string> {
   const fromEnv = process.env.STOCKERA_PASSWORD;
@@ -34,25 +31,28 @@ async function getPassword(): Promise<string> {
     return check(fromEnv);
   }
   if (!process.stdin.isTTY) {
-    console.error('Chybí heslo: spusť příkaz v terminálu, nebo nastav proměnnou STOCKERA_PASSWORD.');
-    process.exit(1);
+    fail('Nejde se zeptat na heslo – program neběží v okně terminálu.', [
+      'Spusť aktualizaci dvojklikem na aktualizovat-windows.cmd / aktualizovat-mac.command.',
+    ]);
   }
+  console.log('\nZvol heslo, kterým budeš report otevírat (aspoň 12 znaků, třeba několik slov za sebou).');
+  console.log('Při psaní se nic nezobrazuje – to je v pořádku. Potvrď klávesou Enter.');
+  console.log('Heslo si zapamatuj; když ho zapomeneš, stačí znovu spustit aktualizaci a zvolit nové.\n');
   for (;;) {
-    const first = await promptHidden('Heslo pro report: ');
+    const first = await promptHidden('Heslo: ');
     if (first.length < MIN_LENGTH) {
-      console.log(`Heslo musí mít aspoň ${MIN_LENGTH} znaků.`);
+      console.log(`✗ Heslo má ${first.length} znaků, potřeba je aspoň ${MIN_LENGTH}. Zkus to znovu.\n`);
       continue;
     }
-    const second = await promptHidden('Heslo znovu: ');
+    const second = await promptHidden('Pro kontrolu ještě jednou: ');
     if (first === second) return first;
-    console.log('Hesla se neshodují, zkus to znovu.');
+    console.log('✗ Hesla se neshodují (nejspíš překlep). Zadej obě znovu.\n');
   }
 }
 
 function check(p: string): string {
   if (p.length < MIN_LENGTH) {
-    console.error(`Heslo musí mít aspoň ${MIN_LENGTH} znaků.`);
-    process.exit(1);
+    fail(`Heslo v STOCKERA_PASSWORD má jen ${p.length} znaků, potřeba je aspoň ${MIN_LENGTH}.`);
   }
   return p;
 }

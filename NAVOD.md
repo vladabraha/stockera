@@ -1,28 +1,48 @@
 # Návod
 
-## Poprvé (jednou na počítači)
-Ve složce projektu dvakrát klikni na:
-- **Windows:** `instalace-windows.cmd`
-- **Mac:** `instalace-mac.command` (když ho Mac nechce otevřít: pravé tlačítko → Otevřít)
+Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurzy, tvoje data se nikam neposílají.
 
-Skript sám doinstaluje Node.js a pnpm, pokud chybí, a připraví projekt.
-Když se Node.js nainstalovat nepodaří, stáhni ho z [nodejs.org](https://nodejs.org) (verze LTS) a skript spusť znovu.
+## 1. Poprvé (jednou na počítači)
+1. Složku Stockera **rozbal** (pokud je v ZIPu) – např. do Dokumentů.
+2. Dvakrát klikni na:
+   - **Windows:** `instalace-windows.cmd`
+   - **Mac:** `instalace-mac.command`
+3. Počkej na „Hotovo ✓“. Otevře se složka `data/input`.
 
-## Aktualizace dat
-1. V xStation exportuj **historii účtu** do XLSX (každý účet zvlášť).
-2. Soubor ulož do složky `data/input/`.
-3. Dvakrát klikni na `aktualizovat-windows.cmd` / `aktualizovat-mac.command`
-   (nebo v terminálu spusť `pnpm update-data`).
-4. Zadej heslo k reportu (aspoň 12 znaků, 2×).
+## 2. Aktualizace dat (pokaždé, když chceš nová čísla)
+1. V xStation exportuj **historii účtu do Excelu (XLSX)**:
+   - období **od založení účtu** až do dneška,
+   - každý podúčet (EUR, CZK) zvlášť.
+2. Soubory ulož do `data/input/` (staré výpisy tam klidně nech).
+3. Dvakrát klikni na `aktualizovat-windows.cmd` / `aktualizovat-mac.command`.
+4. Až se program zeptá, zadej heslo k reportu (aspoň 12 znaků) a pak ho zopakuj.
+   **Při psaní se nic nezobrazuje – to je v pořádku.**
+5. Report se sám otevře v prohlížeči.
 
-## Prohlížení
-- Otevři `out/stockera.html` v prohlížeči a zadej heslo.
-- Na mobil soubor jen zkopíruj (AirDrop, kabel, cloud) a otevři ho tam. Funguje i offline.
+## 3. Prohlížení
+- Počítač: `out/stockera.html` → dvojklik → heslo.
+- Mobil: soubor zkopíruj (AirDrop, kabel, cloud) a otevři ho v prohlížeči. Funguje i offline.
 
-## Když něco chybí
-- Hláška „Neznámé složení“ nebo „Chybí historie cen“: doplň instrument do `data/instruments.json`
-  (vzor je v `config/instruments.example.json`) a znovu spusť aktualizaci.
+## Když něco nejde
+Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastější situace:
+
+| Problém | Co dělat |
+|---|---|
+| Windows: „Systém Windows ochránil váš počítač“ | Klikni **Další informace → Přesto spustit**. |
+| Mac: „nelze otevřít, protože pochází od neidentifikovaného vývojáře“ | Pravé tlačítko na soubor → **Otevřít** → Otevřít. |
+| „Složka je ještě zabalená v ZIPu“ | ZIP rozbal (pravé tlačítko → Extrahovat vše) a spouštěj z rozbalené složky. |
+| „Chybí Node.js“ | Spusť nejdřív instalační skript (krok 1). |
+| „Zatím není žádný výpis z XTB“ | Ulož XLSX export do `data/input/`. |
+| „Soubor se nepodařilo načíst“ / „nejsou XLSX“ | Stáhni z xStation znovu export **XLSX** a neotevírej ho/neukládej v Excelu. PDF ani CSV nejde. |
+| „Nepodařilo se spojit s žádným serverem“ | Zkontroluj připojení a spusť aktualizaci znovu. |
+| Upozornění „⚠“ u některého instrumentu | Report se vytvoří i tak, jen u něj chybí část údajů. Zkus později, nebo ho doplň do `data/instruments.json` (vzor: `config/instruments.example.json`). |
+| „Databázi právě používá jiný program“ | Zavři druhé okno se Stockerou a zkus to znovu. |
+| Report: „Nesprávné heslo“ | Pozor na velká písmena a českou/anglickou klávesnici. |
+| Report: zapomenuté heslo | Spusť znovu aktualizaci a zvol nové heslo. Data se nic neztratí. |
+| Report na mobilu ukazuje jen text | Otevři soubor v prohlížeči (Safari/Chrome), ne v náhledu. |
+
+Technické podrobnosti chyb se ukládají do `data/logs/chyby.log` – hodí se, když budeš někoho žádat o pomoc
+(neobsahuje hesla, ale může obsahovat cesty k souborům).
 
 ## Přenos na jiný počítač
-Zkopíruj celou složku včetně `data/` a na novém počítači spusť instalační skript.
-Zapomenuté heslo nevadí, nový report vytvoříš s novým heslem příkazem `pnpm report`.
+Zkopíruj celou složku **včetně `data/`** a na novém počítači spusť instalační skript (krok 1).

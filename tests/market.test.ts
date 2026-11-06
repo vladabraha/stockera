@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { openDatabase, type Db } from '../src/db/database.ts';
 import { importBuffer } from '../src/importer.ts';
 import { Http } from '../src/net/http.ts';
-import { updateMarketData } from '../src/market/update.ts';
+import { loadInstrumentConfig, updateMarketData } from '../src/market/update.ts';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { analyze } from '../src/analysis/portfolio.ts';
 import { geography } from '../src/analysis/market.ts';
 import { fakeXtbExport } from './helpers/fakeXtb.ts';
@@ -131,4 +134,15 @@ test('geography puts holdings without composition into "??"', () => {
     { value: t(250), countries: [] },
   ]);
   assert.deepEqual(g.map((s) => [s.country, s.share]), [['US', 75], ['??', 25]]);
+});
+
+test('instruments.json saved by Windows Notepad (UTF-8 BOM) still loads', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'stockera-'));
+  try {
+    const file = join(dir, 'instruments.json');
+    writeFileSync(file, '\uFEFF{"$comment": "x", "CSG.NL": {"country": "CZ"}}');
+    assert.deepEqual(loadInstrumentConfig(file), { 'CSG.NL': { country: 'CZ' } });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

@@ -66,7 +66,7 @@ export async function buildReport(analysis: Analysis, password: string, options:
 <style>${style}</style>
 </head>
 <body>
-<div id="app"><noscript>Report potřebuje zapnutý JavaScript.</noscript></div>
+<div id="app"><noscript>Report se v tomto náhledu nespustil, protože tu nefungují skripty (to dělají např. náhledy souborů v mailu nebo ve Files na iPhonu). Otevři soubor přímo v prohlížeči – Chrome, Edge, Firefox nebo Safari.</noscript></div>
 <script type="application/json" id="payload">${payloadJson}</script>
 <script>${script}</script>
 </body>

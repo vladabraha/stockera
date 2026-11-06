@@ -41,8 +41,11 @@ SQL řetězce v jednoduchých uvozovkách.
 - `instalace-windows.cmd` (→ `scripts/instalace.ps1`) a `instalace-mac.command` jsou výjimka z pravidla „nic mimo
   složku“: na výslovné přání uživatele doinstalují Node.js (winget `OpenJS.NodeJS.LTS` / Homebrew) a pnpm
   (`npm install -g pnpm@10.18.1` – přesná verze kvůli `packageManager`). Bez winget/brew jen odkážou na nodejs.org.
-- `aktualizovat-*.cmd/.command` spouští `pnpm update-data`; `.cmd` obchází blokaci `pnpm.ps1` execution policy
-  v PowerShellu (nic v systému se nemění, `-ExecutionPolicy Bypass` platí jen pro daný proces).
+- `aktualizovat-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
+  odpadá i problém s execution policy u `pnpm.ps1`). Předem ověří Node; po úspěchu otevřou `out/stockera.html`.
+  `instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).
+- Oba `.cmd` odmítnou běh ze ZIPu / `%TEMP%` (Průzkumník spouští soubory ze ZIPu z dočasné složky) – detekce přes
+  `findstr /l` na cestu s `/` místo `\` (findstr bere `\` jako escape).
 - `.cmd` soubory jen ASCII + CRLF (kódová stránka cmd), `.ps1` UTF-8 **s BOM** + CRLF (jinak PowerShell 5.1 rozbije
   diakritiku), `.command` LF + spustitelný bit; hlídá `.gitattributes`. PowerShell skript nebyl spuštěn na Windows
   (vývoj probíhal na macOS) – při první chybě opravit.
@@ -142,6 +145,22 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   hashů, jediné URL v HTML je SVG namespace, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
 - Nešifrovaný `out/analysis.json` vzniká **jen** s `pnpm analyze --json` (práva 600); bez přepínače se starý smaže.
   `update-data` = `ingest → market → report` (bez analyze).
+
+### Blbuvzdornost a hlášky (pro uživatele, který u vývoje nebyl)
+- Každá chyba = co se stalo + **„Co dělat“** (číslované kroky). Společné nástroje v `src/cli/friendly.ts`:
+  `paths`, `fail()`, `explain()` (SQLITE_BUSY/EBUSY, EACCES/EPERM, ENOSPC → konkrétní rada), `logError()`.
+- `friendly.ts` instaluje `uncaughtException` handler: stack trace jde do `data/logs/chyby.log` (práva 600),
+  uživatel vidí jen srozumitelnou větu. Každé CLI ho importuje.
+- `src/cli/update.ts` = průvodce „Krok 1/3 … 3/3“; kroky spouští jako podprocesy se `stdio: 'inherit'` (kvůli TTY
+  dotazu na heslo). Bez XLSX i bez DB vypíše postup exportu z xStation (exit 1). Na konci shrnutí + „Co dál“.
+- Exit kódy: 0 OK, 1 chyba, `market` 2 = nejde internet (všechny požadavky selhaly) → report se přesto vytvoří
+  se staršími cenami.
+- Import: ignoruje ne-XLSX soubory s vysvětlením (PDF/CSV/XLS nejde), upozorní na zámkové soubory Excelu `~$`,
+  chyba jednoho souboru neblokuje ostatní. `instruments.json` s BOM (Poznámkový blok) se načte.
+- Report (prohlížeč): kontrola `crypto.subtle` + `DecompressionStream` (starý prohlížeč), poškozený payload,
+  nápověda u špatného hesla, `<noscript>` pro náhledy bez JS (mail, Files na iPhonu).
+- Hlášky skriptů `.cmd` jsou bez diakritiky (ASCII), výstup Node je UTF-8 (`chcp 65001`).
+- Uživatelský návod s tabulkou „Problém → Co dělat“ je `NAVOD.md` – při nové hlášce ji tam doplnit.
 
 ### UI / design
 - Dva taby: **Portfolio** (hodnota + graf vývoje s rozsahy 1M–Vše, souhrnné statistiky, donut podle instrumentů,

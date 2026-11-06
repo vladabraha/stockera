@@ -14,7 +14,7 @@ pnpm ingest           # import do data/stockera.db (opakovatelné, bez duplicit)
 pnpm market           # stažení kurzů ČNB, cen a složení ETF (jediný krok se sítí)
 pnpm analyze          # výpočty → výpis do terminálu (--json uloží i NEŠIFROVANÝ out/analysis.json)
 pnpm report           # zašifrovaný report out/stockera.html (zeptá se na heslo)
-pnpm update-data      # vše najednou: ingest + market + report
+pnpm update-data      # průvodce: ingest → market → report, se srozumitelnými hláškami
 ```
 
 ### HTML report
@@ -62,7 +62,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `src/importer.ts` | idempotentní import do DB |
 | `src/analysis/` | výpočty: kurzy (`fx`), časový test (`calendar`), loty, FIFO kontrola, portfolio a daně, ocenění, země, vývoj hodnoty (`market`) |
 | `src/report/` | HTML report: šifrování (`crypto`), frontend (`app.ts`, `styles.css`, bez knihoven), sestavení (`build`) |
-| `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`, `pnpm report`) |
+| `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`, `pnpm report`, průvodce `update.ts`); hlášky a log chyb v `friendly.ts` |
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
 | `out/` | **výstupy – v .gitignore** (`stockera.html` zašifrovaně; `analysis.json` jen s `pnpm analyze --json`, nešifrovaně – po použití smazat) |
 | `config/` | vzor ruční konfigurace instrumentů |

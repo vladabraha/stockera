@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fail } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { analyze, type Analysis } from '../analysis/portfolio.ts';
 import type { Percent, Totals } from '../analysis/fx.ts';
@@ -9,8 +10,7 @@ const dbPath = join(root, 'data/stockera.db');
 const outDir = join(root, 'out');
 
 if (!existsSync(dbPath)) {
-  console.error('Databáze neexistuje – nejdřív spusť `pnpm ingest`.');
-  process.exit(1);
+  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť `pnpm ingest`.']);
 }
 
 const db = openDatabase(dbPath);

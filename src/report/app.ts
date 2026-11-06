@@ -200,15 +200,31 @@ async function unlock(form: HTMLFormElement): Promise<void> {
   submit.disabled = true;
   msg.textContent = 'Dešifruji…';
   msg.className = 'msg';
+  if (!globalThis.crypto?.subtle || typeof DecompressionStream === 'undefined') {
+    msg.textContent = 'Tento prohlížeč report neumí otevřít. Použij aktuální Chrome, Edge, Firefox nebo Safari (případně prohlížeč aktualizuj).';
+    msg.className = 'msg err';
+    submit.disabled = false;
+    return;
+  }
+  let payload: EncryptedPayload;
   try {
-    const payload = JSON.parse(document.getElementById('payload')!.textContent!) as EncryptedPayload;
+    payload = JSON.parse(document.getElementById('payload')!.textContent!) as EncryptedPayload;
+  } catch {
+    msg.textContent = 'Soubor reportu je poškozený (nejspíš se nezkopíroval celý). Zkopíruj ho znovu z počítače.';
+    msg.className = 'msg err';
+    submit.disabled = false;
+    return;
+  }
+  try {
     const json = await decryptPayload(payload, input.value);
     input.value = '';
     state.data = JSON.parse(json) as Analysis;
     assignColors(state.data);
     render();
   } catch (e) {
-    msg.textContent = e instanceof DOMException && e.name === 'OperationError' ? 'Nesprávné heslo.' : `Chyba: ${(e as Error).message}`;
+    msg.textContent = e instanceof DOMException && e.name === 'OperationError'
+      ? 'Nesprávné heslo. Pozor na velká písmena a českou/anglickou klávesnici.'
+      : `Report se nepodařilo otevřít (${(e as Error).message}). Zkus ho na počítači vytvořit znovu.`;
     msg.className = 'msg err';
     submit.disabled = false;
     input.select();
@@ -225,6 +241,7 @@ function renderLogin(): void {
       h('input', { type: 'password', required: true, autocomplete: 'current-password', autocapitalize: 'off', spellcheck: 'false' })),
     h('button', { type: 'submit', class: 'primary' }, 'Odemknout'),
     h('p', { class: 'msg', role: 'status' }),
+    h('p', { class: 'muted small' }, 'Zapomenuté heslo? Na počítači spusť znovu aktualizaci a zvol nové.'),
   );
   form.addEventListener('submit', (e) => {
     e.preventDefault();

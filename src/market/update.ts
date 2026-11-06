@@ -22,7 +22,7 @@ export type InstrumentConfig = Record<string, InstrumentOverride>;
 
 export function loadInstrumentConfig(path: string): InstrumentConfig {
   if (!existsSync(path)) return {};
-  const raw = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+  const raw = JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>;
   const cfg: InstrumentConfig = {};
   for (const [ticker, v] of Object.entries(raw)) if (!ticker.startsWith('$') && v && typeof v === 'object') cfg[ticker] = v as InstrumentOverride;
   return cfg;

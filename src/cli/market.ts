@@ -1,18 +1,14 @@
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { fail, paths } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { Http, ALLOWED_HOSTS } from '../net/http.ts';
 import { loadInstrumentConfig, updateMarketData } from '../market/update.ts';
 import { pragueDate } from '../analysis/calendar.ts';
 
-const root = resolve(import.meta.dirname, '../..');
-const dbPath = join(root, 'data/stockera.db');
-const configPath = join(root, 'data/instruments.json');
-const auditLog = join(root, 'data/logs/network.log');
+const { db: dbPath, config: configPath, networkLog: auditLog } = paths;
 
 if (!existsSync(dbPath)) {
-  console.error('Databáze neexistuje – nejdřív spusť `pnpm ingest`.');
-  process.exit(1);
+  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
 }
 
 console.log(`Stahuji tržní data. Povolené servery: ${[...ALLOWED_HOSTS].join(', ')}`);
@@ -20,9 +16,19 @@ console.log(`Odesílají se jen tickery, ISINy a data. Log všech požadavků: $
 
 const db = openDatabase(dbPath);
 const http = new Http({ auditLog });
+let config;
+try {
+  config = loadInstrumentConfig(configPath);
+} catch (e) {
+  fail(`Soubor ${configPath} má chybu a nejde přečíst (${(e as Error).message}).`, [
+    'Otevři ho v textovém editoru a oprav chybu – nejčastěji chybějící čárka, uvozovka nebo závorka.',
+    `Správný tvar je vidět ve vzoru ${paths.configExample}.`,
+    'Případně soubor dočasně přejmenuj – program poběží bez ručních doplnění.',
+  ]);
+}
 const report = await updateMarketData(db, http, {
   today: pragueDate(new Date().toISOString()),
-  config: loadInstrumentConfig(configPath),
+  config,
   log: (m) => console.log(`  ${m}`),
 });
 db.close();
@@ -36,5 +42,17 @@ for (const i of report.instruments) {
   );
 }
 for (const w of report.warnings) console.log(`⚠ ${w}`);
-console.log(`\nSíťových požadavků: ${http.log.length} (zablokovaných ${http.log.filter((e) => e.status === 'blocked').length})`);
-if (!existsSync(configPath)) console.log('Tip: ruční doplnění ISIN/zemí → zkopíruj config/instruments.example.json do data/instruments.json');
+const failedRequests = http.log.filter((e) => e.status === 'error').length;
+console.log(`\nSíťových požadavků: ${http.log.length} (zablokovaných ${http.log.filter((e) => e.status === 'blocked').length}, nedostupných ${failedRequests})`);
+
+if (http.log.length > 0 && failedRequests === http.log.length) {
+  console.log('\n✗ Nepodařilo se spojit s žádným serverem – nejspíš nejde internet.');
+  console.log('  Report se vytvoří s naposledy staženými cenami. Až bude internet, spusť aktualizaci znovu.');
+  process.exit(2);
+}
+if (report.warnings.length) {
+  console.log('\nUpozornění výše report neblokují – u dotčených instrumentů jen bude chybět část údajů.');
+  console.log('  • „nepodařilo se stáhnout“: server byl dočasně nedostupný → zkus aktualizaci později.');
+  console.log(`  • „doplň do data/instruments.json“: údaj se nedá zjistit automaticky → doplň ho ručně podle vzoru ${paths.configExample}`);
+  if (!existsSync(configPath)) console.log('    (soubor data/instruments.json zatím neexistuje – zkopíruj vzor a uprav ho).');
+}
