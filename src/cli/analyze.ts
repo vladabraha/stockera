@@ -25,7 +25,7 @@ print(a);
 console.log(`\nKompletní výsledek: ${jsonPath}`);
 
 function print(a: Analysis): void {
-  const asOf = a.snapshotAsOf ? ` (stav XTB k ${czDate(a.snapshotAsOf.slice(0, 10))})` : '';
+  const asOf = a.summary.valueDate ? ` (ocenění k ${czDate(a.summary.valueDate)})` : '';
   console.log(`\n=== PORTFOLIO${asOf} ===`);
   console.log(`Hodnota ${t(a.summary.value)} | nákup ${t(a.summary.cost)} | zisk ${t(a.summary.unrealizedProfit)} ${pct(a.summary.unrealizedPct)}`);
   console.log(`Realizovaný zisk ${t(a.summary.realizedProfit)} | dividendy ${t(a.summary.dividendsNet)} | vklady ${t(a.summary.deposits)} | výběry ${t(a.summary.withdrawals)}`);
@@ -37,6 +37,17 @@ function print(a: Analysis): void {
       `${h.ticker.padEnd(9)} ${(h.name ?? '').slice(0, 28).padEnd(28)} ${fmt(h.quantity, 4).padStart(10)} ks  ` +
         `hodnota ${t(h.value)}  zisk ${t(h.profit)} ${pct(h.profitPct)}  bez daně ${fmt(h.taxFreeQuantity, 4)} ks${next}`,
     );
+  }
+
+  console.log('\n--- Země (podle složení ETF) ---');
+  const regionName = new Intl.DisplayNames('cs', { type: 'region' });
+  const country = (c: string) => (c === 'XX' ? 'Ostatní' : c === '??' ? 'Neznámé složení' : regionName.of(c) ?? c);
+  console.log(a.geography.map((g) => `${country(g.country)} ${fmt(g.share, 1)} %`).join(', '));
+  const unknown = a.holdings.filter((h) => !h.countries.length).map((h) => h.ticker);
+  if (unknown.length) console.log(`  bez složení: ${unknown.join(', ')} → doplň "countries" do data/instruments.json`);
+  if (a.history.length) {
+    const last = a.history[a.history.length - 1]!;
+    console.log(`Vývoj hodnoty: ${a.history.length} dní od ${czDate(a.history[0]!.date)} do ${czDate(last.date)}`);
   }
 
   console.log('\n--- Prodané ---');

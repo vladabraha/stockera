@@ -1,8 +1,12 @@
 import type { Db } from '../db/database.ts';
-import { daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
+import { addDays, daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
 import { checkFifo, type FifoMismatch } from './fifo.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
+import {
+  DbMarketData, crossConvert, geography, valueHistory, type GeographySlice, type HistoryLot, type HistoryPoint,
+  type MarketData,
+} from './market.ts';
 
 /** Annual tax-exempt limit for gross income from selling securities (§4(1)(w) ZDP). */
 export const SALES_LIMIT_CZK = 100_000;
@@ -20,6 +24,10 @@ export interface HoldingLot {
   cost: Money;
   costSource: ValueSource | 'xtb-profit';
   value: Money | null;
+  /** `market` = downloaded price, `xtb` = value from the XTB export snapshot. */
+  valueSource: 'market' | 'xtb' | null;
+  valueDate: string | null;
+  currentPrice: { date: string; close: number; currency: string } | null;
   profit: Money | null;
   profitPct: Percent | null;
   taxFreeFrom: string;
@@ -31,6 +39,9 @@ export interface Holding {
   ticker: string;
   name: string | null;
   category: string | null;
+  isin: string | null;
+  countries: { country: string; weight: number }[];
+  countrySource: string | null;
   quantity: number;
   cost: Totals;
   value: Totals;
@@ -112,6 +123,8 @@ export interface DividendSummary {
 
 export interface Summary {
   value: Totals;
+  /** Latest date the holdings are valued at. */
+  valueDate: string | null;
   cost: Totals;
   unrealizedProfit: Totals;
   unrealizedPct: Percent;
@@ -128,6 +141,10 @@ export interface Analysis {
   accounts: { accountNumber: string; currency: string | null }[];
   summary: Summary;
   holdings: Holding[];
+  geography: GeographySlice[];
+  history: HistoryPoint[];
+  /** Price series per instrument for charts (from ~1 month before the first purchase). */
+  instruments: Record<string, InstrumentSeries>;
   realized: RealizedInstrument[];
   taxYears: TaxYear[];
   dividends: DividendSummary[];
@@ -135,15 +152,25 @@ export interface Analysis {
   checks: { fifoMismatches: FifoMismatch[]; missingRates: string[]; warnings: string[] };
 }
 
+export interface InstrumentSeries {
+  isin: string | null;
+  priceSource: string | null;
+  currency: string | null;
+  prices: [date: string, close: number][];
+}
+
 export interface AnalyzeOptions {
   /** Reference day (YYYY-MM-DD, Prague) for time-test countdowns. Defaults to today. */
   today?: string;
   fx?: FxRates;
+  market?: MarketData;
 }
 
 export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const today = options.today ?? pragueDate(new Date().toISOString());
-  const conv = new Converter(options.fx ?? new DbFxRates(db));
+  const fx = options.fx ?? new DbFxRates(db);
+  const conv = new Converter(fx);
+  const market = options.market ?? new DbMarketData(db);
   const loaded = loadLots(db);
   const warnings = [...loaded.warnings];
 
@@ -166,7 +193,15 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     const openDate = pragueDate(l.openTime);
     const free = taxFreeFrom(openDate);
     const cost = conv.money(l.cost, l.currency, openDate);
-    const value = l.value == null ? null : conv.money(l.value, l.currency, valueDate);
+    let value: Money | null = null;
+    let valueSource: HoldingLot['valueSource'] = null;
+    let lotValueDate: string | null = null;
+    const quote = market.price(l.ticker, today);
+    if (quote && quote.date > valueDate) {
+      const native = crossConvert(fx, l.volume * quote.close, quote.currency, l.currency, quote.date);
+      if (native != null) [value, valueSource, lotValueDate] = [conv.money(native, l.currency, quote.date), 'market', quote.date];
+    }
+    if (!value && l.value != null) [value, valueSource, lotValueDate] = [conv.money(l.value, l.currency, valueDate), 'xtb', valueDate];
     const profit = value ? diffMoney(value, cost) : null;
     const lot: HoldingLot = {
       accountNumber: l.accountNumber,
@@ -178,6 +213,9 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
       cost,
       costSource: l.costSource,
       value,
+      valueSource,
+      valueDate: lotValueDate,
+      currentPrice: quote,
       profit,
       profitPct: profit ? percent(sumMoney([profit]), sumMoney([cost])) : null,
       taxFreeFrom: free,
@@ -191,9 +229,13 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     const value = sumMoney(lots.flatMap((l) => (l.value ? [l.value] : [])));
     const profit = subTotals(value, cost);
     const pending = lots.filter((l) => !l.taxFree).map((l) => l.taxFreeFrom).sort();
+    const m = market.info(ticker);
     return {
       ticker,
       ...info(ticker),
+      isin: m.isin,
+      countries: m.countries,
+      countrySource: m.countrySource,
       quantity: lots.reduce((a, l) => a + l.quantity, 0),
       cost,
       value,
@@ -328,8 +370,10 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const value = all((h) => h.value);
   const cost = all((h) => h.cost);
   const unrealizedProfit = subTotals(value, cost);
+  const valueDates = holdings.flatMap((h) => h.lots.flatMap((l) => (l.valueDate ? [l.valueDate] : []))).sort();
   const summary: Summary = {
     value,
+    valueDate: valueDates[valueDates.length - 1] ?? null,
     cost,
     unrealizedProfit,
     unrealizedPct: percent(unrealizedProfit, cost),
@@ -338,6 +382,36 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     deposits: kindTotal('deposit'),
     withdrawals: kindTotal('withdrawal'),
   };
+
+  function historyLots(): HistoryLot[] {
+    const lot = (l: (typeof loaded.open)[number], closeDate: string | null): HistoryLot => {
+      const openDate = pragueDate(l.openTime);
+      const c = conv.money(l.cost, l.currency, openDate);
+      return { ticker: l.ticker, quantity: l.volume, openDate, closeDate, costNative: l.cost, costCzk: c.czk, costEur: c.eur, currency: l.currency };
+    };
+    return [...loaded.open.map((l) => lot(l, null)), ...loaded.closed.map((c) => lot({ ...c, costSource: c.costSource, currentPrice: null, value: null }, pragueDate(c.closeTime)))];
+  }
+
+  function instrumentSeries(): Record<string, InstrumentSeries> {
+    const firstOpen = new Map<string, string>();
+    for (const l of [...loaded.open, ...loaded.closed]) {
+      const d = pragueDate(l.openTime);
+      if (!firstOpen.has(l.ticker) || d < firstOpen.get(l.ticker)!) firstOpen.set(l.ticker, d);
+    }
+    const out: Record<string, InstrumentSeries> = {};
+    for (const [ticker, first] of [...firstOpen.entries()].sort()) {
+      const from = addDays(first, -31);
+      const m = market.info(ticker);
+      const prices = market.series(ticker).filter((p) => p.date >= from);
+      out[ticker] = {
+        isin: m.isin,
+        priceSource: m.priceSource,
+        currency: prices[0]?.currency ?? m.priceCurrency,
+        prices: prices.map((p) => [p.date, p.close]),
+      };
+    }
+    return out;
+  }
 
   return {
     generatedAt: new Date().toISOString(),
@@ -349,6 +423,9 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     }[],
     summary,
     holdings,
+    geography: geography(holdings),
+    history: valueHistory(historyLots(), market, fx, today),
+    instruments: instrumentSeries(),
     realized,
     taxYears,
     dividends,

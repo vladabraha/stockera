@@ -101,6 +101,34 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (currency, date)
   );
   `,
+  `
+  CREATE TABLE instrument_meta (
+    ticker         TEXT PRIMARY KEY,
+    isin           TEXT,
+    name           TEXT,
+    price_source   TEXT,
+    price_symbol   TEXT,
+    price_currency TEXT,
+    country_source TEXT,
+    updated_at     TEXT NOT NULL
+  );
+
+  CREATE TABLE prices (
+    ticker   TEXT NOT NULL,
+    date     TEXT NOT NULL,
+    close    REAL NOT NULL,
+    currency TEXT NOT NULL,
+    source   TEXT NOT NULL,
+    PRIMARY KEY (ticker, date)
+  );
+
+  CREATE TABLE country_weights (
+    ticker  TEXT NOT NULL,
+    country TEXT NOT NULL,
+    weight  REAL NOT NULL,
+    PRIMARY KEY (ticker, country)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

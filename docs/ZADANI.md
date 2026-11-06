@@ -8,7 +8,7 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
    - Import výpisů XTB ve formátu **XLSX** (CZK i EUR subúčty).
    - Uložení do lokální **SQLite** DB (idempotentní import – opakované nahrání nevytvoří duplicity).
    - Stažení cen (veřejné API), kurzů ČNB (denní).
-   - Složení ETF podle zemí – kaskáda zdrojů: (1) data emitenta (iShares, Vanguard…), (2) proxy přes stejný index (S&P 500, MSCI World, FTSE All-World…), (3) justETF dle ISIN, (4) ruční konfigurace. U každého ETF evidovat zdroj a stáří dat.
+   - Složení ETF podle zemí – původně plánovaná kaskáda: (1) data emitenta, (2) proxy přes stejný index, (3) justETF dle ISIN, (4) ruční konfigurace. **Implementováno (fáze 3):** justETF dle ISIN → ruční konfigurace; emitenti vyžadují JavaScript a „související ETF“ na justETF nejsou spolehlivá proxy (viz [zdroje-dat.md](zdroje-dat.md)). U každého ETF se eviduje zdroj a datum.
    - Výpočty: párování FIFO, časový test, zisky/ztráty, dividendy, splity.
    - Vygeneruje **jeden samostatný HTML soubor** s daty uvnitř.
 2. **Frontend (single HTML, responzivní)** – funguje offline na desktopu i mobilu (přenos ručně AirDrop/kabel), pouze čte předpřipravená data.
@@ -20,7 +20,7 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 - Ruční zásahy pouze přes konfigurační soubor (přepis tickeru, země, složení ETF).
 
 ## Bezpečnost a soukromí
-- Veškerá síťová komunikace přes jediný HTTP wrapper s **allowlistem domén** (Yahoo Finance, ČNB, OpenFIGI, emitenti ETF, justETF); jiné domény blokovány.
+- Veškerá síťová komunikace přes jediný HTTP wrapper s **allowlistem domén** (implementováno: ČNB, Deutsche Börse/Xetra, justETF, Yahoo Finance); jiné domény blokovány.
 - Ven odchází pouze ticker / ISIN / datum – nikdy množství, ceny, hodnoty, čísla účtů (ověřeno testy).
 - Audit log všech odchozích požadavků.
 - Výsledné HTML: všechny knihovny inline, CSP `default-src 'none'` (+ inline skripty/styly) → prohlížeč zablokuje jakoukoliv síť.
