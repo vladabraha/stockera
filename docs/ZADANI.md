@@ -26,7 +26,7 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 - Výsledné HTML: všechny knihovny inline, CSP `default-src 'none'` (+ inline skripty/styly) → prohlížeč zablokuje jakoukoliv síť.
 - Minimum závislostí, zamčené verze, `npm ci --ignore-scripts`, `npm audit`.
 - `data/` a vygenerované výstupy nikdy necommitovat (`.gitignore`).
-- Volitelně: šifrování HTML heslem (WebCrypto, dešifrování v prohlížeči).
+- **Rozhodnuto:** HTML report je uložený lokálně a **vždy chráněný heslem** – data v souboru zašifrovaná (AES-GCM, klíč z hesla přes PBKDF2/WebCrypto), dešifrování až v prohlížeči po zadání hesla. Heslo se nikam neukládá.
 - Při vývoji s AI používat pouze **anonymizované/smyšlené** vzorové výpisy – skutečná data AI nikdy nečte.
 
 ## Výpočetní pravidla
