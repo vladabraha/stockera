@@ -23,7 +23,8 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 - Veškerá síťová komunikace přes jediný HTTP wrapper s **allowlistem domén** (implementováno: ČNB, Deutsche Börse/Xetra, justETF, Yahoo Finance); jiné domény blokovány.
 - Ven odchází pouze ticker / ISIN / datum – nikdy množství, ceny, hodnoty, čísla účtů (ověřeno testy).
 - Audit log všech odchozích požadavků.
-- Výsledné HTML: všechny knihovny inline, CSP `default-src 'none'` (+ inline skripty/styly) → prohlížeč zablokuje jakoukoliv síť.
+- Výsledné HTML: vše inline, bez knihoven (vlastní SVG grafy), CSP `default-src 'none'; connect-src 'none'`, inline skript a styl povolené jen přes sha256 hash → prohlížeč zablokuje jakoukoliv síť. **Implementováno (fáze 4):** `pnpm report` → `out/stockera.html`.
+- Přenositelnost: celá aplikace i data jsou ve složce projektu; po zkopírování na jiný počítač (i Windows) stačí Node ≥ 24, pnpm a `pnpm install`.
 - Minimum závislostí, zamčené verze, `npm ci --ignore-scripts`, `npm audit`.
 - `data/` a vygenerované výstupy nikdy necommitovat (`.gitignore`).
 - **Rozhodnuto:** HTML report je uložený lokálně a **vždy chráněný heslem** – data v souboru zašifrovaná (AES-GCM, klíč z hesla přes PBKDF2/WebCrypto), dešifrování až v prohlížeči po zadání hesla. Heslo se nikam neukládá.

@@ -11,11 +11,12 @@
     "ingest": "node --disable-warning=ExperimentalWarning src/cli/import.ts",
     "market": "node --disable-warning=ExperimentalWarning src/cli/market.ts",
     "analyze": "node --disable-warning=ExperimentalWarning src/cli/analyze.ts",
-    "update-data": "pnpm -s ingest && pnpm -s market && pnpm -s analyze",
+    "update-data": "pnpm -s ingest && pnpm -s market && pnpm -s analyze && pnpm -s report",
     "test": "node --disable-warning=ExperimentalWarning --test \"tests/**/*.test.ts\"",
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test",
-    "audit": "pnpm audit"
+    "audit": "pnpm audit",
+    "report": "node --disable-warning=ExperimentalWarning src/cli/report.ts"
   },
   "devDependencies": {
     "@types/node": "24.19.2",

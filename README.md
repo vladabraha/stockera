@@ -13,13 +13,33 @@ pnpm install          # jen vývojové nástroje (typescript, @types/node)
 pnpm ingest           # import do data/stockera.db (opakovatelné, bez duplicit)
 pnpm market           # stažení kurzů ČNB, cen a složení ETF (jediný krok se sítí)
 pnpm analyze          # výpočty → výpis do terminálu + out/analysis.json
-pnpm update-data      # vše najednou: ingest + market + analyze
+pnpm report           # zašifrovaný report out/stockera.html (zeptá se na heslo)
+pnpm update-data      # vše najednou: ingest + market + analyze + report
 ```
+
+### HTML report
+`out/stockera.html` je jediný soubor, který funguje offline v jakémkoli moderním prohlížeči (i na mobilu – stačí ho
+zkopírovat, např. AirDrop/kabel/USB). Obsahuje taby **Portfolio** (souhrn, vývoj hodnoty, rozložení podle instrumentů
+a zemí, časový test, akordeon instrumentů → nákupy, graf ceny/hodnoty každého instrumentu) a **Prodané** (daňové roky,
+akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v %). Přepínání Kč / €.
+
+- Data v souboru jsou zašifrovaná (gzip → AES-256-GCM, klíč z hesla přes PBKDF2-SHA256, 600 000 iterací);
+  dešifrují se až v prohlížeči po zadání hesla. Heslo se nikam neukládá, tlačítko *Zamknout* data zahodí z paměti.
+- Content-Security-Policy zakazuje stránce jakoukoli síťovou komunikaci, povolený je jen vlastní vložený skript a styl.
+- Heslo: interaktivně (skryté zadání, 2×), nebo proměnnou `STOCKERA_PASSWORD`
+  (macOS/Linux `STOCKERA_PASSWORD=… pnpm report`, PowerShell `$env:STOCKERA_PASSWORD='…'; pnpm report`). Min. 8 znaků.
+- Zapomenuté heslo nevadí – report se dá kdykoli vygenerovat znovu z databáze s novým heslem.
 
 Export z xStation: **Historie účtu → zvolit celé období → Export (XLSX)**, pro každý subúčet zvlášť.
 Formát je popsán v [docs/xtb-format.md](docs/xtb-format.md), zdroje tržních dat v [docs/zdroje-dat.md](docs/zdroje-dat.md).
 
 Ruční doplnění (ISIN, země akcie, složení ETF bez dat, zdroj cen): zkopíruj `config/instruments.example.json` do `data/instruments.json`.
+
+## Přenos na jiný počítač (i Windows)
+Vše potřebné je ve složce projektu, nic se neinstaluje globálně ani nemění v systému.
+1. Zkopíruj celou složku **včetně `data/`** (databáze, výpisy, ruční konfigurace; `out/` a `node_modules/` není potřeba).
+2. Na cílovém počítači nainstaluj Node.js ≥ 24 a pnpm (`corepack enable` nebo instalátor pnpm).
+3. Ve složce spusť `pnpm install` a pak libovolný příkaz výše – skripty i cesty jsou multiplatformní.
 
 ## Vývoj
 ```bash
@@ -39,9 +59,10 @@ pnpm audit        # kontrola zranitelností závislostí
 | `src/market/` | parsery zdrojů (ČNB, Xetra, justETF, Yahoo) a inkrementální aktualizace |
 | `src/importer.ts` | idempotentní import do DB |
 | `src/analysis/` | výpočty: kurzy (`fx`), časový test (`calendar`), loty, FIFO kontrola, portfolio a daně, ocenění, země, vývoj hodnoty (`market`) |
-| `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`) |
+| `src/report/` | HTML report: šifrování (`crypto`), frontend (`app.ts`, `styles.css`, bez knihoven), sestavení (`build`) |
+| `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`, `pnpm report`) |
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
-| `out/` | **výstupy – v .gitignore** (`analysis.json`) |
+| `out/` | **výstupy – v .gitignore** (`analysis.json` nešifrovaně, `stockera.html` zašifrovaně) |
 | `config/` | vzor ruční konfigurace instrumentů |
 | `data/` | **osobní data – v .gitignore**: `input/` výpisy, `stockera.db` databáze, `instruments.json`, `logs/network.log` |
 
@@ -57,4 +78,4 @@ pnpm audit        # kontrola zranitelností závislostí
 1. ✅ Import XLSX → SQLite, testy
 2. ✅ Výpočty: FIFO kontrola párování, časový test, limit 100 000 Kč, dividendy, vklady/výběry (splity čekají na ukázku exportu)
 3. ✅ Kurzy ČNB, ceny (justETF / Yahoo), ISIN (Xetra), složení ETF podle zemí, vývoj hodnoty – síťová vrstva s allowlistem a audit logem
-4. Generátor jednosouborového HTML (CZK/EUR, grafy, taby, akordeony), mobilní zobrazení
+4. ✅ Zašifrovaný jednosouborový HTML report (CZK/EUR, grafy, taby, akordeony), mobilní zobrazení
