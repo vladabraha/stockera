@@ -90,9 +90,32 @@ test('updateMarketData stores rates, ISINs, countries and prices; requests carry
   assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('dateFrom=2025-01-06')));
 });
 
+test('ETF without a justETF country breakdown falls back to onvista; Yahoo provides stock names', async () => {
+  const db = seed();
+  const onvista = JSON.stringify({ countryBreakdown: { list: [{ nameBreakdown: 'Polen', investmentPct: 73 }, { nameBreakdown: 'Ungarn', investmentPct: 20.17 }, { nameBreakdown: 'Tschechien', investmentPct: 6.83 }] } });
+  const named = yahoo.replace('"currency":"USD"', '"currency":"USD","longName":"Stock Inc."');
+  const http = new Http({
+    minIntervalMs: 0,
+    fetch: fakeFetch((u) =>
+      u.includes('etf-profile') ? new Response('<meta property="og:title" content="Swap ETF | X | IE0000000001" />')
+        : u.includes('api.onvista.de') ? new Response(onvista)
+          : u.includes('finance.yahoo.com') ? new Response(named)
+            : routes(u)),
+  });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.warnings, []);
+  assert.equal(r.instruments[0]!.countrySource, 'onvista');
+  const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x }));
+  assert.deepEqual(weights, [{ country: 'PL', weight: 73 }, { country: 'HU', weight: 20.17 }, { country: 'CZ', weight: 6.83 }]);
+  assert.deepEqual(db.prepare('SELECT ticker, name FROM instrument_meta ORDER BY ticker').all().map((x) => ({ ...x })), [
+    { ticker: 'ETFA.DE', name: 'Swap ETF' },
+    { ticker: 'STK.US', name: 'Stock Inc.' },
+  ]);
+});
+
 test('manual overrides win and failures become warnings', async () => {
   const db = seed();
-  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => (u.includes('finance.yahoo.com') ? new Response('', { status: 429 }) : routes(u))) });
+  const http = new Http({ minIntervalMs: 0, retryDelaysMs: [0, 0], fetch: fakeFetch((u) => (u.includes('finance.yahoo.com') ? new Response('', { status: 429 }) : routes(u))) });
   const r = await updateMarketData(db, http, {
     today: '2025-01-13',
     config: { 'ETFA.DE': { countries: { DE: 100 }, priceSource: 'none' }, 'STK.US': { country: 'CZ' } },

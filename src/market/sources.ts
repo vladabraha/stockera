@@ -113,6 +113,21 @@ export async function fetchJustEtfPrices(http: Http, isin: string, from: string,
   return data.series.filter((p) => Number.isFinite(p.value?.raw)).map((p) => ({ date: p.date, close: p.value.raw }));
 }
 
+// ------------------------------------------------------------ onvista ------
+
+/** Fallback for ETFs whose justETF profile has no country breakdown (swap ETFs, new funds). Country names are German. */
+export const onvistaBreakdownsUrl = (isin: string) => `https://api.onvista.de/api/v1/funds/ISIN:${encodeURIComponent(isin)}/breakdowns`;
+
+interface OnvistaBreakdowns {
+  countryBreakdown?: { list?: { nameBreakdown?: string; investmentPct?: number }[] };
+}
+
+export function parseOnvistaCountries(data: OnvistaBreakdowns): { name: string; weight: number }[] {
+  return (data.countryBreakdown?.list ?? [])
+    .filter((c) => c.nameBreakdown && Number.isFinite(c.investmentPct))
+    .map((c) => ({ name: c.nameBreakdown!.trim(), weight: c.investmentPct! }));
+}
+
 // -------------------------------------------------------------- Yahoo ------
 
 const YAHOO_SUFFIX: Record<string, string> = {
@@ -135,7 +150,7 @@ export const yahooChartUrl = (symbol: string, from: string, to: string) =>
 interface YahooChart {
   chart: {
     result?: {
-      meta: { currency: string; gmtoffset?: number };
+      meta: { currency: string; gmtoffset?: number; longName?: string; shortName?: string };
       timestamp?: number[];
       indicators: { quote: { close: (number | null)[] }[] };
     }[];
@@ -143,7 +158,7 @@ interface YahooChart {
   };
 }
 
-export function parseYahooChart(data: YahooChart): { currency: string; prices: PricePoint[] } {
+export function parseYahooChart(data: YahooChart): { currency: string; name: string | null; prices: PricePoint[] } {
   const r = data.chart.result?.[0];
   if (!r) throw new Error(`Yahoo: ${data.chart.error?.description ?? 'prázdná odpověď'}`);
   // Minor units (pence, cents) → major units
@@ -156,7 +171,7 @@ export function parseYahooChart(data: YahooChart): { currency: string; prices: P
     const c = closes[i];
     if (c != null) prices.push({ date: new Date((t + offset) * 1000).toISOString().slice(0, 10), close: c * factor });
   });
-  return { currency: minor[r.meta.currency] ?? r.meta.currency, prices };
+  return { currency: minor[r.meta.currency] ?? r.meta.currency, name: r.meta.longName ?? r.meta.shortName ?? null, prices };
 }
 
 export async function fetchYahooPrices(http: Http, symbol: string, from: string, to: string) {
@@ -166,24 +181,29 @@ export async function fetchYahooPrices(http: Http, symbol: string, from: string,
 // ---------------------------------------------------------- countries ------
 
 const ALIASES: Record<string, string> = {
-  other: 'XX', others: 'XX', 'south korea': 'KR', korea: 'KR', 'hong kong': 'HK', macau: 'MO', macao: 'MO',
+  other: 'XX', others: 'XX', cash: 'XX',
+  // German (onvista)
+  sonstige: 'XX', andere: 'XX', barmittel: 'XX', kasse: 'XX', 'liquide mittel': 'XX', großbritannien: 'GB',
+  'vereinigte staaten': 'US', südkorea: 'KR', 'tschechische republik': 'CZ', 'south korea': 'KR', korea: 'KR', 'hong kong': 'HK', macau: 'MO', macao: 'MO',
   russia: 'RU', 'czech republic': 'CZ', czechia: 'CZ', turkey: 'TR', 'türkiye': 'TR', 'ivory coast': 'CI',
   usa: 'US', 'united states of america': 'US', uk: 'GB', 'great britain': 'GB', taiwan: 'TW', vietnam: 'VN',
 };
 let byName: Map<string, string> | null = null;
 
-/** English country name (as used by justETF) → ISO 3166 alpha-2; `XX` = other/unknown. */
+/** English (justETF) or German (onvista) country name → ISO 3166 alpha-2; `XX` = other/cash. */
 export function countryCode(name: string): string | null {
   const key = name.trim().toLowerCase();
   if (ALIASES[key]) return ALIASES[key];
   if (!byName) {
     byName = new Map();
-    const dn = new Intl.DisplayNames('en', { type: 'region', fallback: 'none' });
-    for (let a = 65; a <= 90; a++) {
-      for (let b = 65; b <= 90; b++) {
-        const code = String.fromCharCode(a, b);
-        const n = dn.of(code);
-        if (n && !byName.has(n.toLowerCase())) byName.set(n.toLowerCase(), code);
+    for (const lang of ['en', 'de']) {
+      const dn = new Intl.DisplayNames(lang, { type: 'region', fallback: 'none' });
+      for (let a = 65; a <= 90; a++) {
+        for (let b = 65; b <= 90; b++) {
+          const code = String.fromCharCode(a, b);
+          const n = dn.of(code);
+          if (n && !byName.has(n.toLowerCase())) byName.set(n.toLowerCase(), code);
+        }
       }
     }
   }

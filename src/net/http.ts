@@ -11,6 +11,7 @@ export const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
   'www.justetf.com', // ETF countries and prices
   'query1.finance.yahoo.com', // stock prices
   'query2.finance.yahoo.com',
+  'api.onvista.de', // ETF country breakdown fallback (when justETF has none)
 ]);
 
 const MAX_REDIRECTS = 5;
@@ -18,6 +19,11 @@ const TIMEOUT_MS = 60_000;
 export const MAX_BODY_BYTES = 20 * 1024 * 1024;
 const MIN_INTERVAL_MS = 400;
 const USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
+// Yahoo answers a cookie-less "browser" User-Agent with HTTP 429; a plain one is served normally.
+const PLAIN_UA_HOSTS = new Set(['query1.finance.yahoo.com', 'query2.finance.yahoo.com']);
+/** Rate limiting / temporary outage → wait and try again (delays in ms). */
+const RETRY_STATUSES = new Set([429, 502, 503, 504]);
+const RETRY_DELAYS_MS = [2_000, 5_000];
 
 export interface AuditEntry {
   time: string;
@@ -45,6 +51,8 @@ export interface HttpOptions {
   auditLog?: string;
   fetch?: FetchFn;
   minIntervalMs?: number;
+  /** Override retry delays (tests use 0). */
+  retryDelaysMs?: number[];
 }
 
 /** GET-only HTTP client restricted to {@link ALLOWED_HOSTS}; every request (incl. blocked ones) is audited. */
@@ -59,6 +67,18 @@ export class Http {
   }
 
   async getText(url: string, accept = '*/*'): Promise<string> {
+    const delays = this.opts.retryDelaysMs ?? RETRY_DELAYS_MS;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.getOnce(url, accept);
+      } catch (e) {
+        if (!(e instanceof HttpError) || !RETRY_STATUSES.has(e.status) || attempt >= delays.length) throw e;
+        await new Promise((r) => setTimeout(r, delays[attempt]));
+      }
+    }
+  }
+
+  private async getOnce(url: string, accept: string): Promise<string> {
     const fetchFn = this.opts.fetch ?? fetch;
     let current = url;
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -71,7 +91,7 @@ export class Http {
           method: 'GET',
           redirect: 'manual',
           credentials: 'omit',
-          headers: { 'User-Agent': USER_AGENT, Accept: accept },
+          headers: { 'User-Agent': PLAIN_UA_HOSTS.has(new URL(current).hostname) ? 'Mozilla/5.0' : USER_AGENT, Accept: accept },
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
       } catch (e) {

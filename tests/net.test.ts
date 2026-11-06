@@ -54,6 +54,24 @@ test('Http follows allowed redirects, throws on errors and writes the audit log'
   }
 });
 
+test('Http retries rate-limited requests and gives Yahoo a plain User-Agent', async () => {
+  let n = 0;
+  const agents: string[] = [];
+  const http = new Http({
+    minIntervalMs: 0,
+    retryDelaysMs: [0, 0],
+    fetch: async (_u, init) => {
+      agents.push(new Headers(init.headers).get('user-agent')!);
+      return ++n < 3 ? new Response('', { status: 429 }) : new Response('ok');
+    },
+  });
+  assert.equal(await http.getText('https://query1.finance.yahoo.com/x'), 'ok');
+  assert.deepEqual(agents, ['Mozilla/5.0', 'Mozilla/5.0', 'Mozilla/5.0']);
+  n = -10;
+  await assert.rejects(http.getText('https://www.cnb.cz/x'), /HTTP 429/);
+  assert.equal(n, -7);
+});
+
 test('Http rejects oversized responses even without Content-Length', async () => {
   const chunk = new Uint8Array(1024 * 1024);
   const huge = () =>
@@ -120,15 +138,16 @@ test('parseJustEtfProfile extracts name and country weights', () => {
 test('parseYahooChart converts pence and uses exchange-local dates', () => {
   const r = parseYahooChart({
     chart: {
-      result: [{ meta: { currency: 'GBp', gmtoffset: 3600 }, timestamp: [1704177000, 1704263400], indicators: { quote: [{ close: [1234, null] }] } }],
+      result: [{ meta: { currency: 'GBp', gmtoffset: 3600, longName: 'Shell plc' }, timestamp: [1704177000, 1704263400], indicators: { quote: [{ close: [1234, null] }] } }],
     },
   });
-  assert.deepEqual(r, { currency: 'GBP', prices: [{ date: '2024-01-02', close: 12.34 }] });
+  assert.deepEqual(r, { currency: 'GBP', name: 'Shell plc', prices: [{ date: '2024-01-02', close: 12.34 }] });
   assert.throws(() => parseYahooChart({ chart: { result: [], error: { description: 'No data' } } }), /No data/);
 });
 
 test('ticker, country and exchange mappings', () => {
   assert.deepEqual(['AAPL.US', 'VWRL.UK', 'CSG.NL', 'BRK.B.US', 'X.ZZ'].map(yahooSymbol), ['AAPL', 'VWRL.L', 'CSG.AS', 'BRK-B', null]);
   assert.deepEqual(['United States', 'United Kingdom', 'South Korea', 'Other', 'Atlantis'].map(countryCode), ['US', 'GB', 'KR', 'XX', null]);
+  assert.deepEqual(['Polen', 'Tschechien', 'USA', 'Großbritannien', 'Barmittel'].map(countryCode), ['PL', 'CZ', 'US', 'GB', 'XX']);
   assert.equal(exchangeCountry('VWRL.UK'), 'GB');
 });

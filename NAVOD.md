@@ -15,8 +15,7 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
    - každý podúčet (EUR, CZK) zvlášť.
 2. Soubory ulož do `data/input/` (staré výpisy tam klidně nech).
 3. Dvakrát klikni na `aktualizovat-windows.cmd` / `aktualizovat-mac.command`.
-4. Až se program zeptá, zadej heslo k reportu (aspoň 12 znaků) a pak ho zopakuj.
-   **Při psaní se nic nezobrazuje – to je v pořádku.**
+4. Až se program zeptá, zadej heslo k reportu (místo znaků se ukazují hvězdičky) a pak ho zopakuj.
 5. Report se sám otevře v prohlížeči.
 
 ## 3. Prohlížení

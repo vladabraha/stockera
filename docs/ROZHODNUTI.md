@@ -103,19 +103,23 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   přihlašovacích údajů, `credentials: 'omit'`, ruční přesměrování s kontrolou každého skoku (max 5), timeout 60 s,
   throttle 400 ms/host, **limit odpovědi 20 MB**, audit každého požadavku (i zablokovaného) do `data/logs/network.log`.
 - **Allowlist** (`ALLOWED_HOSTS`): `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`,
-  `query1/query2.finance.yahoo.com`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
+  `query1/query2.finance.yahoo.com`, `api.onvista.de`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
 - Síť používá **jen `pnpm market`**. Import, výpočty i report jsou offline.
 - Zdroje (podrobně `docs/zdroje-dat.md`):
   - kurzy: ČNB roční txt (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
   - ticker → ISIN: CSV všech instrumentů Xetra (jen pro `.DE`),
   - ETF: justETF profil (země: top země + „Ostatní“ = `XX`; obnova po 30 dnech) a justETF chart API (denní ceny EUR),
-  - akcie: Yahoo chart v8 (z této IP často 429 → varování, ne pád). Mapování `.UK`→`.L`, `.NL`→`.AS`, `.US`→bez přípony; GBp ÷ 100.
+  - ETF bez zemí na justETF → záložně onvista `api/v1/funds/ISIN:{isin}/breakdowns` (`countryBreakdown`, německé
+    názvy zemí → `countryCode` zná i `de` + aliasy jako „Barmittel“ = `XX`). Zdroj se ukládá (`onvista`), obnova po 30 dnech.
+  - akcie: Yahoo chart v8. Yahoo vrací 429 na „prohlížečový“ User-Agent bez cookies → pro Yahoo se posílá jen
+    `Mozilla/5.0`. Obecně: HTTP 429/502/503/504 se 2× zopakuje (po 2 s a 5 s), pak varování, ne pád.
+    Z odpovědi se bere i `longName` → plný název akcie. Mapování `.UK`→`.L`, `.NL`→`.AS`, `.US`→bez přípony; GBp ÷ 100.
   - Země akcie: prefix ISIN, jinak země burzy. Kód `GB`, ne `UK`.
 - **Zamítnuto:** Stooq (vyžaduje JS), OpenFIGI (nevrací ISIN), vyhledávání Börse Frankfurt/Euronext (prázdné),
   „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční doplnění.
 - Ruční přepisy: `data/instruments.json` (vzor `config/instruments.example.json`, klíče začínající `$` se ignorují):
   `isin`, `countries`/`country`, `priceSource` (`justetf`|`yahoo`|`none`), `yahooSymbol`.
-  Swapové/aktivní ETF (LEER, DEGT) nemají na justETF země → `??` = „Neznámé složení“, doplnit ručně.
+  Swapové/aktivní ETF (LEER, DEGT) nemají na justETF země → onvista; teprve když selže i ta, `??` = „Neznámé složení“.
 - **Ceny se stahují od společného hrubého data** (1. 12. roku před prvním nákupem) pro všechny tickery, aby
   z požadavků nešlo vyčíst, kdy byl který instrument koupen. Dál inkrementálně od posledního data − 7 dní.
 - Selhání zdroje = varování, nikdy pád celého běhu.
@@ -129,7 +133,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   `DecompressionStream`). Heslo se nikam neukládá; *Zamknout* zahodí data z paměti.
   Testy používají 1000 iterací (`buildReport(a, pw, { iterations })`).
 - Heslo: interaktivně (skryté, 2×, raw mode – funguje i ve Windows Terminal/PowerShell/cmd), nebo
-  `STOCKERA_PASSWORD` (varování o historii příkazů, proměnná se po přečtení smaže). **Min. 12 znaků.**
+  `STOCKERA_PASSWORD` (varování o historii příkazů, proměnná se po přečtení smaže). Bez minimální délky (přání uživatele – volba je na něm), jen neprázdné; při psaní se zobrazují `*`.
 - **CSP** v `<meta>`: `default-src 'none'`, `script-src`/`style-src` jen **sha256 hash** vložených bloků,
   `img-src`/`connect-src`/`form-action`/`base-uri` `'none'` → stránka nemůže nic odeslat.
   Důsledky pro kód frontendu:
@@ -163,10 +167,12 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Uživatelský návod s tabulkou „Problém → Co dělat“ je `NAVOD.md` – při nové hlášce ji tam doplnit.
 
 ### UI / design
-- Dva taby: **Portfolio** (hodnota + graf vývoje s rozsahy 1M–Vše, souhrnné statistiky, donut podle instrumentů,
-  sloupce podle zemí, „Brzy bez daně“, akordeon instrumentů → nákupy s časovým testem; „Zobrazit graf“ přepne hlavní
+- Dva taby: **Portfolio** (hodnota + graf vývoje s rozsahy 1M–Vše, souhrnné statistiky, **pruhy podle instrumentů**
+  (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), „Brzy bez daně“, akordeon instrumentů → nákupy s časovým testem; „Zobrazit graf“ přepne hlavní
   graf na cenu/hodnotu instrumentu s body nákupů/prodejů) a **Prodané** (realizovaný zisk, daně podle let s limitem
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
+- Řádky instrumentů ukazují **plný název** (justETF/Yahoo z `instrument_meta`, jinak krátký z XTB) a pod ním ticker + ks.
+  Jednotkové ceny (nákup/prodej) jsou vždy v **měně instrumentu** s jejím symbolem; součty se řídí přepínačem Kč / €.
 - Vědomě **ne „typický AI dashboard“**: teplé neutrální pozadí (#f4f2ed), tlumená zelenomodrá akcentní barva
   (#127a6b), vlastní paleta tickerů (ne Tableau), barevné „avatary“ tickerů, segmentové přepínače, bez barevných
   levých okrajů karet a gradientů. Systémové fonty (CSP blokuje webfonty), tabulkové číslice.
@@ -180,8 +186,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 ## 7. Bezpečnostní revize (11/2026)
 
 Revize celého projektu nenašla zneužitelnou chybu (allowlist, XSS, CSP, krypto, SQL – vše parametrizované,
-ZIP – názvy jen jako klíče v paměti). Zapracovaná zpevnění: `analysis.json` jen na vyžádání, heslo ≥ 12 znaků
-+ varování u env, společné datum začátku cen, limit 20 MB odpovědi, kontrola importů při buildu, práva 600.
+ZIP – názvy jen jako klíče v paměti). Zapracovaná zpevnění: `analysis.json` jen na vyžádání, varování u hesla z env, společné datum začátku cen, limit 20 MB odpovědi, kontrola importů při buildu, práva 600.
 Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem), prototype pollution v
 `data/instruments.json` (vlastní lokální konfigurace).
 
@@ -198,6 +203,5 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
 
 - Splity, skutečné názvy dividend / srážkové daně / výběrů (čeká se na anonymizovaný vzorek).
 - Export CZK subúčtu (čeká se na uživatele).
-- Ruční doplnění zemí pro LEER.DE, DEGT.DE a cen pro CSG.NL (Yahoo 429) do `data/instruments.json`.
 - Zda se prodeje splňující časový test započítávají do limitu 100 000 Kč (teď konzervativně ano).
 - Volitelné: zaokrouhlení čísel v payloadu reportu (menší soubor) – pak upravit `deepEqual` v testu.

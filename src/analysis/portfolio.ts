@@ -175,7 +175,11 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const warnings = [...loaded.warnings];
 
   const instruments = new Map(
-    (db.prepare('SELECT ticker, name, category FROM instruments').all() as {
+    // Full fund/company name from market data (justETF, Yahoo) beats XTB's short index-style name.
+    (db.prepare(
+      `SELECT i.ticker, COALESCE(NULLIF(m.name, ''), i.name) AS name, i.category
+       FROM instruments i LEFT JOIN instrument_meta m ON m.ticker = i.ticker`,
+    ).all() as {
       ticker: string;
       name: string | null;
       category: string | null;

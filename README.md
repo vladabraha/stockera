@@ -27,7 +27,7 @@ akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v 
   dešifrují se až v prohlížeči po zadání hesla. Heslo se nikam neukládá, tlačítko *Zamknout* data zahodí z paměti.
 - Content-Security-Policy zakazuje stránce jakoukoli síťovou komunikaci, povolený je jen vlastní vložený skript a styl.
 - Heslo: interaktivně (skryté zadání, 2×), nebo proměnnou `STOCKERA_PASSWORD`
-  (macOS/Linux `STOCKERA_PASSWORD=… pnpm report`, PowerShell `$env:STOCKERA_PASSWORD='…'; pnpm report`). Min. 12 znaků.
+  (macOS/Linux `STOCKERA_PASSWORD=… pnpm report`, PowerShell `$env:STOCKERA_PASSWORD='…'; pnpm report`).
   Heslo z proměnné může zůstat v historii příkazů – bezpečnější je interaktivní zadání.
 - Zapomenuté heslo nevadí – report se dá kdykoli vygenerovat znovu z databáze s novým heslem.
 
@@ -58,7 +58,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `src/xtb/` | parser exportu XTB → typovaná data; při změně formátu hlásí `XtbFormatError` |
 | `src/db/` | SQLite schéma a migrace (`PRAGMA user_version`) |
 | `src/net/` | jediný HTTP klient: allowlist domén, jen GET, audit log |
-| `src/market/` | parsery zdrojů (ČNB, Xetra, justETF, Yahoo) a inkrementální aktualizace |
+| `src/market/` | parsery zdrojů (ČNB, Xetra, justETF, onvista, Yahoo) a inkrementální aktualizace |
 | `src/importer.ts` | idempotentní import do DB |
 | `src/analysis/` | výpočty: kurzy (`fx`), časový test (`calendar`), loty, FIFO kontrola, portfolio a daně, ocenění, země, vývoj hodnoty (`market`) |
 | `src/report/` | HTML report: šifrování (`crypto`), frontend (`app.ts`, `styles.css`, bez knihoven), sestavení (`build`) |
@@ -73,7 +73,7 @@ pnpm audit        # kontrola zranitelností závislostí
 - Žádné runtime závislosti; vývojové závislosti s přesnými verzemi.
 - `pnpm-workspace.yaml`: zakázané install skripty závislostí, instalace jen verzí starších 3 dnů.
 - Import ani výpočty nekomunikují po síti. Síť používá jen `pnpm market`, výhradně přes `src/net/http.ts`:
-  - povolené servery: `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`, `query1/query2.finance.yahoo.com` (jiné, i při přesměrování, se zablokují),
+  - povolené servery: `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`, `query1/query2.finance.yahoo.com`, `api.onvista.de` (jiné, i při přesměrování, se zablokují),
   - posílá jen tickery, ISINy a data (ověřeno testem `tests/market.test.ts`), bez cookies,
   - každý požadavek se zapíše do `data/logs/network.log`,
   - ceny se stahují od 1. 12. roku před prvním nákupem pro všechny tickery stejně (z požadavků nejde vyčíst, kdy jsi co koupil),

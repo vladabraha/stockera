@@ -4,7 +4,7 @@ import type { Http } from '../net/http.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
   XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
-  justEtfProfileUrl, parseJustEtfProfile, parseXetraInstruments, yahooSymbol, type PricePoint, type XetraInstrument,
+  justEtfProfileUrl, onvistaBreakdownsUrl, parseJustEtfProfile, parseOnvistaCountries, parseXetraInstruments, yahooSymbol, type PricePoint, type XetraInstrument,
 } from './sources.ts';
 
 /** Manual overrides per XTB ticker (data/instruments.json, see config/instruments.example.json). */
@@ -146,22 +146,42 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     if (o.countries) [countries, countrySource] = [o.countries, 'manual'];
     else if (o.country) [countries, countrySource] = [{ [o.country]: 100 }, 'manual'];
     else if (isEtf && isin) {
-      const age = prev?.updated_at && countrySource === 'justetf' ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;
+      const age = prev?.updated_at && (countrySource === 'justetf' || countrySource === 'onvista') ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;
       if (age > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS)) {
         log(`${ticker}: složení podle zemí (justETF)…`);
+        let raw: { name: string; weight: number }[] = [];
+        let rawSource: string | null = null;
+        const problems: string[] = [];
         try {
           const profile = parseJustEtfProfile(await http.getText(justEtfProfileUrl(isin), 'text/html'));
           name = profile.name ?? name;
-          if (!profile.countries.length) throw new Error('stránka neobsahuje rozpad podle zemí');
+          if (profile.countries.length) [raw, rawSource] = [profile.countries, 'justetf'];
+          else problems.push('justETF rozpad podle zemí neuvádí');
+        } catch (e) {
+          problems.push(`justETF: ${(e as Error).message}`);
+        }
+        if (!raw.length) {
+          log(`${ticker}: složení podle zemí (onvista)…`);
+          try {
+            raw = parseOnvistaCountries(await http.getJson(onvistaBreakdownsUrl(isin)));
+            if (raw.length) rawSource = 'onvista';
+            else problems.push('onvista rozpad podle zemí neuvádí');
+          } catch (e) {
+            problems.push(`onvista: ${(e as Error).message}`);
+          }
+        }
+        if (raw.length) {
           countries = {};
-          for (const c of profile.countries) {
+          for (const c of raw) {
             const code = countryCode(c.name);
             if (!code) warnings.push(`${ticker}: neznámá země "${c.name}" – započtena jako Ostatní.`);
             countries[code ?? 'XX'] = (countries[code ?? 'XX'] ?? 0) + c.weight;
           }
-          countrySource = 'justetf';
-        } catch (e) {
-          warnings.push(`${ticker}: země z justETF se nepodařilo načíst (${(e as Error).message}).`);
+          countrySource = rawSource;
+        } else if (!countrySource) {
+          warnings.push(`${ticker}: složení podle zemí se nepodařilo zjistit (${problems.join('; ')}) – doplň "countries" do data/instruments.json.`);
+        } else {
+          warnings.push(`${ticker}: složení podle zemí se nepodařilo aktualizovat (${problems.join('; ')}) – zůstává poslední známé.`);
         }
       }
     } else if (!isEtf) {
@@ -194,7 +214,11 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         try {
           let points: PricePoint[];
           if (source === 'justetf') [points, currency] = [await fetchJustEtfPrices(http, symbol, from, opts.today), 'EUR'];
-          else ({ prices: points, currency } = await fetchYahooPrices(http, symbol, from, opts.today));
+          else {
+            const y = await fetchYahooPrices(http, symbol, from, opts.today);
+            [points, currency] = [y.prices, y.currency];
+            if (!isEtf && y.name) name = y.name;
+          }
           transaction(db, () => {
             for (const p of points) insertPrice.run(ticker, p.date, p.close, currency!, source);
           });

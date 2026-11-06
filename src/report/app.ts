@@ -105,6 +105,8 @@ function money(m: Money | null): string {
   const v = m[state.cur];
   return v != null ? fmtMoney(v, curCode()) : fmtMoney(m.native, m.currency);
 }
+/** Unit price in the instrument's own currency (prices stay native; totals follow the CZK/EUR switch). */
+const price = (v: number, currency: string) => fmtMoney(v, currency, Math.abs(v) < 10 ? 4 : 2);
 const moneyValue = (m: Money | null) => (m ? (m[state.cur] ?? m.native) : null);
 const pctValue = (p: Percent | null): number | null => (p ? (p[state.cur] ?? p.native) : null);
 function pct(p: Percent | number | null): string {
@@ -340,6 +342,10 @@ function portfolioTab(a: Analysis): HTMLElement {
   );
 }
 
+function instrumentName(ticker: string, name: string | null, quantity: number): HTMLElement {
+  return h('div', { class: 'iname' }, h('b', { title: name ?? ticker }, name || ticker), h('span', {}, `${ticker} · ${fmtNum(quantity, 4)} ks`));
+}
+
 function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
   const taxText = freeShare >= 1 - 1e-9
@@ -348,7 +354,7 @@ function holdingRow(x: Holding): HTMLElement {
   return accordion(`h:${x.ticker}`, [
     h('div', { class: 'irow' },
       avatar(x.ticker),
-      h('div', { class: 'iname' }, h('b', {}, x.ticker), h('span', {}, `${fmtNum(x.quantity, 4)} ks · ${x.name ?? ''}`)),
+      instrumentName(x.ticker, x.name, x.quantity),
       h('div', { class: 'ival' },
         h('b', { class: 'num' }, totals(x.value)),
         signed(`${signedMoney(totals(x.profit), totalsValue(x.profit))} · ${pct(x.profitPct)}`, totalsValue(x.profit))),
@@ -362,7 +368,7 @@ function holdingRow(x: Holding): HTMLElement {
     return h('div', { class: 'acc-body' },
       h('div', { class: 'meta' },
         x.isin ? h('span', {}, 'ISIN ', h('b', {}, x.isin)) : null,
-        h('span', {}, 'Ø nákup ', h('b', {}, fmtNum(avg, 4))),
+        h('span', {}, 'Ø nákup ', h('b', {}, x.lots[0] ? price(avg, x.lots[0].cost.currency) : '—')),
         last ? h('span', {}, 'Cena ', h('b', {}, fmtMoney(last.close, last.currency)), ` (${czDate(last.date)})`) : null,
         countries ? h('span', {}, countries) : null,
         button('Zobrazit graf', () => showInstrument(x.ticker), 'link'),
@@ -371,7 +377,7 @@ function holdingRow(x: Holding): HTMLElement {
         x.lots.map((l) => h('tr', {},
           h('td', {}, czDate(l.openDate)),
           h('td', { class: 'num' }, fmtNum(l.quantity, 4)),
-          h('td', { class: 'num' }, fmtNum(l.openPrice, 4)),
+          h('td', { class: 'num' }, price(l.openPrice, l.cost.currency)),
           h('td', { class: 'num' }, money(l.cost)),
           h('td', { class: 'num' }, money(l.value)),
           signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit), 'td'),
@@ -739,37 +745,44 @@ function donut(items: { value: number; color: string; title: string }[], label: 
 
 function allocationPanel(a: Analysis): HTMLElement {
   const total = a.holdings.reduce((n, x) => n + measure(x.value), 0);
-  const items = [...a.holdings]
-    .sort((p, q) => measure(q.value) - measure(p.value))
-    .map((x) => ({ value: measure(x.value), color: colorOf(x.ticker), title: `${x.ticker}: ${totals(x.value)}`, x }));
-  const legend = h('ul', { class: 'legend-list' }, ...items.map((it) => {
-    const li = h('li', { tabindex: '0', role: 'button', title: 'Zobrazit graf' },
-      paint(h('i', {}), { background: it.color }),
-      h('span', { class: 'lname' }, h('b', {}, it.x.ticker), h('small', {}, ` ${it.x.name ?? ''}`)),
-      h('span', { class: 'num' }, `${fmtNum(total ? (it.value / total) * 100 : 0, 1)} %`));
-    li.addEventListener('click', () => showInstrument(it.x.ticker));
-    li.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInstrument(it.x.ticker); } });
-    return li;
-  }));
+  const items = [...a.holdings].sort((p, q) => measure(q.value) - measure(p.value));
+  const max = Math.max(...items.map((x) => measure(x.value)), 1);
   return panel('Složení portfolia',
-    h('div', { class: 'donut-wrap' }, donut(items, `${a.holdings.length} instrumentů`, fmtAxis(total, curCode())), legend));
+    h('div', { class: 'bars alloc' }, ...items.map((x) => {
+      const v = measure(x.value);
+      const row = h('div', { class: 'bar-row', tabindex: '0', role: 'button', title: 'Zobrazit graf' },
+        h('span', { class: 'bar-label' }, h('b', {}, x.ticker), h('small', {}, x.name ?? '')),
+        h('div', { class: 'bar-track' }, paint(h('div', { class: 'bar' }), { width: `${(v / max) * 100}%`, background: colorOf(x.ticker) })),
+        h('span', { class: 'num' }, h('b', {}, `${fmtNum(total ? (v / total) * 100 : 0, 1)} %`), h('small', {}, totals(x.value))));
+      row.addEventListener('click', () => showInstrument(x.ticker));
+      row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInstrument(x.ticker); } });
+      return row;
+    })),
+    h('p', { class: 'hint' }, 'Kliknutím na instrument zobrazíš jeho graf.'),
+  );
 }
 
+const COUNTRY_SLICES = 8;
+const OTHER_COLOR = '#a8a29e';
+const UNKNOWN_COLOR = '#d6d3d1';
+
 function geographyPanel(a: Analysis): HTMLElement {
-  const top = a.geography.slice(0, 10);
-  const rest = a.geography.slice(10);
-  const restShare = rest.reduce((n, g) => n + g.share, 0);
-  const items = top.map((g) => ({ label: countryName(g.country), share: g.share, muted: g.country === '??' || g.country === 'XX' }));
-  if (restShare > 0) items.push({ label: `Další země (${rest.length})`, share: restShare, muted: true });
-  const max = Math.max(...items.map((i) => i.share), 1);
+  const known = a.geography.filter((g) => g.country !== '??' && g.country !== 'XX');
+  const top = known.slice(0, COUNTRY_SLICES);
+  const restShare = a.geography.filter((g) => !top.includes(g)).reduce((n, g) => n + g.share, 0);
+  const unknown = a.geography.find((g) => g.country === '??')?.share ?? 0;
+  const items = top.map((g, i) => ({ value: g.share, color: PALETTE[i % PALETTE.length]!, title: `${countryName(g.country)}: ${fmtNum(g.share, 1)} %`, label: countryName(g.country) }));
+  const other = restShare - unknown;
+  if (other > 0.05) items.push({ value: other, color: OTHER_COLOR, title: `Ostatní: ${fmtNum(other, 1)} %`, label: 'Ostatní' });
+  if (unknown > 0.05) items.push({ value: unknown, color: UNKNOWN_COLOR, title: `Neznámé složení: ${fmtNum(unknown, 1)} %`, label: 'Neznámé složení' });
+  if (!items.length) return panel('Podle zemí', h('p', { class: 'empty' }, 'Složení není k dispozici.'));
+  const legend = h('ul', { class: 'legend-list static' }, ...items.map((it) => h('li', {},
+    paint(h('i', {}), { background: it.color }),
+    h('span', { class: 'lname' }, it.label),
+    h('span', { class: 'num' }, `${fmtNum(it.value, 1)} %`))));
   return panel('Podle zemí',
-    items.length
-      ? h('div', { class: 'bars' }, ...items.map((it) => h('div', { class: 'bar-row' },
-          h('span', { class: 'bar-label' }, it.label),
-          h('div', { class: 'bar-track' }, paint(h('div', { class: `bar${it.muted ? ' muted' : ''}` }), { width: `${(it.share / max) * 100}%` })),
-          h('span', { class: 'num' }, `${fmtNum(it.share, 1)} %`))))
-      : h('p', { class: 'empty' }, 'Složení není k dispozici.'),
-    h('p', { class: 'hint' }, 'ETF jsou rozpočítané podle zemí, do kterých investují (hlavní země podle justETF, zbytek je „Ostatní“).'),
+    h('div', { class: 'donut-wrap' }, donut(items, 'Největší podíl', top[0] ? `${top[0].country} ${fmtNum(top[0].share, 0)} %` : '—'), legend),
+    h('p', { class: 'hint' }, 'ETF jsou rozpočítané podle zemí, do kterých investují (justETF, případně onvista). Menší země jsou v „Ostatní“.'),
   );
 }
 
@@ -830,8 +843,8 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
   return accordion(`r:${r.ticker}`, [
     h('div', { class: 'irow' },
       avatar(r.ticker),
-      h('div', { class: 'iname' }, h('b', {}, r.ticker), h('span', {}, `${fmtNum(r.quantity, 4)} ks · ${r.name ?? ''}`)),
-      h('div', { class: 'ival' },
+      instrumentName(r.ticker, r.name, r.quantity),
+      h('div', { class: 'ival lead' },
         h('b', { class: 'num' }, totals(r.proceeds)),
         h('span', { class: 'muted small' }, r.firstSale === r.lastSale ? czDate(r.lastSale) : `${czDate(r.firstSale)} – ${czDate(r.lastSale)}`)),
       h('div', { class: 'ival' },
@@ -845,8 +858,8 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
         h('td', {}, czDate(l.openDate)),
         h('td', {}, czDate(l.closeDate)),
         h('td', { class: 'num' }, fmtNum(l.quantity, 4)),
-        h('td', { class: 'num' }, fmtNum(l.openPrice, 4)),
-        h('td', { class: 'num' }, fmtNum(l.closePrice, 4)),
+        h('td', { class: 'num' }, price(l.openPrice, l.cost.currency)),
+        h('td', { class: 'num' }, price(l.closePrice, l.proceeds.currency)),
         h('td', { class: 'num' }, money(l.cost)),
         h('td', { class: 'num' }, money(l.proceeds)),
         signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit), 'td'),
