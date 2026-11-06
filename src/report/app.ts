@@ -484,7 +484,7 @@ function rangeChange(history: HistoryPoint[]): HTMLElement | null {
 }
 
 interface Series { name: string; color: string; points: Point[]; dashed?: boolean; area?: boolean }
-interface Marker { x: number; y: number; kind: 'buy' | 'sell'; label: string }
+interface Marker { x: number; y: number; kind: 'buy' | 'sell'; label: string; amount?: string }
 
 function portfolioChart(history: HistoryPoint[]): HTMLElement {
   if (!history.length) return h('p', { class: 'empty' }, 'Historie hodnoty není k dispozici (spusť pnpm market).');
@@ -530,18 +530,13 @@ function instrumentChart(a: Analysis, ticker: string, view: 'price' | 'value'): 
       for (const l of lots) if (l.from <= d && (l.to == null || d < l.to)) qty += l.qty;
       return [dayMs(d), qty * c];
     });
-    return lineChart([{ name: `Hodnota pozice (${currency})`, color, points: pts, area: true }], [], fmtP, currency);
+    // Markers sit on the position-value line (the trade amount is in the tooltip)
+    const valueAt = (iso: string) => pts[nearest(pts, dayMs(iso))]?.[1] ?? 0;
+    const markers = tradeMarkers(holding, sold, inRange, fmtP).map((m) => ({ ...m, y: valueAt(new Date(m.x).toISOString()) }));
+    return lineChart([{ name: `Hodnota pozice (${currency})`, color, points: pts, area: true }], markers, fmtP, currency);
   }
 
-  const buy = (l: { openDate: string; openPrice: number; quantity: number }, suffix = ''): Marker =>
-    ({ x: dayMs(l.openDate), y: l.openPrice, kind: 'buy', label: `Nákup ${czDate(l.openDate)}: ${fmtNum(l.quantity, 4)} ks à ${fmtP(l.openPrice)}${suffix}` });
-  const markers: Marker[] = [
-    ...(holding?.lots ?? []).filter((l) => inRange(l.openDate)).map((l) => buy(l)),
-    ...(sold?.lots ?? []).flatMap((l) => [
-      ...(inRange(l.openDate) ? [buy(l, ' (prodáno)')] : []),
-      ...(inRange(l.closeDate) ? [{ x: dayMs(l.closeDate), y: l.closePrice, kind: 'sell' as const, label: `Prodej ${czDate(l.closeDate)}: ${fmtNum(l.quantity, 4)} ks à ${fmtP(l.closePrice)}` }] : []),
-    ]),
-  ];
+  const markers = tradeMarkers(holding, sold, inRange, fmtP);
   const lines: Series[] = [{ name: `Cena (${currency})`, color, points: prices.map(([d, c]) => [dayMs(d), c]), area: true }];
   if (holding?.lots.length) {
     const avg = holding.lots.reduce((n, l) => n + l.openPrice * l.quantity, 0) / holding.quantity;
@@ -551,8 +546,34 @@ function instrumentChart(a: Analysis, ticker: string, view: 'price' | 'value'): 
   const wrap = lineChart(lines, markers, fmtP, currency);
   wrap.append(h('p', { class: 'hint' },
     'Cena za zobrazené období ', signed(pct(first ? (last / first - 1) * 100 : null), last - first),
-    '. Body: ', h('span', { class: 'dot buy' }), ' nákup, ', h('span', { class: 'dot sell' }), ' prodej.'));
+    '. Body: ', h('span', { class: 'dot buy' }), ' nákup, ', h('span', { class: 'dot sell' }), ' prodej (najeď nebo klepni pro částku).'));
   return wrap;
+}
+
+/** Buy/sell points with what was paid/received (unit price × quantity, plus the CZK/EUR amount). */
+function tradeMarkers(holding: Holding | undefined, sold: RealizedInstrument | undefined, inRange: (iso: string) => boolean, fmtP: (v: number) => string): Marker[] {
+  const buy = (l: { openDate: string; openPrice: number; quantity: number; cost: Money }, suffix = ''): Marker => ({
+    x: dayMs(l.openDate), y: l.openPrice, kind: 'buy',
+    label: `Nákup ${czDate(l.openDate)}${suffix}: ${fmtNum(l.quantity, 4)} ks à ${fmtP(l.openPrice)}`,
+    amount: `zaplaceno ${tradeAmount(l.cost)}`,
+  });
+  return [
+    ...(holding?.lots ?? []).filter((l) => inRange(l.openDate)).map((l) => buy(l)),
+    ...(sold?.lots ?? []).flatMap((l) => [
+      ...(inRange(l.openDate) ? [buy(l, ' (později prodáno)')] : []),
+      ...(inRange(l.closeDate) ? [{
+        x: dayMs(l.closeDate), y: l.closePrice, kind: 'sell' as const,
+        label: `Prodej ${czDate(l.closeDate)}: ${fmtNum(l.quantity, 4)} ks à ${fmtP(l.closePrice)}`,
+        amount: `utrženo ${tradeAmount(l.proceeds)} · zisk ${signedMoney(money(l.profit), moneyValue(l.profit))}`,
+      }] : []),
+    ]),
+  ];
+}
+
+function tradeAmount(m: Money): string {
+  const native = fmtMoney(m.native, m.currency);
+  const v = m[state.cur];
+  return v != null && curCode() !== m.currency ? `${native} (${fmtMoney(v, curCode())})` : native;
 }
 
 function niceTicks(min: number, max: number, count = 4): number[] {
@@ -657,7 +678,13 @@ function lineChart(series: Series[], markers: Marker[], fmtY: (v: number) => str
     svg.append(paint(s('path', { d, class: `line${sr.dashed ? ' dashed' : ''}` }), { stroke: sr.color }));
   }
   for (const m of markers) {
-    svg.append(s('circle', { cx: X(m.x), cy: Y(m.y), r: narrow ? 3.5 : 4.5, class: `marker ${m.kind}` }, s('title', {}, m.label)));
+    svg.append(s('circle', { cx: X(m.x), cy: Y(m.y), r: narrow ? 3.5 : 4.5, class: `marker ${m.kind}` }, s('title', {}, `${m.label}, ${m.amount ?? ''}`)));
+  }
+  // Trades are shown in the hover tooltip of the nearest chart point (works on touch too)
+  const tradesAt = new Map<number, Marker[]>();
+  for (const m of markers) {
+    const i = nearest(main.points, m.x);
+    tradesAt.set(i, [...(tradesAt.get(i) ?? []), m]);
   }
   const lastMain = main.points.at(-1)!;
   svg.append(paint(s('circle', { cx: X(lastMain[0]), cy: Y(lastMain[1]), r: 4, class: 'end' }), { fill: main.color }));
@@ -693,6 +720,11 @@ function lineChart(series: Series[], markers: Marker[], fmtY: (v: number) => str
       rows.push(h('div', {}, `${sr.name}: `, h('b', {}, fmtY(y))));
     });
     const ex = extra?.(idx); if (ex) rows.push(ex);
+    const trades = tradesAt.get(idx) ?? [];
+    for (const m of trades.slice(0, 3)) {
+      rows.push(h('div', { class: `trade ${m.kind}` }, h('span', { class: `dot ${m.kind}` }), h('b', {}, m.label), m.amount ? h('div', {}, m.amount) : null));
+    }
+    if (trades.length > 3) rows.push(h('div', { class: 'trade muted' }, `a další obchody: ${trades.length - 3} (viz tabulka nákupů)`));
     tip.replaceChildren(...rows);
     tip.classList.add('show');
     const left = (X(cx) / W) * rect.width;
@@ -895,4 +927,17 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = window.setTimeout(() => { if (state.data) render(); }, 200);
 });
+// Open instrument rows stick below the page header; its height changes with wrapping, so measure it.
+const headerObserver = new ResizeObserver((entries) => {
+  for (const e of entries) document.documentElement.style.setProperty('--header-h', `${Math.ceil((e.target as HTMLElement).offsetHeight)}px`);
+});
+let observedHeader: Element | null = null;
+new MutationObserver(() => {
+  const hdr = document.querySelector('header');
+  if (hdr && hdr !== observedHeader) {
+    if (observedHeader) headerObserver.unobserve(observedHeader);
+    headerObserver.observe(hdr);
+    observedHeader = hdr;
+  }
+}).observe(document.getElementById('app')!, { childList: true, subtree: true });
 renderLogin();

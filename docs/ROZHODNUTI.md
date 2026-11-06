@@ -173,6 +173,11 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
 - Řádky instrumentů ukazují **plný název** (justETF/Yahoo z `instrument_meta`, jinak krátký z XTB) a pod ním ticker + ks.
   Jednotkové ceny (nákup/prodej) jsou vždy v **měně instrumentu** s jejím symbolem; součty se řídí přepínačem Kč / €.
+- Rozbalený řádek instrumentu (`.acc[open] > summary`) je **sticky** pod hlavičkou stránky; výšku hlavičky (mění se
+  zalomením na mobilu) měří `ResizeObserver` do CSS proměnné `--header-h`.
+- Body nákupů/prodejů v grafu instrumentu: částka (zaplaceno / utrženo + zisk, v měně instrumentu i v Kč/€) se ukazuje
+  v **tooltipu** nejbližšího bodu grafu (funguje i dotykem, `<title>` na mobilu nejde); max 3 obchody, zbytek jen počtem.
+  V režimu „Hodnota pozice“ leží body na křivce hodnoty.
 - Vědomě **ne „typický AI dashboard“**: teplé neutrální pozadí (#f4f2ed), tlumená zelenomodrá akcentní barva
   (#127a6b), vlastní paleta tickerů (ne Tableau), barevné „avatary“ tickerů, segmentové přepínače, bez barevných
   levých okrajů karet a gradientů. Systémové fonty (CSP blokuje webfonty), tabulkové číslice.

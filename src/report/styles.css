@@ -115,6 +115,8 @@ svg .marker { stroke: var(--panel); stroke-width: 1.5; }
 svg .marker.buy, .dot.buy { fill: var(--pos); background: var(--pos); }
 svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; vertical-align: middle; }
+.tip .trade { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+.tip .trade .dot { margin-right: 6px; }
 .tip { position: absolute; top: 4px; left: 0; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 8px 10px; font-size: .8rem; line-height: 1.45; box-shadow: 0 8px 24px rgba(0, 0, 0, .14); opacity: 0; transition: opacity .1s; white-space: nowrap; }
 .tip.show { opacity: 1; }
@@ -172,6 +174,9 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .acc:first-child { border-top: 0; }
 .acc > summary { list-style: none; cursor: pointer; padding: 12px 6px; border-radius: 12px; }
 .acc > summary:hover { background: var(--sunk); }
+.acc[open] > summary { position: sticky; top: var(--header-h, 60px); z-index: 4; background: var(--panel); border-radius: 0;
+  box-shadow: 0 1px 0 var(--line); }
+.acc[open] > summary:hover { background: color-mix(in srgb, var(--sunk) 60%, var(--panel)); }
 .acc > summary::-webkit-details-marker { display: none; }
 .irow { display: grid; grid-template-columns: 38px minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1.1fr) 14px; align-items: center; gap: 14px; }
 .irow::after { content: ""; width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); justify-self: center; transition: transform .15s; }
