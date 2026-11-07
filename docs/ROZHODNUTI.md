@@ -259,7 +259,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 
 ### UI / design
 - Dva taby: **Portfolio** (hodnota + graf vývoje s rozsahy 1M–Vše, souhrnné statistiky, **pruhy podle instrumentů**
-  (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), akordeon instrumentů → nákupy s časovým testem, pod ním „Brzy bez daně“; „Zobrazit graf“ přepne hlavní
+  (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), akordeon instrumentů → nákupy s časovým testem, pod ním „Brzy bez daně“ (po 5 lotech, „Zobrazit dalších 10“; volba **„Bez daně k datu“** vypíše po instrumentech kusy se splněným testem k zvolenému dni, závěrečnou cenu k tomu dni a hodnotu/zisk v dnešním kurzu – pro budoucí datum poslední známou cenu); „Zobrazit graf“ přepne hlavní
   graf na cenu/hodnotu instrumentu s body nákupů/prodejů) a **Prodané** (realizovaný zisk, daně podle let s limitem
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
 - Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se

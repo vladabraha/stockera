@@ -38,6 +38,10 @@ const state = {
   colors: new Map<string, string>(),
   /** Rows shown in the "stocks inside ETFs" list (grows by LT_STEP up to LT_MAX). */
   ltShown: 10,
+  /** Rows shown in "Brzy bez daně" (grows by UPCOMING_STEP). */
+  upcomingShown: 5,
+  /** "Bez daně k datu" (ISO date); null = list of upcoming dates. */
+  taxFreeDate: null as string | null,
 };
 
 // ---------------------------------------------------------------- DOM helpers
@@ -609,22 +613,105 @@ function showInstrument(ticker: string): void {
   document.getElementById('hero')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+const UPCOMING_STEP = 10;
+
 function upcomingPanel(a: Analysis): HTMLElement | null {
   const pending = a.holdings
     .flatMap((x) => x.lots.filter((l) => !l.taxFree).map((l) => ({ x, l })))
     .sort((p, q) => p.l.taxFreeFrom.localeCompare(q.l.taxFreeFrom));
-  if (!pending.length) return null;
-  const items = pending.slice(0, 5);
-  return panel('Brzy bez daně',
-    h('ul', { class: 'upcoming' }, ...items.map(({ x, l }) => h('li', {},
-      avatar(x.ticker),
-      h('div', { class: 'grow' },
-        h('div', {}, h('b', {}, x.ticker), h('span', { class: 'muted' }, ` ${fmtNum(l.quantity, 4)} ks z ${czDate(l.openDate)}`)),
-        progress(lotProgress(l))),
-      h('div', { class: 'right' },
-        h('b', {}, czDate(l.taxFreeFrom)),
-        h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))),
-    ))));
+  if (!pending.length && !a.holdings.some((x) => x.lots.length)) return null;
+  const dateInput = h('input', { type: 'date', value: state.taxFreeDate ?? '' });
+  dateInput.addEventListener('change', () => { state.taxFreeDate = dateInput.value || null; render(); });
+  const head = h('div', { class: 'panel-head' },
+    h('h2', {}, 'Brzy bez daně'),
+    h('div', { class: 'tf-date' },
+      h('label', { class: 'date-field' }, h('span', {}, 'Bez daně k datu'), dateInput),
+      state.taxFreeDate ? button('Zrušit', () => { state.taxFreeDate = null; render(); }, 'ghost') : null));
+  if (state.taxFreeDate) return h('section', { class: 'panel' }, head, taxFreeAtDate(a, state.taxFreeDate));
+  if (!pending.length) return h('section', { class: 'panel' }, head, h('p', { class: 'muted' }, 'Všechny držené nákupy už splnily časový test.'));
+
+  const item = ({ x, l }: (typeof pending)[number]) => h('li', {},
+    avatar(x.ticker),
+    h('div', { class: 'grow' },
+      h('div', {}, h('b', {}, x.ticker), h('span', { class: 'muted' }, ` ${fmtNum(l.quantity, 4)} ks z ${czDate(l.openDate)}`)),
+      progress(lotProgress(l))),
+    h('div', { class: 'right' },
+      h('b', {}, czDate(l.taxFreeFrom)),
+      h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))));
+  const list = h('ul', { class: 'upcoming' });
+  const more = h('div', { class: 'lt-more' });
+  const fill = (from: number) => {
+    const n = Math.min(state.upcomingShown, pending.length);
+    list.append(...pending.slice(from, n).map(item));
+    const left = pending.length - n;
+    more.replaceChildren(...[
+      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${pending.length}`),
+      left > 0 ? button(`Zobrazit dalších ${Math.min(UPCOMING_STEP, left)}`, () => {
+        const was = state.upcomingShown;
+        state.upcomingShown = Math.min(was + UPCOMING_STEP, pending.length);
+        fill(was);
+      }, 'ghost') : null,
+      n > 5 ? button('Zobrazit méně', () => { state.upcomingShown = 5; list.replaceChildren(); fill(0); }, 'ghost') : null,
+    ].filter((c) => c != null));
+  };
+  fill(0);
+  return h('section', { class: 'panel' }, head, list, pending.length > 5 ? more : null);
+}
+
+/** Last known close on or before `date` (ISO), else null. */
+function closeOn(prices: [string, number][] | undefined, date: string): number | null {
+  let v: number | null = null;
+  for (const [d, c] of prices ?? []) { if (d > date) break; v = c; }
+  return v;
+}
+
+/**
+ * Lots that are past the time test on `date`, per instrument, valued at the price on that date
+ * (the latest known price for future dates; converted at today's rate).
+ */
+function taxFreeAtDate(a: Analysis, date: string): HTMLElement {
+  const rows: { ticker: string; name: string | null; qty: number; px: number | null; ccy: string | null; value: number | null; profit: number | null; newQty: number }[] = [];
+  for (const x of a.holdings) {
+    const lots = x.lots.filter((l) => l.taxFreeFrom <= date);
+    if (!lots.length) continue;
+    let value: number | null = 0, cost: number | null = 0, px: number | null = null, ccy: string | null = null;
+    for (const l of lots) {
+      const cur = l.currentPrice;
+      const p = cur && date >= cur.date ? cur.close : closeOn(a.instruments[x.ticker]?.prices, date);
+      if (cur) [px, ccy] = [p, cur.currency];
+      const ratio = cur && p != null ? p / cur.close : null;
+      const v = l.value?.[state.cur];
+      value = value == null || v == null || ratio == null ? null : value + v * ratio;
+      const c = l.cost[state.cur];
+      cost = cost == null || c == null ? null : cost + c;
+    }
+    rows.push({
+      ticker: x.ticker, name: x.name, qty: lots.reduce((n, l) => n + l.quantity, 0), px, ccy, value,
+      profit: value == null || cost == null ? null : value - cost,
+      newQty: lots.filter((l) => !l.taxFree).reduce((n, l) => n + l.quantity, 0),
+    });
+  }
+  if (!rows.length) return h('p', { class: 'muted' }, `K ${czDate(date)} nebude žádný držený nákup po časovém testu.`);
+  rows.sort((p, q) => (q.value ?? 0) - (p.value ?? 0));
+  const sum = (f: (r: (typeof rows)[number]) => number | null) =>
+    rows.reduce<number | null>((n, r) => (n == null || f(r) == null ? null : n + f(r)!), 0);
+  const [total, profit] = [sum((r) => r.value), sum((r) => r.profit)];
+  const latest = a.holdings.flatMap((x) => x.lots).map((l) => l.currentPrice?.date ?? '').sort().at(-1) ?? '';
+  return h('div', {},
+    h('p', { class: 'tf-sum' }, `K ${czDate(date)} lze bez daně prodat za `, h('b', {}, fmtMoney(total, curCode())),
+      ', zisk ', signed(signedMoney(fmtMoney(profit, curCode()), profit), profit)),
+    table(['Instrument', 'Ks bez daně', 'z toho nově', 'Cena k datu', 'Hodnota', 'Zisk'],
+      rows.map((r) => h('tr', {},
+        h('td', {}, h('b', {}, r.ticker), r.name ? h('span', { class: 'muted' }, ` ${r.name}`) : null),
+        h('td', { class: 'num' }, fmtNum(r.qty, 4)),
+        h('td', { class: 'num' }, r.newQty ? fmtNum(r.newQty, 4) : '—'),
+        h('td', { class: 'num' }, r.px != null && r.ccy ? price(r.px, r.ccy) : '—'),
+        h('td', { class: 'num' }, fmtMoney(r.value, curCode())),
+        signed(signedMoney(fmtMoney(r.profit, curCode()), r.profit), r.profit, 'td'))), 1),
+    h('p', { class: 'hint' }, date > latest
+      ? 'Datum je v budoucnu – cena je poslední známá, hodnota v aktuálním kurzu. Počítají se jen dnes držené kusy.'
+      : 'Cena je závěrečná k datu (nebo poslední předtím), hodnota v aktuálním kurzu. Počítají se jen dnes držené kusy.'),
+  );
 }
 
 function checksPanel(a: Analysis): HTMLElement | null {

@@ -241,6 +241,8 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 
 /* upcoming */
 .upcoming { list-style: none; margin: 0; padding: 0; }
+.tf-date { display: flex; align-items: center; gap: 8px; }
+.tf-sum { margin: 0 0 10px; }
 .offset { font-size: .86rem; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .offset p { margin: 0 0 6px; }
 .offset ul { margin: 0 0 6px; padding-left: 18px; }
