@@ -1,6 +1,6 @@
 // Pure helper shared by the analysis and the report frontend (bundled into the HTML by build.ts) – no runtime imports.
 
-/** Annual tax-exempt limit for gross income from selling securities (§4(1)(w) ZDP). */
+/** Annual tax-exempt limit for gross income from selling securities (§4(1)(w) ZDP); time-tested sales don't count. */
 export const SALES_LIMIT_CZK = 100_000;
 /** Basic personal income tax rate; the 23 % band depends on the whole income, which the app does not know. */
 export const TAX_RATE = 0.15;
@@ -20,7 +20,10 @@ export interface OffsetLot {
 
 export interface OffsetSale {
   ticker: string;
+  account: string;
   quantity: number;
+  /** Part of the quantity from old time-tested lots that FIFO sells first (their 3-year test restarts on a buyback). */
+  taxFreeQuantity: number;
   /** Taxable loss realized by this sale (negative). */
   lossCzk: number;
 }
@@ -34,6 +37,7 @@ export interface LossOffset {
 }
 
 const ceilQty = (q: number) => Math.ceil(q * 1e4 - 1e-6) / 1e4;
+const taxFreeQty = (lots: OffsetLot[]) => lots.filter((l) => l.taxFree).reduce((a, l) => a + l.quantity, 0);
 
 /**
  * Which held positions to sell at a loss this year so the loss offsets the tax base of earlier sales.
@@ -59,19 +63,22 @@ export function lossOffsetPlan(baseCzk: number, lots: OffsetLot[]): LossOffset {
   const sales: OffsetSale[] = [];
   for (const c of candidates) {
     if (need <= 0) break;
+    const { ticker, account } = c.lots[0]!;
     if (-c.loss <= need) {
-      sales.push({ ticker: c.lots[0]!.ticker, quantity: c.lots.reduce((a, l) => a + l.quantity, 0), lossCzk: c.loss });
+      sales.push({ ticker, account, quantity: c.lots.reduce((a, l) => a + l.quantity, 0), taxFreeQuantity: taxFreeQty(c.lots), lossCzk: c.loss });
       need += c.loss;
       continue;
     }
     let cum = 0, qty = 0;
+    const whole: OffsetLot[] = [];
     for (const l of c.lots) {
       const p = l.taxFree ? 0 : l.profitCzk!;
       if (p < 0 && cum + p <= -need) { qty += (l.quantity * (-need - cum)) / p; break; }
       cum += p;
       qty += l.quantity;
+      whole.push(l);
     }
-    sales.push({ ticker: c.lots[0]!.ticker, quantity: ceilQty(qty), lossCzk: -need });
+    sales.push({ ticker, account, quantity: ceilQty(qty), taxFreeQuantity: taxFreeQty(whole), lossCzk: -need });
     need = 0;
   }
   return { sales, lossCzk: sales.reduce((a, s) => a + s.lossCzk, 0), remainingTaxCzk: incomeTax(need)! };

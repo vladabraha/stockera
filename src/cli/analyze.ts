@@ -73,7 +73,7 @@ function print(a: Analysis): void {
   console.log('\n--- Daně z prodejů ---');
   for (const y of a.taxYears) {
     const limit = {
-      within: `v limitu 100 000 Kč (zbývá ${fmt(y.limitRemainingCzk ?? 0, 0)} Kč) → osvobozeno`,
+      within: `prodeje bez časového testu v limitu 100 000 Kč (zbývá ${fmt(y.limitRemainingCzk ?? 0, 0)} Kč) → osvobozeno`,
       exceeded: 'limit 100 000 Kč překročen',
       unknown: 'limit nelze posoudit – chybí kurzy ČNB',
     }[y.limitStatus];

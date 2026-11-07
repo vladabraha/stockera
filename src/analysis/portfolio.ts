@@ -92,8 +92,10 @@ export interface RealizedInstrument {
 export interface TaxYear {
   year: number;
   salesCount: number;
-  /** Gross proceeds of all sales (counts towards the 100 000 Kč limit). */
+  /** Gross proceeds of all sales. */
   proceeds: Totals;
+  /** Gross proceeds of sales without the time test – only these count towards the 100 000 Kč limit (§4(1)(w) ZDP). */
+  shortTermProceeds: Totals;
   limitStatus: 'within' | 'exceeded' | 'unknown';
   limitRemainingCzk: number | null;
   timeTestedProceeds: Totals;
@@ -496,10 +498,13 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
     .sort(([a], [b]) => b - a)
     .map(([year, ls]) => {
       const proceeds = sumMoney(ls.map((l) => l.proceeds));
-      const limitStatus = proceeds.czk == null ? 'unknown' : proceeds.czk <= SALES_LIMIT_CZK ? 'within' : 'exceeded';
       const timeTested = ls.filter((l) => l.timeTestMet);
       const timeTestedProceeds = sumMoney(timeTested.map((l) => l.proceeds));
+      // Time-tested sales are exempt under §4(1)(x) and don't count towards the 100k limit
       const shortTerm = ls.filter((l) => !l.timeTestMet);
+      const shortTermProceeds = sumMoney(shortTerm.map((l) => l.proceeds));
+      const used = shortTermProceeds.czk;
+      const limitStatus = used == null ? 'unknown' : used <= SALES_LIMIT_CZK ? 'within' : 'exceeded';
       const taxableLots = limitStatus === 'within' ? [] : shortTerm;
       const tCost = sumMoney(taxableLots.map((l) => l.cost));
       const tProceeds = sumMoney(taxableLots.map((l) => l.proceeds));
@@ -509,8 +514,9 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
         year,
         salesCount: ls.length,
         proceeds,
+        shortTermProceeds,
         limitStatus,
-        limitRemainingCzk: proceeds.czk == null ? null : SALES_LIMIT_CZK - proceeds.czk,
+        limitRemainingCzk: used == null ? null : SALES_LIMIT_CZK - used,
         timeTestedProceeds,
         taxable: {
           count: taxableLots.length,
@@ -520,7 +526,7 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
           baseCzk,
           taxCzk: incomeTax(baseCzk),
         },
-        shortTermProfitCzk: subTotals(sumMoney(shortTerm.map((l) => l.proceeds)), sumMoney(shortTerm.map((l) => l.cost))).czk,
+        shortTermProfitCzk: subTotals(shortTermProceeds, sumMoney(shortTerm.map((l) => l.cost))).czk,
         timeTestCapExceeded: !TIME_TEST_CAP_YEARS.has(year)
           ? false
           : timeTestedProceeds.czk == null

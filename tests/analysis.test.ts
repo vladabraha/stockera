@@ -64,7 +64,7 @@ test('tax years: sales within the 100k limit are exempt', () => {
 test('tax years: above the limit, losses offset gains, time-tested lots excluded, base ≥ 0', () => {
   const [y] = computeTaxYears([
     lot('2024-03-01', 50_000, 70_000),
-    lot('2024-04-01', 40_000, 30_000),
+    lot('2024-04-01', 41_000, 31_000),
     lot('2024-05-01', 1_000, 50_000, true),
   ]);
   assert.equal(y!.limitStatus, 'exceeded');
@@ -76,6 +76,26 @@ test('tax years: above the limit, losses offset gains, time-tested lots excluded
 
   const [loss] = computeTaxYears([lot('2024-03-01', 150_000, 101_000)]);
   assert.equal(loss!.taxable.baseCzk, 0);
+});
+
+test('tax years: time-tested sales do not count towards the 100k limit (§4(1)(x) ZDP)', () => {
+  const [y] = computeTaxYears([
+    lot('2024-02-01', 100_000, 500_000, true),
+    lot('2024-03-01', 50_000, 60_000),
+    lot('2024-04-01', 20_000, 30_000),
+  ]);
+  assert.equal(y!.proceeds.czk, 590_000);
+  assert.equal(y!.shortTermProceeds.czk, 90_000);
+  assert.equal(y!.limitStatus, 'within');
+  assert.equal(y!.limitRemainingCzk, 10_000);
+  assert.equal(y!.taxable.count, 0);
+  assert.equal(y!.taxable.taxCzk, 0);
+
+  // Short-term sales alone over the limit → taxed, the time-tested sale still is not
+  const [over] = computeTaxYears([lot('2024-02-01', 1, 500_000, true), lot('2024-03-01', 90_000, 110_000)]);
+  assert.equal(over!.limitStatus, 'exceeded');
+  assert.equal(over!.limitRemainingCzk, -10_000);
+  assert.equal(over!.taxable.baseCzk, 20_000);
 });
 
 test('tax years: 40M cap on time-tested income applies only in 2025; missing rates → unknown', () => {
@@ -171,11 +191,18 @@ test('loss offset: FIFO prefix per account, time-tested lots ignored, biggest lo
     lot('CCC', '2025-01-01', 1, null),
   ];
   assert.deepEqual(lossOffsetPlan(5_000, lots), {
-    sales: [{ ticker: 'AAA', quantity: 7, lossCzk: -4_000 }, { ticker: 'BBB', quantity: 5, lossCzk: -1_000 }],
+    sales: [
+      // FIFO sells the old tax-free lot too → reported so the user knows its time test restarts on a buyback
+      { ticker: 'AAA', account: '1', quantity: 7, taxFreeQuantity: 1, lossCzk: -4_000 },
+      { ticker: 'BBB', account: '1', quantity: 5, taxFreeQuantity: 0, lossCzk: -1_000 },
+    ],
     lossCzk: -5_000, remainingTaxCzk: 0,
   });
   // Partial lot after a gain: need 2 000 → AAA lots 1+2 (+1 000) and 3/5 of the losing lot.
-  assert.deepEqual(lossOffsetPlan(2_000, lots).sales, [{ ticker: 'AAA', quantity: 5.4, lossCzk: -2_000 }]);
+  assert.deepEqual(lossOffsetPlan(2_000, lots).sales, [{ ticker: 'AAA', account: '1', quantity: 5.4, taxFreeQuantity: 1, lossCzk: -2_000 }]);
+  // Same ticker on another account is a separate FIFO queue
+  assert.deepEqual(lossOffsetPlan(500, [lot('AAA', '2025-01-01', 2, 300), lot('AAA', '2025-02-01', 1, -800, false, '2')]).sales,
+    [{ ticker: 'AAA', account: '2', quantity: 0.625, taxFreeQuantity: 0, lossCzk: -500 }]);
   // Not enough losses → the rest stays taxed at 15 %.
   assert.equal(lossOffsetPlan(16_000, lots).remainingTaxCzk, 1_500);
   assert.deepEqual(lossOffsetPlan(1_000, [lot('X', '2025-01-01', 1, 500)]).sales, []);

@@ -82,8 +82,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   (per účet + ticker) a rozdíly se hlásí. Prodejní událost = uzavřené loty do 5 s; sell cash op se páruje v okně 60 s + stejné množství.
 - **Časový test:** posuzuje se **po lotech**, > 3 roky. První den bez daně = 3. výročí nákupu + 1 den
   (29. 2. → 28. 2. + 1 den). Kalendářní data v **Europe/Prague**, v DB UTC.
-- **Limit 100 000 Kč:** z **hrubých příjmů z prodejů** za rok (ne ze zisku), vše-nebo-nic. **Konzervativně se
-  započítávají všechny prodeje včetně těch s časovým testem** (výklad nejistý – raději přísněji).
+- **Limit 100 000 Kč** (§ 4 odst. 1 písm. w) ZDP): z **hrubých příjmů z prodejů bez časového testu** za rok (ne ze
+  zisku), vše-nebo-nic (`shortTermProceeds`). Prodeje se splněným testem jsou osvobozené podle písm. x) a do limitu
+  se **nezapočítávají** (dříve se konzervativně počítaly všechny prodeje – změněno na pokyn uživatele).
 - Strop 40 mil. Kč pro osvobození časovým testem platí **jen pro rok 2025** (`TIME_TEST_CAP_YEARS`).
 - Ztráty se v rámci roku započítají proti ziskům, základ ≥ 0, ztráty se nepřevádí.
 - **Daň** = 15 % ze základu (`src/analysis/tax.ts`, sdíleno s reportem). Pásmo 23 % závisí na všech příjmech, které
@@ -92,6 +93,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   ukáže se, které držené pozice prodat se ztrátou, aby se základ vynuloval (`lossOffsetPlan`). Prodej se páruje
   **FIFO** per účet a ticker, takže jde prodat jen nejstarší loty; loty se splněným testem se nezapočítají (jejich
   zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Podle aktuálních (i živých) cen.
+  Když FIFO prodá i staré loty se splněným testem (`taxFreeQuantity`), doporučení na to upozorní – po zpětném nákupu
+  by časový test běžel znovu. Při více účtech se u doporučení uvádí účet.
 - **Kurzy:** denní kurz ČNB ke dni obchodu (nákup kurzem dne nákupu, prodej kurzem dne prodeje); víkend/svátek
   = poslední fixing max. 7 dní zpět. EUR = CZK / kurz EUR (nebo nativně u EUR účtu).
 - **Model peněz:** `Money {native, currency, czk|null, eur|null}`, `Totals` s mapou `native` podle měn.
@@ -332,5 +335,4 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
 
 - Splity, skutečné názvy dividend / srážkové daně / výběrů (čeká se na anonymizovaný vzorek).
 - Export CZK subúčtu (čeká se na uživatele).
-- Zda se prodeje splňující časový test započítávají do limitu 100 000 Kč (teď konzervativně ano).
 - Volitelné: zaokrouhlení čísel v payloadu reportu (menší soubor) – pak upravit `deepEqual` v testu.
