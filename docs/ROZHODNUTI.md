@@ -136,6 +136,12 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     vezme při shodě kódu; když žádný kód nesedí, jen při **jediné** akcii s cenou do ±10 % od ceny z výpisu (+ varování).
     Yahoo symbol = obchodní kód + `.PR` (RBAG.CZ → `ERBAG.PR`, KOMB.CZ → `KOMB.PR`) a ukládá se. Posílá se jen ISIN.
     Spouští se jen pro `.CZ` bez ISIN nebo bez cen.
+  - **Obecně pro všechny burzy:** XTB někdy přidá ke kódu číslici (`CEZ1.CZ` = ČEZ, kód CEZ) → zkouší se i kód bez
+    koncových číslic (`symbolVariants`; Xetra, BCPP, onvista i Yahoo). Když kód nesedí, hledá se podle **názvu
+    instrumentu z výpisu XTB** (veřejný název firmy; BCPP shoda prvního slova, onvista kandidáti ověření cenou ±10 %).
+  - Yahoo symbol: když výchozí symbol neexistuje a ještě nejsou uložené ceny, zkusí se kód bez číslice a pak Yahoo
+    vyhledávání **podle ISIN** (`query2…/v1/finance/search?q={ISIN}`) – vezme se jediný symbol na burze XTB
+    (`pickYahooSymbol`, např. `CEZ.PR`). Nalezený symbol se uloží (`price_symbol`). Po podezřelých datech se nezkouší nic.
   - **Složení (země, sektory, pozice) jen pro držené instrumenty** (`open_lots`) – u prodaných se nepoužívá, takže se
     ani nestahuje a nedělá zbytečná varování. Prodaným se stahují jen ceny (historie) a ETF i ISIN (ceny justETF).
   - **Zrušený/sloučený fond**: justETF ho označí textem „This fund has been liquidated or merged“ (`EtfProfile.closed`)

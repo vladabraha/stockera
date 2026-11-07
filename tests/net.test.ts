@@ -8,7 +8,7 @@ import { fakeFetch } from './helpers/fakeFetch.ts';
 import { findThreat, parseSafeJson, UnsafeDataError } from '../src/net/inspect.ts';
 import {
   countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, pickOnvistaStock, sectorKey,
-  yahooSymbol, companySearchQueries, holdingNameKey, pickOnvistaCompany,
+  yahooSymbol, companySearchQueries, holdingNameKey, pickOnvistaCompany, nameKey, pickYahooSymbol, symbolVariants,
 } from '../src/market/sources.ts';
 
 test('Http blocks hosts outside the allowlist, non-HTTPS and redirects to foreign hosts', async () => {
@@ -205,6 +205,18 @@ test('Http discards suspicious JSON and extracted values and audits them as unsa
     e instanceof UnsafeDataError && /Yahoo poslal podezřelá data \(HTML\/skript\)/.test(e.message));
   assert.throws(() => http.checkExtracted('https://www.justetf.com/p', { name: 'ETF\u001b]0;pwned\u0007' }), UnsafeDataError);
   assert.deepEqual(http.log.map((e) => [e.status, e.error ?? '']), [[200, ''], ['unsafe', 'HTML/skript'], ['unsafe', 'řídicí znaky']]);
+});
+
+test('symbolVariants, nameKey and pickYahooSymbol', () => {
+  assert.deepEqual(symbolVariants('CEZ1.CZ'), ['CEZ1', 'CEZ']);
+  assert.deepEqual(symbolVariants('VOW3.DE'), ['VOW3', 'VOW']);
+  assert.deepEqual(symbolVariants('KOMB.CZ'), ['KOMB']);
+  assert.deepEqual(symbolVariants('Z1.CZ'), ['Z1']);
+  assert.equal(nameKey('ČEZ, a. s.'), 'CEZ');
+  const q = { quotes: [{ symbol: 'CEZ.F', quoteType: 'EQUITY' }, { symbol: 'CEZ.PR', quoteType: 'EQUITY' }, { symbol: 'AAPL', quoteType: 'EQUITY' }] };
+  assert.equal(pickYahooSymbol(q, 'CEZ1.CZ'), 'CEZ.PR');
+  assert.equal(pickYahooSymbol(q, 'AAPL.US'), 'AAPL');
+  assert.equal(pickYahooSymbol(q, 'X.PL'), null);
 });
 
 test('pickOnvistaCompany: ETF position by company name, ADR/CDR ignored, ambiguous names give null', () => {

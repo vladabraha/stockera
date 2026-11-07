@@ -220,6 +220,41 @@ test('Prague stocks: ISIN and Yahoo symbol from the PSE lists by trading/Bloombe
   assert.ok(!r.warnings.some((w) => /^(RBAG|KOMB)\.CZ: (ISIN|ceny)/.test(w)), r.warnings.join('\n'));
 });
 
+test('XTB digit suffix and names: CEZ1.CZ = ČEZ (PSE code CEZ), Yahoo symbol by ISIN; other exchanges by the XTB name + price', async () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 'a.xlsx', fakeXtbExport({
+    account: ACCOUNT,
+    cash: [{ id: '1', type: 'Deposit', time: '2024-12-01T08:00:00Z', amount: 5000 }],
+    openAsOf: '2025-01-10T10:00:00Z',
+    open: [
+      { ticker: 'CEZ1.CZ', name: 'CEZ', positionId: '1', volume: 1, openPrice: 900, openTime: '2025-01-06T09:00:00Z', currentPrice: 1000 },
+      { ticker: 'ABC1.FR', name: 'Alpha Beta', positionId: '2', volume: 1, openPrice: 40, openTime: '2025-01-06T09:00:00Z', currentPrice: 50 },
+    ],
+  }));
+  db.prepare(`UPDATE instruments SET category = 'STOCK'`).run();
+  const fr = (name: string, isin: string) => ({ name, isin, additionalData: { countryCode: 'FR' } });
+  const quote = (last: number) => JSON.stringify({ quoteList: { list: [{ last, market: { isoCountry: 'FR' } }] } });
+  const calls: string[] = [];
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => {
+    if (u.includes('shares/prime-market')) return new Response('<tr><td data-title="ČEZ"><div class="isin">CZ0005112300</div></td><td sort-by="1010">CZK</td></tr>');
+    if (u.includes('shares/')) return new Response('');
+    if (u.includes('detail/CZ0005112300')) return new Response('<td>Ticker Bloomberg</td><td>CEZ CP Equity</td><td>Ticker Xetra®</td><td>BAACEZ</td>');
+    if (u.includes('chart/CEZ1.PR') || u.includes('chart/BAACEZ.PR') || u.includes('chart/CEZ.PR')) return new Response('{}', { status: 404 });
+    if (u.includes('finance/search?q=CZ0005112300')) return new Response(JSON.stringify({ quotes: [{ symbol: 'CEZ.F', quoteType: 'EQUITY' }, { symbol: 'CEZP.PR', quoteType: 'EQUITY' }] }));
+    if (u.includes('searchValue=Alpha')) return new Response(JSON.stringify({ facets: [{ type: 'STOCK', results: [fr('Alpha Beta SA', 'FR0000000011'), fr('Alpha Beta Holding', 'FR0000000029')] }] }));
+    if (u.includes('searchValue=')) return new Response(JSON.stringify({ facets: [] }));
+    if (u.includes('ISIN:FR0000000011/snapshot')) return new Response(quote(51));
+    if (u.includes('ISIN:FR0000000029/snapshot')) return new Response(quote(12));
+    return routes(u);
+  }, calls) });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.instruments.map((i) => [i.ticker, i.isin, i.newPrices > 0]),
+    [['ABC1.FR', 'FR0000000011', true], ['CEZ1.CZ', 'CZ0005112300', true]]);
+  assert.ok(calls.some((u) => u.includes('chart/CEZP.PR')), 'Yahoo symbol found by ISIN');
+  assert.ok(calls.some((u) => u.includes('searchValue=ABC1')) && calls.some((u) => u.includes('searchValue=ABC&')));
+  assert.ok(!r.warnings.some((w) => /: (ISIN|ceny)/.test(w)), r.warnings.join('\n'));
+});
+
 test('liquidated ETF is reported; compositionIsin takes countries and positions from another ETF, prices stay its own', async () => {
   const seedOne = () => {
     const db = openDatabase(':memory:');

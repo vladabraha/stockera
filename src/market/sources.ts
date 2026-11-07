@@ -340,6 +340,39 @@ export function yahooSymbol(xtbTicker: string): string | null {
   return suffix == null ? null : xtbTicker.slice(0, dot).replace(/\./g, '-') + suffix;
 }
 
+/**
+ * Exchange codes an XTB ticker may stand for: XTB sometimes appends a digit to the exchange code
+ * (CEZ1.CZ = ČEZ, code CEZ), so the code without trailing digits is tried too.
+ */
+export function symbolVariants(xtbTicker: string): string[] {
+  const dot = xtbTicker.lastIndexOf('.');
+  const base = (dot < 0 ? xtbTicker : xtbTicker.slice(0, dot)).toUpperCase();
+  const stripped = base.replace(/\d+$/, '');
+  return stripped.length >= 2 && stripped !== base ? [base, stripped] : [base];
+}
+
+/** Upper-case name without diacritics, e.g. "ČEZ, a.s." → "CEZ, A.S.". */
+export const plainName = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+/** First word of a company name ("ČEZ, a.s." → "CEZ"). */
+export const nameKey = (s: string) => plainName(s).split(/[^A-Z0-9&]+/).filter(Boolean)[0] ?? '';
+
+/** Yahoo search – used only with an ISIN to find the symbol on the right exchange. */
+export const yahooSearchUrl = (isin: string) =>
+  `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=10&newsCount=0`;
+
+export interface YahooSearch {
+  quotes?: { symbol?: string; quoteType?: string }[];
+}
+
+/** Yahoo symbol of the security on the XTB exchange (by Yahoo suffix), e.g. CZ0005112300 + `.CZ` → CEZ.PR. */
+export function pickYahooSymbol(data: YahooSearch, xtbTicker: string): string | null {
+  const suffix = YAHOO_SUFFIX[xtbTicker.slice(xtbTicker.lastIndexOf('.') + 1)];
+  if (suffix == null) return null;
+  const hits = (data.quotes ?? []).filter((q) => q.symbol && /^(EQUITY|ETF)$/.test(q.quoteType ?? '') &&
+    (suffix ? q.symbol.endsWith(suffix) : !q.symbol.includes('.')));
+  return hits.length === 1 ? hits[0]!.symbol! : null;
+}
+
 export const yahooChartUrl = (symbol: string, from: string, to: string) =>
   `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d` +
   `&period1=${Date.parse(`${from}T00:00:00Z`) / 1000}&period2=${Date.parse(`${to}T23:59:59Z`) / 1000}`;
