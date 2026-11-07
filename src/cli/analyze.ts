@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fail } from './friendly.ts';
+import { fail, printChecks } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { analyze, type Analysis } from '../analysis/portfolio.ts';
 import type { Percent, Totals } from '../analysis/fx.ts';
@@ -101,6 +101,7 @@ function print(a: Analysis): void {
     console.log(`⚠ Chybí kurzy ČNB pro ${missingRates.length} dní (doplní fáze 3) – částky v Kč/EUR a daně nejsou k dispozici.`);
   }
   for (const w of warnings) console.log(`⚠ ${w}`);
+  printChecks(a.checks.validation);
 }
 
 function t(x: Totals): string {

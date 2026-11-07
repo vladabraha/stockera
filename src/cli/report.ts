@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { fail, paths } from './friendly.ts';
+import { fail, paths, printChecks } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { analyze } from '../analysis/portfolio.ts';
 import { buildReport } from '../report/build.ts';
@@ -11,10 +11,12 @@ if (!existsSync(dbPath)) {
   fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
 }
 
-const password = await getPassword();
 const db = openDatabase(dbPath);
 const analysis = analyze(db);
 db.close();
+printChecks(analysis.checks.validation);
+
+const password = await getPassword();
 
 console.log('Šifruji report…');
 const html = await buildReport(analysis, password);

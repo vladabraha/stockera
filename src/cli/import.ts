@@ -27,31 +27,65 @@ if (files.length === 0) {
 }
 
 const db = openDatabase(dbPath);
-let failed = false;
+const before = counts();
+const reports: ImportReport[] = [];
+const failedFiles: string[] = [];
 for (const file of files) {
   try {
-    printReport(importFile(db, join(inputDir, file)));
+    const r = importFile(db, join(inputDir, file));
+    reports.push(r);
+    printReport(r);
   } catch (e) {
-    failed = true;
+    failedFiles.push(file);
     console.error(`✗ ${file}: soubor se nepodařilo načíst.`);
     console.error(`  Důvod: ${errorText(e)}`);
     console.error(`  Co dělat: ${adviceFor(e)}`);
   }
 }
 
-const totals = db
-  .prepare(
-    `SELECT (SELECT COUNT(*) FROM accounts) accounts, (SELECT COUNT(*) FROM instruments) instruments,
-            (SELECT COUNT(*) FROM cash_operations) cash, (SELECT COUNT(*) FROM closed_lots) closed,
-            (SELECT COUNT(*) FROM open_lots) open`,
-  )
-  .get() as Record<string, number>;
-console.log(
-  `\nV databázi je: účty ${totals.accounts}, instrumenty ${totals.instruments}, ` +
-    `peněžní operace ${totals.cash}, uzavřené loty ${totals.closed}, otevřené loty ${totals.open}`,
-);
+printSummary(reports, failedFiles, before, counts());
 db.close();
-process.exit(failed ? 1 : 0);
+process.exit(failedFiles.length ? 1 : 0);
+
+function counts(): Record<'accounts' | 'instruments' | 'cash' | 'closed' | 'open', number> {
+  return { ...db
+    .prepare(
+      `SELECT (SELECT COUNT(*) FROM accounts) accounts, (SELECT COUNT(*) FROM instruments) instruments,
+              (SELECT COUNT(*) FROM cash_operations) cash, (SELECT COUNT(*) FROM closed_lots) closed,
+              (SELECT COUNT(*) FROM open_lots) open`,
+    )
+    .get() as Record<'accounts' | 'instruments' | 'cash' | 'closed' | 'open', number> };
+}
+
+/** Totals over all files so the user can check the import at a glance: what is new, what was already known. */
+function printSummary(rs: ImportReport[], failed: string[], b: ReturnType<typeof counts>, a: ReturnType<typeof counts>): void {
+  const n = (s: ImportReport['status']) => rs.filter((r) => r.status === s).length;
+  const sum = (f: (r: ImportReport) => number) => rs.reduce((x, r) => x + f(r), 0);
+  const cashNew = sum((r) => r.cash.inserted);
+  const cashDup = sum((r) => r.cash.duplicates);
+  const closedNew = sum((r) => r.closed.inserted);
+  const closedDup = sum((r) => r.closed.duplicates);
+  const snapshot = rs.find((r) => r.openPositions === 'replaced');
+  const pad = (s: string) => s.padEnd(20);
+  console.log('\nShrnutí importu');
+  console.log(`  ${pad('Soubory')}${files.length} celkem: ${n('imported')} nových, ${n('already-imported')} načtených už dříve` +
+    `${n('unsupported') ? `, ${n('unsupported')} přeskočených` : ''}${failed.length ? `, ${failed.length} s chybou` : ''}`);
+  console.log(`  ${pad('Peněžní operace')}${cashNew} nových, ${cashDup} už v databázi (přepoužito)`);
+  console.log(`  ${pad('Prodeje')}${closedNew} nových, ${closedDup} už v databázi (přepoužito)`);
+  console.log(`  ${pad('Otevřené pozice')}${snapshot ? `nahrazeny stavem z ${snapshot.file} (${a.open} nákupů, dříve ${b.open})` : `beze změny (${a.open} nákupů)`}`);
+  console.log(`  ${pad('V databázi celkem')}účty ${a.accounts}, instrumenty ${a.instruments} (${plus(a.instruments - b.instruments)}), ` +
+    `peněžní operace ${a.cash} (${plus(a.cash - b.cash)}), prodeje ${a.closed} (${plus(a.closed - b.closed)}), otevřené nákupy ${a.open}`);
+  // Each new row must come from exactly one file; anything else would mean a lost or double-counted record.
+  const consistent = a.cash - b.cash === cashNew && a.closed - b.closed === closedNew;
+  console.log(consistent
+    ? '  ✓ Počty sedí: každý nový záznam je v databázi právě jednou, duplicity z překrývajících se výpisů se přeskočily.'
+    : '  ⚠ Počty v databázi nesedí s načtenými soubory – smaž data/stockera.db a spusť aktualizaci znovu (výpisy zůstanou v data/input).');
+  if (!n('imported') && !failed.length) console.log('  Nic nového – všechny výpisy už byly načtené dříve.');
+}
+
+function plus(d: number): string {
+  return d > 0 ? `+${d}` : '±0';
+}
 
 function adviceFor(e: unknown): string {
   if (/měnu/.test(errorText(e))) {

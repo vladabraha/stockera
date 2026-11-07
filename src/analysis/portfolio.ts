@@ -3,6 +3,7 @@ import { addDays, daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
 import { checkFifo, type FifoMismatch } from './fifo.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
+import { validatePortfolio, type DataCheck } from './validation.ts';
 import {
   DbMarketData, crossConvert, geography, sectorBreakdown, valueHistory, type GeographySlice, type SectorSlice, type HistoryLot, type HistoryPoint,
   type MarketData,
@@ -151,7 +152,7 @@ export interface Analysis {
   taxYears: TaxYear[];
   dividends: DividendSummary[];
   cashFlows: CashFlow[];
-  checks: { fifoMismatches: FifoMismatch[]; missingRates: string[]; warnings: string[] };
+  checks: { fifoMismatches: FifoMismatch[]; missingRates: string[]; warnings: string[]; validation: DataCheck[] };
 }
 
 export interface InstrumentSeries {
@@ -420,6 +421,28 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     return out;
   }
 
+  const fifoMismatches = checkFifo(loaded.closed, loaded.open);
+  const snapshots = (db.prepare(
+    `SELECT s.account_number, a.currency, s.as_of, s.value, s.profit FROM open_snapshots s JOIN accounts a USING (account_number)`,
+  ).all() as { account_number: string; currency: string | null; as_of: string; value: number | null; profit: number | null }[])
+    .map((s) => ({ accountNumber: s.account_number, currency: s.currency ?? '???', asOf: s.as_of, value: s.value, profit: s.profit }));
+  const xtbValues = loaded.open.map((l) => {
+    const snap = snapshots.find((s) => s.accountNumber === l.accountNumber);
+    return l.value == null || !snap ? null : conv.money(l.value, l.currency, pragueDate(snap.asOf)).czk;
+  });
+  const validation = validatePortfolio({
+    today,
+    snapshots,
+    open: loaded.open,
+    priceAt: (ticker, date) => market.price(ticker, date),
+    xtbValueCzk: xtbValues.some((x) => x == null) ? null : xtbValues.reduce((a: number, x) => a + x!, 0),
+    currentValueCzk: summary.value.czk,
+    currentValueDate: summary.valueDate,
+    missingRates: conv.missing.size,
+    fifoMismatches: fifoMismatches.length,
+    incompleteAccounts: cashFlows.filter((c) => !c.historyComplete).map((c) => c.accountNumber),
+  });
+
   return {
     generatedAt: new Date().toISOString(),
     today,
@@ -439,9 +462,10 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     dividends,
     cashFlows,
     checks: {
-      fifoMismatches: checkFifo(loaded.closed, loaded.open),
+      fifoMismatches,
       missingRates: [...conv.missing].sort(),
       warnings,
+      validation,
     },
   };
 }

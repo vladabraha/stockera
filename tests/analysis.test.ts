@@ -138,6 +138,7 @@ test('analyze: holdings, time test, realized, dividends, FIFO check', () => {
   close(a.summary.deposits.czk, 1000 * EUR_CZK);
 
   assert.equal(a.checks.fifoMismatches.length, 1);
+  assert.equal(a.checks.validation.find((c) => c.title.startsWith('Párování'))?.status, 'warn');
   assert.deepEqual(a.checks.fifoMismatches[0]!.fifo.map((x) => [x.positionId, x.volume]), [['10', 1], ['20', 1]]);
   assert.deepEqual(a.checks.missingRates, []);
   assert.ok(a.cashFlows[0]!.historyComplete);

@@ -380,6 +380,7 @@ function portfolioTab(a: Analysis): HTMLElement {
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
       h('div', { class: 'acc-list' }, ...a.holdings.map(holdingRow))),
     checksPanel(a),
+    validationPanel(a),
   );
 }
 
@@ -468,6 +469,23 @@ function checksPanel(a: Analysis): HTMLElement | null {
   if (noPrice.length) items.push(`Chybí historie cen: ${noPrice.join(', ')}`);
   if (!items.length) return null;
   return h('section', { class: 'notice' }, h('h2', {}, 'K doplnění'), h('ul', {}, ...items.map((t) => h('li', {}, t))));
+}
+
+/** Cross-checks of the portfolio value against the XTB export; collapsed when everything passes. */
+function validationPanel(a: Analysis): HTMLElement | null {
+  const checks = a.checks.validation ?? [];
+  if (!checks.length) return null;
+  const warns = checks.filter((c) => c.status === 'warn').length;
+  const icon = { ok: '✓', warn: '!', info: 'i' } as const;
+  return h('section', { class: 'panel' },
+    h('details', { class: 'checks', ...(warns ? { open: '' } : {}) },
+      h('summary', {},
+        h('h2', {}, 'Kontrola dat'),
+        h('span', { class: warns ? 'check-sum warn' : 'check-sum ok' }, warns ? `${warns} upozornění z ${checks.length} kontrol` : `Vše v pořádku, ${checks.length} kontrol`)),
+      h('p', { class: 'muted hint' }, 'Hodnota portfolia je porovnaná se souhrnem a cenami ve výpisu XTB, kurzy ČNB a párováním prodejů.'),
+      h('ul', { class: 'check-list' }, ...checks.map((c) => h('li', { class: c.status },
+        h('span', { class: 'check-icon', 'aria-hidden': 'true' }, icon[c.status]),
+        h('div', {}, h('b', {}, c.title), h('span', { class: 'muted' }, c.detail)))))));
 }
 
 // ---------------------------------------------------------------- hero + charts

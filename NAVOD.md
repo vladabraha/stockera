@@ -15,6 +15,8 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
    - každý podúčet (EUR, CZK) zvlášť.
 2. Soubory ulož do `data/input/` (staré výpisy tam klidně nech).
 3. Dvakrát klikni na `aktualizovat-windows.cmd` / `aktualizovat-mac.command`.
+   - Po načtení výpisů uvidíš **Shrnutí importu** (kolik záznamů je nových a kolik už v databázi bylo).
+   - Před zadáním hesla uvidíš **Kontrolu dat** – ✓ = v pořádku, ⚠ = přečti si, co dělat. Stejný přehled je v reportu dole na Portfoliu.
 4. Až se program zeptá, zadej heslo k reportu (místo znaků se ukazují hvězdičky) a pak ho zopakuj.
 5. Report se sám otevře v prohlížeči.
 

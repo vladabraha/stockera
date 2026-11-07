@@ -28,6 +28,15 @@ export function heading(text: string): void {
   console.log(`\n━━ ${text} ━━`);
 }
 
+/** Prints data-validity checks; returns the number of warnings. */
+export function printChecks(checks: { status: 'ok' | 'warn' | 'info'; title: string; detail: string }[]): number {
+  console.log('\nKontrola dat:');
+  for (const c of checks) console.log(`  ${{ ok: '✓', warn: '⚠', info: 'i' }[c.status]} ${c.title}: ${c.detail}`);
+  const warns = checks.filter((c) => c.status === 'warn').length;
+  console.log(warns ? `  → ${warns} upozornění, podrobnosti jsou i v reportu (Portfolio, dole „Kontrola dat“).` : '  → Vše v pořádku.');
+  return warns;
+}
+
 export function printSteps(title: string, steps: string[], out: (s: string) => void = console.log): void {
   out(`\n${title}`);
   steps.forEach((s, i) => out(`  ${i + 1}. ${s}`));

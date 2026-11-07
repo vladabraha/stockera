@@ -34,8 +34,14 @@ export function importFile(db: Db, path: string): ImportReport {
 
 export function importBuffer(db: Db, fileName: string, buf: Buffer): ImportReport {
   const sha256 = createHash('sha256').update(buf).digest('hex');
-  if (db.prepare('SELECT 1 FROM imports WHERE file_sha256 = ?').get(sha256)) {
-    return emptyReport(fileName, 'already-imported');
+  const prior = db.prepare('SELECT id FROM imports WHERE file_sha256 = ?').get(sha256) as { id: number } | undefined;
+  if (prior) {
+    // Same file again: its records are already in the DB – report how many came from it.
+    const r = emptyReport(fileName, 'already-imported');
+    const count = (table: string) => (db.prepare(`SELECT COUNT(*) n FROM ${table} WHERE import_id = ?`).get(prior.id) as { n: number }).n;
+    r.cash.duplicates = count('cash_operations');
+    r.closed.duplicates = count('closed_lots');
+    return r;
   }
 
   const sheets = readWorkbook(buf);

@@ -43,6 +43,7 @@ test('re-importing the same file is a no-op', () => {
   importBuffer(db, 'a.xlsx', buf);
   const r = importBuffer(db, 'a-copy.xlsx', buf);
   assert.equal(r.status, 'already-imported');
+  assert.deepEqual(r.cash, { inserted: 0, duplicates: 2 });
   assert.equal(count(db, 'cash_operations'), 2);
   assert.equal(count(db, 'imports'), 1);
 });

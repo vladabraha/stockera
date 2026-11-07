@@ -215,6 +215,19 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
 
 ## 8. Ověřování a testy
 
+### Kontroly dat pro uživatele
+- **Shrnutí importu** (`src/cli/import.ts`): soubory nové / načtené dříve / přeskočené / s chybou, záznamy nové vs.
+  „už v databázi (přepoužito)“ (u znovu nahraného souboru = počet záznamů z jeho prvního načtení, podle `import_id`),
+  stav otevřených pozic, celkové počty v DB s přírůstky. Kontrola konzistence: přírůstek řádků v DB = součet nových
+  záznamů ze souborů.
+- **Kontrola dat** (`src/analysis/validation.ts`, `Analysis.checks.validation`): vypíše se v kroku 3 před dotazem
+  na heslo, v `pnpm analyze` a v reportu (panel „Kontrola dat“ na konci Portfolia, sbalený, když je vše ✓).
+  Kontroly: součet hodnot nákupů = souhrn „Open position value“ z výpisu (tolerance 0,1 %); nákupní cena = hodnota −
+  zisk podle XTB (0,5 %); stažená cena ke dni výpisu vs cena XTB (**5 %** – 3 % dávalo falešné poplachy u akcií
+  s cenou z předchozího dne; chyby symbolu/měny/pencí jsou řádově větší); stáří výpisu (> 31 dní ⚠); změna hodnoty
+  od výpisu (> 15 % ⚠); kurzy ČNB; FIFO; úplnost historie. Stav `info` = jen kontext, ne chyba.
+  Párování kusů přes peněžní operace se nedělá – export nemusí mít peněžní operace za celé období.
+
 - `pnpm check` (typecheck + testy) a `pnpm audit` musí projít před každým commitem.
 - Testy jsou offline: syntetické XLSX (`tests/helpers/xlsxBuilder.ts`, `fakeXtb.ts`), `fakeFetch` místo sítě,
   in-memory DB. Testy nesmí volat skutečné API ani číst `data/`.
