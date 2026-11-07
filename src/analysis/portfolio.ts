@@ -143,6 +143,8 @@ export interface Analysis {
   generatedAt: string;
   today: string;
   snapshotAsOf: string | null;
+  /** Prague date of the newest trade or cash operation in the imported statements. */
+  lastTransactionDate: string | null;
   accounts: { accountNumber: string; currency: string | null }[];
   summary: Summary;
   holdings: Holding[];
@@ -449,10 +451,16 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     incompleteAccounts: cashFlows.filter((c) => !c.historyComplete).map((c) => c.accountNumber),
   });
 
+  const lastTransaction = (db.prepare(`SELECT max(t) AS t FROM (
+        SELECT max(time_utc) AS t FROM cash_operations
+        UNION ALL SELECT max(open_time) FROM open_lots
+        UNION ALL SELECT max(close_time) FROM closed_lots)`).get() as { t: string | null }).t;
+
   return {
     generatedAt: new Date().toISOString(),
     today,
     snapshotAsOf: loaded.snapshotAsOf,
+    lastTransactionDate: lastTransaction ? pragueDate(lastTransaction) : null,
     accounts: db.prepare('SELECT account_number AS accountNumber, currency FROM accounts').all().map((a) => ({ ...a })) as {
       accountNumber: string;
       currency: string | null;

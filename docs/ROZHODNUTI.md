@@ -226,6 +226,10 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), „Brzy bez daně“, akordeon instrumentů → nákupy s časovým testem; „Zobrazit graf“ přepne hlavní
   graf na cenu/hodnotu instrumentu s body nákupů/prodejů) a **Prodané** (realizovaný zisk, daně podle let s limitem
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
+- Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se
+  mění i s živými cenami). Bez daní a inflace, sazba je konstanta `FIRE_RATE` v `app.ts`.
+- Patička ukazuje `lastTransactionDate` (nejnovější obchod nebo peněžní pohyb ve výpisech, pražské datum) vedle data
+  výpisu XTB – uživatel tak pozná, jestli nahrál poslední výpisy.
 - Rozsah grafů: předvolby 1M–Vše a **„Vlastní“** se dvěma poli `<input type="date">` (Od / Do, min/max = data grafu).
   Rozsah je jeden společný pro graf portfolia i instrumentů (`state.range` + `state.custom`), prohozené Od > Do se
   srovná, prázdné pole = od začátku / do konce. Text „Od … do …: zisk“ porovnává první a poslední bod v rozsahu.

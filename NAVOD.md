@@ -26,6 +26,8 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
 - Po odemknutí si report sám stáhne **aktuální ceny** (nahoře „Živé ceny k …“, znovu tlačítkem *Aktualizovat ceny*; na mobilu ikona kruhové šipky, vedle ní zámek = *Zamknout*).
   Odchází jen kód instrumentu (ISIN), nikdy tvoje počty kusů ani částky. Bez internetu uvidíš hodnoty z poslední aktualizace.
   Když hlavní zdroj nefunguje, použije se záložní a report to napíše žlutě pod datem.
+- **FIRE renta** (pod grafem): kolik by šlo měsíčně vybírat, kdybys každý rok prodal 4 % dnešní hodnoty portfolia (před daní).
+- Dole na stránce je datum **poslední transakce ve výpisech** – podle něj poznáš, jestli máš nahrané aktuální výpisy.
 - Rozsah grafu zvolíš nad grafem (1M–Vše). **Vlastní** ukáže pole Od a Do pro libovolné období.
 - Tlačítko s kolečkem vedle *Aktualizovat ceny* přepíná vzhled: podle systému → světlý → tmavý.
 - **Akcie uvnitř ETF**: které firmy skutečně vlastníš přes všechna ETF dohromady. Řádek rozklikneš a uvidíš, z kterého ETF kolik je. U každého ETF je známých jen 10 největších pozic.

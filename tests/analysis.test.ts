@@ -113,6 +113,7 @@ test('analyze: holdings, time test, realized, dividends, FIFO check', () => {
   const db = openDatabase(':memory:');
   importBuffer(db, 'a.xlsx', fakeXtbExport(scenario));
   const a = analyze(db, { today: '2025-01-01', fx: fixedFx });
+  assert.equal(a.lastTransactionDate, '2024-06-01'); // newest of trades and cash operations (the dividend)
 
   const [h] = a.holdings;
   assert.equal(h!.quantity, 4);

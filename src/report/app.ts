@@ -367,7 +367,8 @@ function render(): void {
     header(a),
     h('main', {}, state.tab === 'portfolio' ? portfolioTab(a) : soldTab(a)),
     h('footer', {},
-      h('span', {}, `Data XTB k ${czDate(a.snapshotAsOf)}`),
+      h('span', {}, `Poslední transakce ve výpisech ${a.lastTransactionDate ? czDate(a.lastTransactionDate) : '—'}`),
+      h('span', {}, `Výpis XTB k ${czDate(a.snapshotAsOf)}`),
       h('span', {}, `Vygenerováno ${new Date(a.generatedAt).toLocaleString('cs-CZ')}`),
       h('span', {}, 'Zpracováno jen na tvém počítači')),
   );
@@ -486,6 +487,15 @@ function panel(title: string | null, ...children: Child[]): HTMLElement {
   return h('section', { class: 'panel' }, title ? h('h2', {}, title) : null, ...children);
 }
 
+/** FIRE: monthly income if 4 % of today's portfolio value were withdrawn each year. */
+const FIRE_RATE = 0.04;
+function fireStat(value: Totals): HTMLElement {
+  const v = totalsValue(value);
+  const el = stat('FIRE renta', v == null ? '—' : fmtMoney((v * FIRE_RATE) / 12, curCode()), 'měsíčně, výběr 4 % ročně');
+  el.title = 'Pravidlo 4 %: kolik by šlo vybírat měsíčně, kdybys každý rok prodal 4 % dnešní hodnoty portfolia (před daní).';
+  return el;
+}
+
 function stat(label: string, value: string, sub?: Child, cls = ''): HTMLElement {
   return h('div', { class: 'stat' }, h('div', { class: 'label' }, label), h('div', { class: `value ${cls}` }, value), sub ? h('div', { class: 'sub' }, sub) : null);
 }
@@ -528,6 +538,7 @@ function portfolioTab(a: Analysis): HTMLElement {
       stat('Realizovaný zisk', signedMoney(totals(s.realizedProfit), totalsValue(s.realizedProfit)), null, sign(totalsValue(s.realizedProfit))),
       stat('Dividendy čistě', totals(s.dividendsNet)),
       stat('Lze prodat bez daně', fmtMoney(freeValue, curCode()), `${free.length} z ${lots.length} nákupů`),
+      fireStat(s.value),
     ),
     h('div', { class: 'grid2' }, allocationPanel(a), geographyPanel(a)),
     sectorsPanel(a),
