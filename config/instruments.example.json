@@ -12,6 +12,10 @@
     "$comment_sectors": "Sektory v %: technology, financials, health, industrials, consumer, energy, materials, utilities, real_estate, other.",
     "sectors": { "technology": 40, "financials": 20, "health": 15, "other": 25 }
   },
+  "LCUW.DE": {
+    "$comment": "Zrušený nebo sloučený fond: země, sektory a největší pozice se vezmou z jiného ETF na stejný index.",
+    "compositionIsin": "IE00B4L5Y983"
+  },
   "ABC.US": {
     "$comment": "priceSource: justetf | yahoo | none (none = hodnota jen z výpisu XTB).",
     "priceSource": "yahoo",

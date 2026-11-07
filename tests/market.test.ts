@@ -149,6 +149,86 @@ test('ETF without a justETF country breakdown or positions falls back to onvista
   ]);
 });
 
+test('ISIN fallbacks: ETF missing from Xetra by onvista symbol, stock without exact name by matching the XTB price', async () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 'a.xlsx', fakeXtbExport({
+    account: ACCOUNT,
+    cash: [{ id: '1', type: 'Deposit', time: '2024-12-01T08:00:00Z', amount: 5000 }],
+    openAsOf: '2025-01-10T10:00:00Z',
+    open: [
+      { ticker: 'LCUW.DE', name: 'MSCI World', positionId: '1', volume: 1, openPrice: 100, openTime: '2025-01-06T09:00:00Z', currentPrice: 110 },
+      { ticker: 'KBC.BE', name: 'KBC', positionId: '2', volume: 1, openPrice: 100, openTime: '2025-01-07T09:00:00Z', currentPrice: 118 },
+    ],
+  }));
+  db.prepare(`UPDATE instruments SET category = CASE ticker WHEN 'KBC.BE' THEN 'STOCK' ELSE 'ETF' END`).run();
+  const be = (name: string, isin: string) => ({ name, isin, additionalData: { countryCode: 'BE' } });
+  const quote = (last: number) => JSON.stringify({ quoteList: { list: [{ last: last * 1.5, market: { isoCountry: 'DE' } }, { last, market: { isoCountry: 'BE' } }] } });
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) =>
+    u.includes('searchValue=KBC') ? new Response(JSON.stringify({ facets: [{ type: 'STOCK', results: [be('KBC Group', 'BE0003565737'), be('KBC Ancora', 'BE0003867844'), be('KBCX', 'BE0000000001')] }] }))
+      : u.includes('searchValue=LCUW') ? new Response(JSON.stringify({ facets: [{ type: 'ETF', results: [{ name: 'Amundi MSCI World', symbol: 'LCUW', isin: 'LU1781541179' }] }] }))
+        : u.includes('ISIN:BE0003565737/snapshot') ? new Response(quote(117.5))
+          : u.includes('ISIN:BE0003867844/snapshot') ? new Response(quote(95))
+            : routes(u)) });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.instruments.map((i) => [i.ticker, i.isin]), [['KBC.BE', 'BE0003565737'], ['LCUW.DE', 'LU1781541179']]);
+  assert.ok(!r.warnings.some((w) => w.includes('ISIN')), r.warnings.join('\n'));
+});
+
+test('liquidated ETF is reported; compositionIsin takes countries and positions from another ETF, prices stay its own', async () => {
+  const seedOne = () => {
+    const db = openDatabase(':memory:');
+    importBuffer(db, 'a.xlsx', fakeXtbExport({
+      account: ACCOUNT,
+      cash: [{ id: '1', type: 'Deposit', time: '2024-12-01T08:00:00Z', amount: 5000 }],
+      openAsOf: '2025-01-10T10:00:00Z',
+      open: [{ ticker: 'OLD.DE', name: 'Old World', positionId: '1', volume: 1, openPrice: 100, openTime: '2025-01-06T09:00:00Z', currentPrice: 110 }],
+    }));
+    db.prepare(`UPDATE instruments SET category = 'ETF'`).run();
+    return db;
+  };
+  const closed = '<meta property="og:title" content="Old ETF | OLD | LU0000000005" /><p>This fund has been liquidated or merged. Consequently…</p>';
+  const calls: string[] = [];
+  const fetch = fakeFetch((u) => (u.includes('etf-profile') && u.includes('LU0000000005') ? new Response(closed)
+    : u.includes('api.onvista.de/api/v1/funds/') && u.includes('LU0000000005') ? new Response('{}')
+      : routes(u)), calls);
+  const config = { 'OLD.DE': { isin: 'LU0000000005' } };
+
+  const first = await updateMarketData(seedOne(), new Http({ minIntervalMs: 0, fetch }), { today: '2025-01-13', config });
+  assert.ok(first.warnings.some((w) => w.includes('zrušený nebo sloučený') && w.includes('compositionIsin')), first.warnings.join('\n'));
+
+  const db = seedOne();
+  calls.length = 0;
+  const second = await updateMarketData(db, new Http({ minIntervalMs: 0, fetch }), {
+    today: '2025-01-13', config: { 'OLD.DE': { ...config['OLD.DE'], compositionIsin: 'IE0000000001' } },
+  });
+  assert.ok(!second.warnings.some((w) => w.includes('zrušený')), second.warnings.join('\n'));
+  assert.equal((db.prepare(`SELECT weight FROM country_weights WHERE ticker = 'OLD.DE' AND country = 'US'`).get() as { weight: number }).weight, 60);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS n FROM fund_holdings WHERE ticker = 'OLD.DE'`).get() as { n: number }).n, 2);
+  assert.ok(calls.some((u) => u.includes('etf-profile') && u.includes('IE0000000001')));
+  assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('LU0000000005')));
+});
+
+test('sold instruments get prices for the history but no countries, sectors or positions (no needless warnings)', async () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 'a.xlsx', fakeXtbExport({
+    account: ACCOUNT,
+    cash: [{ id: '1', type: 'Deposit', time: '2024-12-01T08:00:00Z', amount: 5000 }],
+    closed: [
+      { ticker: 'ETFA.DE', volume: 1, openPrice: 100, openTime: '2025-01-06T09:00:00Z', closePrice: 110, closeTime: '2025-01-08T09:00:00Z', profit: 10, positionId: '1' },
+      { ticker: 'GONE.BE', volume: 1, openPrice: 10, openTime: '2025-01-06T09:00:00Z', closePrice: 11, closeTime: '2025-01-08T09:00:00Z', profit: 1, positionId: '2' },
+    ],
+    openAsOf: '2025-01-10T10:00:00Z',
+    open: [],
+  }));
+  db.prepare(`UPDATE instruments SET category = CASE ticker WHEN 'ETFA.DE' THEN 'ETF' ELSE 'STOCK' END`).run();
+  const calls: string[] = [];
+  const r = await updateMarketData(db, new Http({ minIntervalMs: 0, fetch: fakeFetch(routes, calls) }), { today: '2025-01-13' });
+  assert.deepEqual(r.warnings, []);
+  assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('IE0000000001')));
+  assert.ok(!calls.some((u) => /etf-profile|onvista/.test(u)), calls.join('\n'));
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM country_weights').get() as { n: number }).n, 0);
+});
+
 test('manual overrides win and failures become warnings', async () => {
   const db = seed();
   const http = new Http({ minIntervalMs: 0, retryDelaysMs: [0, 0], fetch: fakeFetch((u) => (u.includes('finance.yahoo.com') ? new Response('', { status: 429 }) : routes(u))) });

@@ -139,6 +139,7 @@ test('parseJustEtfProfile extracts name, country and sector weights', () => {
       { name: 'Other', weight: 66.9 },
     ],
     holdings: [],
+    closed: false,
   });
 });
 
@@ -165,7 +166,8 @@ test('sectorKey maps English and German sector names to the coarse taxonomy', ()
     ['Telecommunication', 'technology'], ['Financials', 'financials'], ['Finanzen', 'financials'],
     ['Health Care', 'health'], ['Gesundheitswesen', 'health'], ['Konsumgüter zyklisch', 'consumer'],
     ['Consumer Staples', 'consumer'], ['Energieversorger', 'utilities'], ['Energie', 'energy'],
-    ['Immobilien', 'real_estate'], ['Other', 'other'], ['Xyz', null],
+    ['Immobilien', 'real_estate'], ['Other', 'other'], ['Elektrokomponenten', 'technology'], ['Internet Service', 'technology'],
+    ['Business Services', 'industrials'], ['Finanzdienstleister', 'financials'], ['Xyz', null],
   ];
   assert.deepEqual(cases.map(([n]) => [n, sectorKey(n)]), cases);
 });

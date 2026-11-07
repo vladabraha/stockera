@@ -45,6 +45,7 @@ Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastěj
 | „Soubor se nepodařilo načíst“ / „nejsou XLSX“ | Stáhni z xStation znovu export **XLSX** a neotevírej ho/neukládej v Excelu. PDF ani CSV nejde. |
 | „Nepodařilo se spojit s žádným serverem“ | Zkontroluj připojení a spusť aktualizaci znovu. |
 | Upozornění „⚠“ u některého instrumentu | Report se vytvoří i tak, jen u něj chybí část údajů. Zkus později, nebo ho doplň do `data/instruments.json` (vzor: `config/instruments.example.json`). |
+| „fond je zrušený nebo sloučený“ | Do `data/instruments.json` doplň `"compositionIsin"`: ISIN jiného ETF na stejný index (např. MSCI World = `IE00B4L5Y983`). Vzor je v `config/instruments.example.json`. |
 | „⛔ Bezpečnostní kontrola“ nebo červené upozornění v reportu | Některý server poslal podivná data, program je zahodil a nic z nich nepoužil. Nic nedělej, zkus to později; když to trvá, pošli správci `data/logs/network.log`. |
 | „Databázi právě používá jiný program“ | Zavři druhé okno se Stockerou a zkus to znovu. |
 | Report: „Nesprávné heslo“ | Pozor na velká písmena a českou/anglickou klávesnici. |

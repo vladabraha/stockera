@@ -107,7 +107,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Síť používá **jen `pnpm market`** a volitelně otevřený report (živé ceny, viz §6). Import a výpočty jsou offline.
 - Zdroje (podrobně `docs/zdroje-dat.md`):
   - kurzy: ČNB roční txt (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
-  - ticker → ISIN: CSV všech instrumentů Xetra (jen pro `.DE`),
+  - ticker → ISIN: CSV všech instrumentů Xetra (jen pro `.DE`); ETF, které tam není (např. LCUW), → onvista
+    vyhledávání, ISIN jen při **jednoznačné shodě symbolu** ve skupině ETF (`pickOnvistaEtf`),
   - ETF: justETF profil (země: top země + „Ostatní“ = `XX`; obnova po 30 dnech) a justETF chart API (denní ceny EUR),
   - ETF bez zemí na justETF → záložně onvista `api/v1/funds/ISIN:{isin}/breakdowns` (`countryBreakdown`, německé
     názvy zemí → `countryCode` zná i `de` + aliasy jako „Barmittel“ = `XX`). Zdroj se ukládá (`onvista`), obnova po 30 dnech.
@@ -116,7 +117,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     Z odpovědi se bere i `longName` → plný název akcie. Mapování `.UK`→`.L`, `.NL`→`.AS`, `.US`→bez přípony; GBp ÷ 100.
   - Země akcie: prefix ISIN, jinak země burzy. Kód `GB`, ne `UK`.
   - ISIN akcie (mimo `.DE`): onvista vyhledávání `api/v1/instruments/search/facet?searchValue={symbol}` – posílá se jen
-    symbol bez přípony burzy; ISIN se vezme **jen při jednoznačné shodě** (název/symbol = ticker a země burzy sedí), jinak nic.
+    symbol bez přípony burzy; ISIN se vezme **jen při jednoznačné shodě** (název/symbol = ticker a země burzy sedí).
+    Když přesná shoda není (onvista vede „KBC Group“ se symbolem KDB, ne „KBC“), vezmou se akcie stejné země, jejichž
+    název začíná tickerem (`onvistaStockCandidates`), a ISIN se přijme jen u **jediné**, jejíž cena na domácí burze
+    (`onvistaHomePrice`) je do ±10 % od aktuální ceny z výpisu XTB (KBC Group 117 € vs. KBC Ancora 94 €). Jinak nic.
+  - **Složení (země, sektory, pozice) jen pro držené instrumenty** (`open_lots`) – u prodaných se nepoužívá, takže se
+    ani nestahuje a nedělá zbytečná varování. Prodaným se stahují jen ceny (historie) a ETF i ISIN (ceny justETF).
+  - **Zrušený/sloučený fond**: justETF ho označí textem „This fund has been liquidated or merged“ (`EtfProfile.closed`)
+    → varování s návodem. Ruční `compositionIsin` (ISIN jiného ETF na stejný index) převezme země, sektory a pozice
+    z něj; ceny zůstávají vlastní. S `compositionIsin` se složení obnovuje při každém běhu, aby se změna hned projevila.
   - **Sektory** (`sector_weights`, `instrument_meta.sector_source`): ETF → onvista `breakdowns` (`branchBreakdown`, úplný
     rozpad), záložně justETF profil (jen top 4 + „Other“); akcie → onvista `stocks/ISIN:{isin}/snapshot`
     (`company.branch.sector`). Názvy (EN/DE) mapuje `sectorKey()` regexy na **hrubou taxonomii** 10 sektorů
@@ -129,9 +138,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     Obnova po 30 dnech; když je nemá žádný zdroj, zkusí se to znovu až za 30 dní (varování jen poprvé).
     Zamítnuto: extraETF (také jen top 10, nový server), stahování úplného složení od správců fondů (viz §6).
 - **Zamítnuto:** Stooq (vyžaduje JS), OpenFIGI (nevrací ISIN), vyhledávání Börse Frankfurt/Euronext (prázdné),
-  „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční doplnění.
+  automatické „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční `compositionIsin` nebo `countries`.
 - Ruční přepisy: `data/instruments.json` (vzor `config/instruments.example.json`, klíče začínající `$` se ignorují):
-  `isin`, `countries`/`country`, `sector`/`sectors` (klíče z `SECTORS`), `priceSource` (`justetf`|`yahoo`|`none`), `yahooSymbol`.
+  `isin`, `compositionIsin`, `countries`/`country`, `sector`/`sectors` (klíče z `SECTORS`), `priceSource` (`justetf`|`yahoo`|`none`), `yahooSymbol`.
   Swapové/aktivní ETF (LEER, DEGT) nemají na justETF země → onvista; teprve když selže i ta, `??` = „Neznámé složení“.
 - **Ceny se stahují od společného hrubého data** (1. 12. roku před prvním nákupem) pro všechny tickery, aby
   z požadavků nešlo vyčíst, kdy byl který instrument koupen. Dál inkrementálně od posledního data − 7 dní.

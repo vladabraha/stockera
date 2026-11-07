@@ -5,13 +5,15 @@ import { addDays } from '../analysis/calendar.ts';
 import {
   XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
   justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
-  parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, sectorKey, SECTORS, yahooSymbol,
-  type EtfProfile, type FundHolding, type OnvistaBreakdowns, type PricePoint, type Sector, type XetraInstrument,
+  parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, pickOnvistaEtf, onvistaStockCandidates, onvistaHomePrice, sectorKey, SECTORS, yahooSymbol,
+  type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type Sector, type XetraInstrument,
 } from './sources.ts';
 
 /** Manual overrides per XTB ticker (data/instruments.json, see config/instruments.example.json). */
 export interface InstrumentOverride {
   isin?: string;
+  /** ISIN of another ETF on the same index whose countries, sectors and positions are used (e.g. for a liquidated fund). */
+  compositionIsin?: string;
   /** `none` disables price download (value then comes from the XTB export). */
   priceSource?: 'justetf' | 'yahoo' | 'none';
   yahooSymbol?: string;
@@ -61,6 +63,8 @@ export interface UpdateReport {
 
 const PRICE_OVERLAP_DAYS = 7;
 const COUNTRY_MAX_AGE_DAYS = 30;
+/** A stock candidate is accepted when its home-exchange price is within 10 % of the XTB price. */
+const PRICE_MATCH_TOLERANCE = 0.1;
 
 /** Downloads ČNB rates, prices and country data for all instruments in the DB. Never sends personal data. */
 export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions): Promise<UpdateReport> {
@@ -108,6 +112,8 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
   // --- instruments ------------------------------------------------------------
   const metaStmt = db.prepare('SELECT * FROM instrument_meta WHERE ticker = ?');
   const categoryStmt = db.prepare('SELECT category FROM instruments WHERE ticker = ?');
+  const heldStmt = db.prepare('SELECT 1 FROM open_lots WHERE ticker = ? LIMIT 1');
+  const refPriceStmt = db.prepare('SELECT MAX(current_price) AS p FROM open_lots WHERE ticker = ?');
   const lastPriceStmt = db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ? AND source = ?');
   const insertPrice = db.prepare(
     `INSERT INTO prices (ticker, date, close, currency, source) VALUES (?, ?, ?, ?, ?)
@@ -141,14 +147,32 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string; holdings_updated: string | null }
       | undefined;
     const isEtf = (categoryStmt.get(ticker) as { category: string | null } | undefined)?.category === 'ETF';
+    // Countries, sectors and positions only matter for what is held now; sold instruments need just prices (history)
+    const held = heldStmt.get(ticker) != null;
 
     let isin = o.isin ?? prev?.isin ?? null;
     let name = prev?.name ?? null;
     if (!isin && ticker.endsWith('.DE')) isin = (await xetraLookup(ticker.slice(0, -3)))?.isin ?? null;
-    if (!isin && !isEtf && ticker.includes('.')) {
-      log(`${ticker}: ISIN akcie (onvista)…`);
+    if (!isin && ticker.includes('.') && (isEtf || held)) {
+      const symbol = ticker.slice(0, ticker.lastIndexOf('.'));
+      const country = exchangeCountry(ticker);
+      log(`${ticker}: ISIN (onvista)…`);
       try {
-        isin = pickOnvistaStock(await http.getJson(onvistaSearchUrl(ticker.slice(0, ticker.lastIndexOf('.')))), ticker.slice(0, ticker.lastIndexOf('.')), exchangeCountry(ticker));
+        const found = await http.getJson<OnvistaSearch>(onvistaSearchUrl(symbol));
+        if (isEtf) isin = pickOnvistaEtf(found, symbol);
+        else {
+          isin = pickOnvistaStock(found, symbol, country);
+          // No exact match (onvista lists e.g. "KBC Group", not "KBC"): pick the candidate whose home-exchange price
+          // matches the price in the XTB statement – this tells "KBC Group" from "KBC Ancora".
+          const ref = (refPriceStmt.get(ticker) as { p: number | null } | undefined)?.p;
+          const candidates = isin || !ref || !country ? [] : onvistaStockCandidates(found, symbol, country);
+          const matching: string[] = [];
+          for (const c of candidates) {
+            const p = onvistaHomePrice(await http.getJson<OnvistaStock>(onvistaStockUrl(c)), country!);
+            if (p && Math.abs(p / ref! - 1) <= PRICE_MATCH_TOLERANCE) matching.push(c);
+          }
+          if (matching.length === 1) isin = matching[0]!;
+        }
       } catch (e) {
         warnings.push(`${ticker}: ISIN se nepodařilo dohledat (${(e as Error).message}).`);
       }
@@ -157,21 +181,25 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
 
     // Each source is downloaded at most once per instrument (countries and sectors come from the same response)
     let profile: Promise<EtfProfile> | undefined;
-    const justEtf = () => (profile ??= http.getText(justEtfProfileUrl(isin!), 'text/html')
-      .then((html) => http.checkExtracted(justEtfProfileUrl(isin!), parseJustEtfProfile(html))));
+    // Composition (countries, sectors, positions) may come from another ETF on the same index; prices always from this one
+    const compIsin = (isEtf && o.compositionIsin) || isin;
+    const justEtf = () => (profile ??= http.getText(justEtfProfileUrl(compIsin!), 'text/html')
+      .then((html) => http.checkExtracted(justEtfProfileUrl(compIsin!), parseJustEtfProfile(html))));
     let breakdowns: Promise<OnvistaBreakdowns> | undefined;
-    const onvista = () => (breakdowns ??= http.getJson<OnvistaBreakdowns>(onvistaBreakdownsUrl(isin!)));
+    const onvista = () => (breakdowns ??= http.getJson<OnvistaBreakdowns>(onvistaBreakdownsUrl(compIsin!)));
     const ageDays = prev?.updated_at ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;
-    const stale = ageDays > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS);
+    // A newly set compositionIsin must apply right away, so such ETFs are refreshed on every run
+    const stale = Boolean(isEtf && o.compositionIsin) || ageDays > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS);
 
     // countries
     let countrySource = prev?.country_source ?? null;
     let countries: Record<string, number> | null = null;
     if (o.countries) [countries, countrySource] = [o.countries, 'manual'];
     else if (o.country) [countries, countrySource] = [{ [o.country]: 100 }, 'manual'];
-    else if (isEtf && isin) {
+    else if (!held) { /* sold: keep what is stored */ }
+    else if (isEtf && compIsin) {
       const age = prev?.updated_at && (countrySource === 'justetf' || countrySource === 'onvista') ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;
-      if (age > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS)) {
+      if (stale || age > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS)) {
         log(`${ticker}: složení podle zemí (justETF)…`);
         let raw: { name: string; weight: number }[] = [];
         let rawSource: string | null = null;
@@ -240,7 +268,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       const bad = Object.keys(manualSectors).filter((k) => !(SECTORS as readonly string[]).includes(k));
       if (bad.length) warnings.push(`${ticker}: neznámý sektor ${bad.join(', ')} v data/instruments.json – povolené: ${SECTORS.join(', ')}.`);
       else [sectors, sectorSource] = [manualSectors as Partial<Record<Sector, number>>, 'manual'];
-    } else if (isin && (!sectorSource || (sectorSource !== 'manual' && stale))) {
+    } else if (!held) { /* sold: keep what is stored */ } else if (compIsin && (!sectorSource || (sectorSource !== 'manual' && stale))) {
       log(`${ticker}: složení podle sektorů…`);
       const problems: string[] = [];
       if (isEtf) {
@@ -262,7 +290,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         }
       } else {
         try {
-          const raw = parseOnvistaStockSector(await http.getJson(onvistaStockUrl(isin)));
+          const raw = parseOnvistaStockSector(await http.getJson(onvistaStockUrl(compIsin)));
           if (raw) [sectors, sectorSource] = [addSectors([{ name: raw, weight: 100 }]), 'onvista'];
           else problems.push('onvista sektor firmy neuvádí');
         } catch (e) {
@@ -316,7 +344,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
 
     // largest positions of an ETF (look-through to single stocks); reuses the justETF/onvista responses from above
     const holdingsAge = prev?.holdings_updated ? (Date.parse(opts.today) - Date.parse(prev.holdings_updated)) / 86_400_000 : Infinity;
-    if (isEtf && isin && holdingsAge > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS)) {
+    if (held && isEtf && compIsin && (o.compositionIsin || holdingsAge > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS))) {
       log(`${ticker}: největší pozice ETF…`);
       const problems: string[] = [];
       let failed = false;
@@ -345,8 +373,14 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         });
       }
       if (!top.length && (failed || !prev?.holdings_updated)) {
-        warnings.push(`${ticker}: největší pozice ETF se nepodařilo zjistit (${problems.join('; ')})${prev?.holdings_updated && failed ? ' – zůstávají poslední známé' : ' – v přehledu akcií uvnitř ETF bude chybět'}.`);
+        warnings.push(failed
+          ? `${ticker}: největší pozice ETF se nepodařilo zjistit (${problems.join('; ')})${prev?.holdings_updated ? ' – zůstávají poslední známé' : ' – v přehledu akcií uvnitř ETF zatím chybí, zkusí se to znovu příště'}.`
+          : `${ticker}: největší pozice tohoto ETF nezveřejňuje žádný zdroj (justETF ani onvista) – v přehledu akcií uvnitř ETF chybí. Není potřeba nic dělat.`);
       }
+    }
+    if (held && profile && !o.compositionIsin && (await profile.catch(() => null))?.closed) {
+      warnings.push(`${ticker}: fond ${isin} je podle justETF zrušený nebo sloučený, jeho složení už nikdo nezveřejňuje. `
+        + 'Do data/instruments.json doplň "compositionIsin" (ISIN jiného ETF na stejný index) nebo ruční "countries" a "sectors".');
     }
     const lastPrice = (db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ?').get(ticker) as { d: string | null }).d;
     report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource });

@@ -11,7 +11,7 @@ Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a 
 | Země ETF (záloha) | onvista – `api.onvista.de/api/v1/funds/ISIN:{ISIN}/breakdowns` | ISIN | když justETF země neuvádí |
 | Sektory ETF | onvista `…/funds/ISIN:{ISIN}/breakdowns` (`branchBreakdown`), záložně justETF profil | ISIN | jednou za 30 dní |
 | Největší pozice ETF (top 10) | justETF profil, záložně onvista `…/breakdowns` (`fundsHoldingList`) | ISIN | jednou za 30 dní |
-| ISIN akcie | onvista – `api/v1/instruments/search/facet?searchValue={symbol}` | symbol bez burzy | jednou, když chybí ISIN |
+| ISIN akcie / ETF mimo Xetra | onvista – `api/v1/instruments/search/facet?searchValue={symbol}`; u akcií bez přesné shody ověření ceny přes `stocks/ISIN:{ISIN}/snapshot` | symbol bez burzy, ISIN kandidátů | jednou, když chybí ISIN |
 | Sektor akcie | onvista – `api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN | jednou |
 | Ceny ETF (EUR) | justETF – `api/etfs/{ISIN}/performance-chart` | ISIN + období | od posledního uloženého dne − 7 dní |
 | Ceny akcií | Yahoo Finance – `v8/finance/chart/{symbol}` | symbol + období | od posledního uloženého dne − 7 dní |
@@ -40,4 +40,4 @@ Když hlavní zdroj selže, použije se záložní a report na to upozorní. Bez
 - Zdroje nemají oficiální API se smlouvou – při změně formátu program skončí srozumitelným varováním a hodnoty se doplní z výpisu XTB.
 
 ## Ruční konfigurace `data/instruments.json`
-Vzor: `config/instruments.example.json`. Pole: `isin`, `priceSource` (`justetf` | `yahoo` | `none`), `yahooSymbol`, `country`, `countries` (v %, `XX` = ostatní), `sector` nebo `sectors` (v %; klíče `technology`, `financials`, `health`, `industrials`, `consumer`, `energy`, `materials`, `utilities`, `real_estate`, `other`).
+Vzor: `config/instruments.example.json`. Pole: `isin`, `compositionIsin` (ISIN jiného ETF na stejný index – z něj země, sektory a pozice, např. u zrušeného fondu), `priceSource` (`justetf` | `yahoo` | `none`), `yahooSymbol`, `country`, `countries` (v %, `XX` = ostatní), `sector` nebo `sectors` (v %; klíče `technology`, `financials`, `health`, `industrials`, `consumer`, `energy`, `materials`, `utilities`, `real_estate`, `other`).

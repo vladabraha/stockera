@@ -96,6 +96,8 @@ export interface EtfProfile {
   sectors: { name: string; weight: number }[];
   /** Top 10 positions (ISIN from the stock profile link). */
   holdings: FundHolding[];
+  /** justETF marks the fund as liquidated or merged – its data are no longer updated anywhere. */
+  closed: boolean;
 }
 
 export function parseJustEtfProfile(html: string): EtfProfile {
@@ -110,7 +112,8 @@ export function parseJustEtfProfile(html: string): EtfProfile {
     const weight = m ? Number(m[3]!.replace(',', '')) : NaN;
     return m && weight > 0 ? [{ isin: m[1]!, name: decode(m[2]!), weight }] : [];
   });
-  return { name: title ? decode(title.split('|')[0]!) : null, countries: table('countries'), sectors: table('sectors'), holdings };
+  return { name: title ? decode(title.split('|')[0]!) : null, countries: table('countries'), sectors: table('sectors'), holdings,
+    closed: /This fund has been liquidated or merged/i.test(html) };
 }
 
 interface JustEtfChart {
@@ -154,7 +157,7 @@ export const parseOnvistaSectors = (data: OnvistaBreakdowns) => onvistaList(data
 export const onvistaSearchUrl = (query: string) =>
   `https://api.onvista.de/api/v1/instruments/search/facet?searchValue=${encodeURIComponent(query)}&perType=10`;
 
-interface OnvistaSearch {
+export interface OnvistaSearch {
   facets?: { type?: string; results?: { name?: string; symbol?: string; isin?: string; additionalData?: { countryCode?: string } }[] }[];
 }
 
@@ -168,10 +171,37 @@ export function pickOnvistaStock(data: OnvistaSearch, symbol: string, country: s
   return isins.length === 1 ? isins[0]! : null;
 }
 
+/**
+ * Stocks of the given country whose name starts with the ticker as a whole word ("KBC" → "KBC Group", "KBC Ancora").
+ * Used when pickOnvistaStock finds no exact match; the caller must confirm the right one (e.g. by price).
+ */
+export function onvistaStockCandidates(data: OnvistaSearch, symbol: string, country: string | null, max = 5): string[] {
+  const s = symbol.toUpperCase();
+  const hits = (data.facets ?? []).filter((f) => f.type === 'STOCK').flatMap((f) => f.results ?? [])
+    .filter((r) => r.isin && country && r.additionalData?.countryCode === country)
+    .filter((r) => (r.name ?? '').toUpperCase().split(/[^A-Z0-9]+/)[0] === s);
+  return [...new Set(hits.map((r) => r.isin!))].slice(0, max);
+}
+
+/** ISIN of the only ETF whose exchange symbol equals the ticker (for ETFs missing from the Xetra list). */
+export function pickOnvistaEtf(data: OnvistaSearch, symbol: string): string | null {
+  const s = symbol.toUpperCase();
+  const isins = [...new Set((data.facets ?? []).filter((f) => f.type === 'ETF').flatMap((f) => f.results ?? [])
+    .filter((r) => r.isin && r.symbol?.toUpperCase() === s).map((r) => r.isin!))];
+  return isins.length === 1 ? isins[0]! : null;
+}
+
 export const onvistaStockUrl = (isin: string) => `https://api.onvista.de/api/v1/stocks/ISIN:${encodeURIComponent(isin)}/snapshot`;
 
-interface OnvistaStock {
+export interface OnvistaStock {
   company?: { branch?: { name?: string; sector?: { name?: string } } };
+  quoteList?: { list?: { last?: number; market?: { isoCountry?: string } }[] };
+}
+
+/** Last price on an exchange in the stock's home country (e.g. Brussels for a Belgian stock); null if none. */
+export function onvistaHomePrice(data: OnvistaStock, country: string): number | null {
+  const q = (data.quoteList?.list ?? []).find((x) => x.market?.isoCountry === country && typeof x.last === 'number' && x.last > 0);
+  return q?.last ?? null;
 }
 
 /** Company sector of a stock (German), e.g. "Technologie". */
@@ -190,10 +220,10 @@ export type Sector = (typeof SECTORS)[number];
 
 // Order matters: the first match wins ("Sonstige Technologie" is technology, "Energieversorger" a utility).
 const SECTOR_PATTERNS: [RegExp, Sector][] = [
-  [/technolog|software|halbleiter|semiconductor|computer|elektronik|\bit\b|telekom|telecom|kommunikation|communication|medien|media/i, 'technology'],
+  [/technolog|software|halbleiter|semiconductor|computer|elektronik|elektrokomponent|internet|\bit\b|telekom|telecom|kommunikation|communication|medien|media/i, 'technology'],
   [/financ|finanz|bank|versicher|insurance/i, 'financials'],
   [/health|gesundheit|pharma|biotech|medizin/i, 'health'],
-  [/industr|maschinen|luftfahrt|aerospace|defen[cs]e|rüstung|transport|logistik/i, 'industrials'],
+  [/industr|maschinen|luftfahrt|aerospace|defen[cs]e|rüstung|transport|logistik|business services/i, 'industrials'],
   [/konsum|consumer|einzelhandel|retail|nahrung|food|getränk|zyklisch|cyclical|discretionary|staples/i, 'consumer'],
   [/versorg|utilit/i, 'utilities'],
   [/energ|öl|oil|gas/i, 'energy'],
