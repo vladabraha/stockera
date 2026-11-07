@@ -2,7 +2,7 @@
 // Privacy: requests carry only ISINs and currency codes – never quantities, prices, values or account numbers.
 import type { Analysis, Holding, HoldingLot } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
-import { breakdown } from '../analysis/breakdown.ts';
+import { breakdown, lookThrough } from '../analysis/breakdown.ts';
 import { parseSafeJson, UnsafeDataError } from '../net/inspect.ts';
 
 /** Primary sources first, then their fallbacks (Tradegate for quotes, ECB for rates). */
@@ -280,6 +280,7 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
     .map(({ key, ...r }) => ({ country: key, ...r }));
   a.sectors = breakdown(a.holdings.map((x) => ({ value: x.value, weights: (x.sectors ?? []).map((c) => ({ key: c.sector, weight: c.weight })) })))
     .map(({ key, ...r }) => ({ sector: key, ...r }));
+  a.lookThrough = lookThrough(a.holdings);
 
   const last = a.history.at(-1);
   if (last && s.value.czk != null && s.value.eur != null && date! >= last.date) {

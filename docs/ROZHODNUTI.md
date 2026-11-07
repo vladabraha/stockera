@@ -124,6 +124,10 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     u části ETF vrací jen „IT/Telekommunikation“ a jediné „Konsumgüter“ – jemnější dělení by ETF nešlo porovnat.
     Zbytek do 100 % = `other`. ETF se obnovují po 30 dnech, sektor akcie se stáhne jednou. Neznámý název → varování
     a `other`. CSG.NL onvista vede jako „Sonstige Technologie“ (ve skutečnosti obrana) → ruční `"sector": "industrials"`.
+  - **Největší pozice ETF** (`fund_holdings`, `instrument_meta.holdings_updated`): justETF profil (top 10, ISIN
+    z odkazu `/stock-profiles/{ISIN}`, anglické názvy), záložně onvista `breakdowns` (`fundsHoldingList`, top 10).
+    Obnova po 30 dnech; když je nemá žádný zdroj, zkusí se to znovu až za 30 dní (varování jen poprvé).
+    Zamítnuto: extraETF (také jen top 10, nový server), stahování úplného složení od správců fondů (viz §6).
 - **Zamítnuto:** Stooq (vyžaduje JS), OpenFIGI (nevrací ISIN), vyhledávání Börse Frankfurt/Euronext (prázdné),
   „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční doplnění.
 - Ruční přepisy: `data/instruments.json` (vzor `config/instruments.example.json`, klíče začínající `$` se ignorují):
@@ -241,7 +245,17 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   (respektuje `prefers-reduced-motion`).
   Pravidla (skill frontend-design): žádné VERZÁLKY u popisků, žádné meta řetězce s „·“, žádné šipky „→/←“ v textu
   odkazů, žádné stíny/gradienty jako dekorace, šedé pro „Ostatní/Neznámé“ studené (#9aa3b2 / #cfd5de).
-- Světlý i tmavý režim podle `prefers-color-scheme` (CSS proměnné v `styles.css`).
+- Světlý i tmavý režim: výchozí podle `prefers-color-scheme`, tlačítko v hlavičce (ikona) přepíná cyklicky
+  podle systému → světlý → tmavý (přání uživatele). Volba = `data-theme` na `<html>` + `localStorage`
+  (`stockera-theme`; jde i u souboru z disku, při zákazu úložiště platí do zavření). Tmavé proměnné jsou v CSS
+  dvakrát (media query s `:not([data-theme="light"])` a `[data-theme="dark"]`) – při změně barev upravit obě.
+- Panel **Akcie uvnitř ETF** (Portfolio, pod sektory; přání uživatele): ETF rozložené na jednotlivé akcie a stejná
+  akcie (podle ISIN) sečtená přes všechna ETF i přímý nákup (`lookThrough()` v `src/analysis/breakdown.ts`, sdílené
+  s živými cenami). Řazeno podle podílu na celém portfoliu, ukazuje 10, tlačítkem po 10 až do 100 (v analýze max 100),
+  od 11. řádku se seznam posouvá uvnitř panelu (`max-height`). Řádek se rozbalí na rozpad „z kterého ETF kolik %“.
+  **Jen 10 největších pozic každého ETF** – úplné složení zveřejňuje každý správce jinak (iShares, Amundi, SPDR…,
+  části přes POST/XLSX), uživatel zvolil top 10 bez nových serverů. Panel proto poctivě ukazuje, kolik % portfolia
+  známé pozice tvoří, a vyjmenuje ETF bez známých pozic (LEER, DEGT – nemá je justETF ani onvista).
 - Responzivita: < 960 px řádek pozice na 2 řádky, < 860 px jeden sloupec, < 640 px statistiky 2×, bez sparkline, taby na celou šířku, **tabulky → karty**
   (`td[data-label]` + `td::before`). Každá buňka tabulky musí mít `data-label`.
 - Vlastní SVG grafy bez knihoven. Výkon: decimace na ~2 body/px, hover přes `requestAnimationFrame`, binární

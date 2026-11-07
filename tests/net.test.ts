@@ -138,6 +138,7 @@ test('parseJustEtfProfile extracts name, country and sector weights', () => {
       { name: 'Technology', weight: 33.1 },
       { name: 'Other', weight: 66.9 },
     ],
+    holdings: [],
   });
 });
 

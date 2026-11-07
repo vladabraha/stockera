@@ -33,6 +33,8 @@ const state = {
   open: new Set<string>(),
   intro: true,
   colors: new Map<string, string>(),
+  /** Rows shown in the "stocks inside ETFs" list (grows by LT_STEP up to LT_MAX). */
+  ltShown: 10,
 };
 
 // ---------------------------------------------------------------- DOM helpers
@@ -84,6 +86,9 @@ function fmt(key: string, make: () => Intl.NumberFormat): Intl.NumberFormat {
   let f = nf.get(key);
   if (!f) nf.set(key, (f = make()));
   return f;
+}
+function fmtFixed(v: number, digits: number): string {
+  return fmt(`f${digits}`, () => new Intl.NumberFormat('cs-CZ', { minimumFractionDigits: digits, maximumFractionDigits: digits })).format(v);
 }
 function fmtNum(v: number, digits = 2): string {
   return fmt(`n${digits}`, () => new Intl.NumberFormat('cs-CZ', { maximumFractionDigits: digits })).format(v);
@@ -382,6 +387,7 @@ function header(a: Analysis): HTMLElement {
     h('div', { class: 'tools' },
       segmented([['czk', 'Kč'], ['eur', '€']], state.cur, (c) => { state.cur = c; render(); }, 'cur'),
       refreshButton(),
+      themeButton(),
       button('Zamknout', () => {
         state.data = state.base = null;
         state.liveRun++;
@@ -402,6 +408,59 @@ function refreshButton(): HTMLButtonElement {
   b.disabled = loading;
   return b;
 }
+
+// ---------------------------------------------------------------- theme
+
+type Theme = 'auto' | 'light' | 'dark';
+const THEME_KEY = 'stockera-theme';
+const THEMES: Record<Theme, { label: string; next: Theme }> = {
+  auto: { label: 'Vzhled: podle systému', next: 'light' },
+  light: { label: 'Vzhled: světlý', next: 'dark' },
+  dark: { label: 'Vzhled: tmavý', next: 'auto' },
+};
+
+function savedTheme(): Theme {
+  try {
+    const t = localStorage.getItem(THEME_KEY);
+    return t === 'light' || t === 'dark' ? t : 'auto';
+  } catch {
+    return 'auto'; // storage can be blocked for files opened from disk
+  }
+}
+
+function applyTheme(t: Theme): void {
+  if (t === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  try {
+    if (t === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, t);
+  } catch { /* the choice then lasts until the page is closed */ }
+}
+
+function themeIcon(t: Theme): SVGElement {
+  const svg = s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  if (t === 'light') {
+    svg.append(s('circle', { cx: 12, cy: 12, r: 4 }));
+    for (let i = 0; i < 8; i++) {
+      const a = (i * Math.PI) / 4;
+      svg.append(s('path', { d: `M${12 + Math.cos(a) * 7} ${12 + Math.sin(a) * 7}L${12 + Math.cos(a) * 9.5} ${12 + Math.sin(a) * 9.5}` }));
+    }
+  } else if (t === 'dark') svg.append(s('path', { d: 'M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z' }));
+  else svg.append(s('circle', { cx: 12, cy: 12, r: 8 }), s('path', { d: 'M12 4a8 8 0 0 1 0 16z', class: 'fill' }));
+  return svg;
+}
+
+function themeButton(): HTMLButtonElement {
+  const t = savedThemeState.current;
+  const b = button(themeIcon(t), () => {
+    savedThemeState.current = THEMES[t].next;
+    applyTheme(savedThemeState.current);
+    render();
+  }, 'ghost theme', `${THEMES[t].label} (kliknutím přepneš)`);
+  b.setAttribute('aria-label', `${THEMES[t].label}, přepnout`);
+  return b;
+}
+
+const savedThemeState = { current: savedTheme() };
 
 function panel(title: string | null, ...children: Child[]): HTMLElement {
   return h('section', { class: 'panel' }, title ? h('h2', {}, title) : null, ...children);
@@ -452,6 +511,7 @@ function portfolioTab(a: Analysis): HTMLElement {
     ),
     h('div', { class: 'grid2' }, allocationPanel(a), geographyPanel(a)),
     sectorsPanel(a),
+    lookThroughPanel(a),
     upcomingPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
@@ -981,6 +1041,68 @@ function sectorsPanel(a: Analysis): HTMLElement | null {
   );
 }
 
+const LT_STEP = 10;
+const LT_MAX = 100;
+
+function lookThroughPanel(a: Analysis): HTMLElement | null {
+  const lt = a.lookThrough;
+  if (!lt?.items.length || !a.holdings.some((x) => x.category === 'ETF')) return null;
+  const items = lt.items.slice(0, LT_MAX);
+  const etf = new Set(a.holdings.filter((x) => x.category === 'ETF').map((x) => x.ticker));
+  const max = Math.max(...items.map((c) => c.share), 0.0001);
+  const list = h('ol', { class: 'lt-list' });
+  const row = (c: (typeof items)[number], i: number) => {
+    const v = c[state.cur];
+    const funds = c.via.filter((x) => etf.has(x.ticker));
+    const direct = c.via.find((x) => !etf.has(x.ticker));
+    const d = h('details', { class: 'lt-row' },
+      h('summary', {},
+        h('span', { class: 'lt-rank num' }, String(i + 1)),
+        h('span', { class: 'lt-name' }, h('b', { title: c.name }, c.name),
+          h('small', {}, funds.length ? `${funds.length === 1 ? '1 ETF' : `${funds.length} ETF`}${direct ? ' a přímo' : ''}` : 'jen přímo')),
+        h('div', { class: 'bar-track' }, paint(h('div', { class: 'bar' }), { width: `${(c.share / max) * 100}%` })),
+        h('span', { class: 'num' }, h('b', {}, `${fmtFixed(c.share, 2)} %`), h('small', {}, v == null ? '' : fmtMoney(v, curCode())))),
+      h('ul', { class: 'lt-via' }, ...c.via.map((x) => {
+        const hold = a.holdings.find((y) => y.ticker === x.ticker);
+        return h('li', {},
+          h('span', {}, etf.has(x.ticker) ? h('span', {}, h('span', { class: 'ticker' }, x.ticker), ' ', hold?.name ?? '') : 'Přímo v držení'),
+          h('span', { class: 'num' }, `${fmtFixed(x.share, 2)} %`));
+      })),
+    );
+    return h('li', {}, d);
+  };
+  const more = h('div', { class: 'lt-more' });
+  const fill = (from: number) => {
+    const n = Math.min(state.ltShown, items.length);
+    list.append(...items.slice(from, n).map((c, k) => row(c, from + k)));
+    list.classList.toggle('long', n > LT_STEP);
+    const left = items.length - n;
+    more.replaceChildren(...[
+      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${items.length}`),
+      left > 0 ? button(`Zobrazit dalších ${Math.min(LT_STEP, left)}`, () => {
+        const was = state.ltShown;
+        state.ltShown = Math.min(state.ltShown + LT_STEP, items.length);
+        fill(was);
+        list.children[was]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }, 'ghost') : null,
+      n > LT_STEP ? button('Zobrazit jen prvních 10', () => {
+        state.ltShown = LT_STEP;
+        list.replaceChildren();
+        list.scrollTop = 0;
+        fill(0);
+      }, 'ghost') : null,
+    ].filter((x) => x != null));
+  };
+  fill(0);
+  const missing = lt.missing.length ? ` U ${lt.missing.join(', ')} pozice nejsou známé.` : '';
+  return panel(null,
+    h('div', { class: 'panel-head' }, h('h2', {}, 'Akcie uvnitř ETF'), h('span', { class: 'muted' }, `Známé pozice tvoří ${fmtNum(lt.coveredShare, 0)} % portfolia`)),
+    list,
+    more,
+    h('p', { class: 'hint' }, `Stejná akcie z více ETF i z přímého nákupu je sečtená. Procenta jsou z hodnoty celého portfolia. U každého ETF je známých jen 10 největších pozic (justETF, případně onvista), zbytek tvoří menší pozice.${missing}`),
+  );
+}
+
 // ---------------------------------------------------------------- sold tab
 
 function soldTab(a: Analysis): HTMLElement {
@@ -1103,4 +1225,5 @@ new MutationObserver(() => {
     observedHeader = hdr;
   }
 }).observe(document.getElementById('app')!, { childList: true, subtree: true });
+applyTheme(savedThemeState.current);
 renderLogin();

@@ -10,6 +10,7 @@ Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a 
 | Země ETF | justETF – profil ETF (`etf-profile.html?isin=`) | ISIN | jednou za 30 dní |
 | Země ETF (záloha) | onvista – `api.onvista.de/api/v1/funds/ISIN:{ISIN}/breakdowns` | ISIN | když justETF země neuvádí |
 | Sektory ETF | onvista `…/funds/ISIN:{ISIN}/breakdowns` (`branchBreakdown`), záložně justETF profil | ISIN | jednou za 30 dní |
+| Největší pozice ETF (top 10) | justETF profil, záložně onvista `…/breakdowns` (`fundsHoldingList`) | ISIN | jednou za 30 dní |
 | ISIN akcie | onvista – `api/v1/instruments/search/facet?searchValue={symbol}` | symbol bez burzy | jednou, když chybí ISIN |
 | Sektor akcie | onvista – `api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN | jednou |
 | Ceny ETF (EUR) | justETF – `api/etfs/{ISIN}/performance-chart` | ISIN + období | od posledního uloženého dne − 7 dní |

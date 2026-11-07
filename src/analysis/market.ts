@@ -21,6 +21,8 @@ export interface InstrumentMarket {
   countries: { country: string; weight: number }[];
   /** Sector weights in % (keys see SECTORS in market/sources.ts, `other` = rest). */
   sectors: { sector: string; weight: number }[];
+  /** ETF only: largest positions in % of the fund. */
+  topHoldings: { isin: string; name: string; weight: number }[];
 }
 
 /** Read access to downloaded market data (prices, countries, ISINs). */
@@ -54,6 +56,10 @@ export class DbMarketData implements MarketData {
     for (const w of db.prepare('SELECT ticker, sector, weight FROM sector_weights ORDER BY weight DESC').all() as { ticker: string; sector: string; weight: number }[]) {
       sectors.set(w.ticker, [...(sectors.get(w.ticker) ?? []), { sector: w.sector, weight: w.weight }]);
     }
+    const top = new Map<string, { isin: string; name: string; weight: number }[]>();
+    for (const w of db.prepare('SELECT ticker, isin, name, weight FROM fund_holdings ORDER BY weight DESC').all() as { ticker: string; isin: string; name: string; weight: number }[]) {
+      top.set(w.ticker, [...(top.get(w.ticker) ?? []), { isin: w.isin, name: w.name, weight: w.weight }]);
+    }
     for (const m of db.prepare('SELECT ticker, isin, price_source, price_currency, country_source FROM instrument_meta').all() as {
       ticker: string;
       isin: string | null;
@@ -68,6 +74,7 @@ export class DbMarketData implements MarketData {
         countrySource: m.country_source,
         countries: weights.get(m.ticker) ?? [],
         sectors: sectors.get(m.ticker) ?? [],
+        topHoldings: top.get(m.ticker) ?? [],
       });
     }
   }
@@ -92,14 +99,14 @@ export class DbMarketData implements MarketData {
   }
 
   info(ticker: string): InstrumentMarket {
-    return this.infos.get(ticker) ?? { isin: null, priceSource: null, priceCurrency: null, countrySource: null, countries: [], sectors: [] };
+    return this.infos.get(ticker) ?? { isin: null, priceSource: null, priceCurrency: null, countrySource: null, countries: [], sectors: [], topHoldings: [] };
   }
 }
 
 export const emptyMarket: MarketData = {
   price: () => null,
   series: () => [],
-  info: () => ({ isin: null, priceSource: null, priceCurrency: null, countrySource: null, countries: [], sectors: [] }),
+  info: () => ({ isin: null, priceSource: null, priceCurrency: null, countrySource: null, countries: [], sectors: [], topHoldings: [] }),
 };
 
 /** Converts an amount between currencies through CZK rates of the given day. */

@@ -4,9 +4,9 @@ import type { Http } from '../net/http.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
   XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
-  justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaSectors,
+  justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
   parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, sectorKey, SECTORS, yahooSymbol,
-  type EtfProfile, type OnvistaBreakdowns, type PricePoint, type Sector, type XetraInstrument,
+  type EtfProfile, type FundHolding, type OnvistaBreakdowns, type PricePoint, type Sector, type XetraInstrument,
 } from './sources.ts';
 
 /** Manual overrides per XTB ticker (data/instruments.json, see config/instruments.example.json). */
@@ -138,7 +138,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
   for (const { ticker } of tickers) {
     const o = config[ticker] ?? {};
     const prev = metaStmt.get(ticker) as
-      | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string }
+      | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string; holdings_updated: string | null }
       | undefined;
     const isEtf = (categoryStmt.get(ticker) as { category: string | null } | undefined)?.category === 'ETF';
 
@@ -313,6 +313,41 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
 
     const refreshed = countries || sectors || countrySource !== prev?.country_source;
     upsertMeta.run(ticker, isin, name, source, symbol, currency, countrySource, sectorSource, refreshed ? opts.today : (prev?.updated_at ?? opts.today));
+
+    // largest positions of an ETF (look-through to single stocks); reuses the justETF/onvista responses from above
+    const holdingsAge = prev?.holdings_updated ? (Date.parse(opts.today) - Date.parse(prev.holdings_updated)) / 86_400_000 : Infinity;
+    if (isEtf && isin && holdingsAge > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS)) {
+      log(`${ticker}: největší pozice ETF…`);
+      const problems: string[] = [];
+      let failed = false;
+      let top: FundHolding[] = [];
+      try {
+        top = (await justEtf()).holdings;
+        if (!top.length) problems.push('justETF je neuvádí');
+      } catch (e) {
+        [failed] = [true, problems.push(`justETF: ${(e as Error).message}`)];
+      }
+      if (!top.length) {
+        try {
+          top = parseOnvistaHoldings(await onvista());
+          if (!top.length) problems.push('onvista je neuvádí');
+        } catch (e) {
+          [failed] = [true, problems.push(`onvista: ${(e as Error).message}`)];
+        }
+      }
+      // An ETF whose positions no source lists is re-checked after 30 days, not on every run
+      if (top.length || !failed) {
+        transaction(db, () => {
+          db.prepare('DELETE FROM fund_holdings WHERE ticker = ?').run(ticker);
+          const ins = db.prepare('INSERT INTO fund_holdings (ticker, isin, name, weight) VALUES (?, ?, ?, ?) ON CONFLICT DO UPDATE SET weight = weight + excluded.weight');
+          for (const t of top) ins.run(ticker, t.isin, t.name, t.weight);
+          db.prepare('UPDATE instrument_meta SET holdings_updated = ? WHERE ticker = ?').run(opts.today, ticker);
+        });
+      }
+      if (!top.length && (failed || !prev?.holdings_updated)) {
+        warnings.push(`${ticker}: největší pozice ETF se nepodařilo zjistit (${problems.join('; ')})${prev?.holdings_updated && failed ? ' – zůstávají poslední známé' : ' – v přehledu akcií uvnitř ETF bude chybět'}.`);
+      }
+    }
     const lastPrice = (db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ?').get(ticker) as { d: string | null }).d;
     report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource });
   }

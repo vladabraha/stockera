@@ -140,6 +140,18 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (ticker, sector)
   );
   `,
+  `
+  -- Largest positions of each ETF (look-through to single stocks); holdings_updated drives the 30-day refresh
+  ALTER TABLE instrument_meta ADD COLUMN holdings_updated TEXT;
+
+  CREATE TABLE fund_holdings (
+    ticker TEXT NOT NULL,
+    isin   TEXT NOT NULL,
+    name   TEXT NOT NULL,
+    weight REAL NOT NULL,
+    PRIMARY KEY (ticker, isin)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

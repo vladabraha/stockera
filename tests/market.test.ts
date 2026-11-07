@@ -11,6 +11,7 @@ import { analyze } from '../src/analysis/portfolio.ts';
 import { geography, sectorBreakdown } from '../src/analysis/market.ts';
 import { fakeXtbExport } from './helpers/fakeXtb.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
+import { lookThrough } from '../src/analysis/breakdown.ts';
 
 const ACCOUNT = '98765432';
 
@@ -39,7 +40,11 @@ const xetra = 'Product Status;Instrument Status;Instrument;ISIN;Mnemonic\nActive
 const profile =
   '<meta property="og:title" content="World ETF | ETFA | IE0000000001" />' +
   '<td data-testid="tl_etf-holdings_countries_value_name">United States</td><span data-testid="tl_etf-holdings_countries_value_percentage">60.00%</span>' +
-  '<td data-testid="tl_etf-holdings_countries_value_name">Japan</td><span data-testid="tl_etf-holdings_countries_value_percentage">10.00%</span>';
+  '<td data-testid="tl_etf-holdings_countries_value_name">Japan</td><span data-testid="tl_etf-holdings_countries_value_percentage">10.00%</span>' +
+  '<tr data-testid="etf-holdings_top-holdings_row"><td><a data-testid="tl_etf-holdings_top-holdings_link_name" href="/en/stock-profiles/US0000000002" title="Stock Inc."><span>Stock Inc.</span></a></td>' +
+  '<td><span data-testid="tl_etf-holdings_top-holdings_value_percentage">5.00%</span></td></tr>' +
+  '<tr data-testid="etf-holdings_top-holdings_row"><td><a data-testid="tl_etf-holdings_top-holdings_link_name" href="/en/stock-profiles/JP0000000004" title="Toyota &amp; Co"><span>Toyota</span></a></td>' +
+  '<td><span data-testid="tl_etf-holdings_top-holdings_value_percentage">3.00%</span></td></tr>';
 const chart = JSON.stringify({ series: [{ date: '2025-01-06', value: { raw: 100 } }, { date: '2025-01-13', value: { raw: 120 } }] });
 const yahoo = JSON.stringify({
   chart: { result: [{ meta: { currency: 'USD', gmtoffset: -18000 }, timestamp: [1736784000], indicators: { quote: [{ close: [75] }] } }] },
@@ -86,6 +91,10 @@ test('updateMarketData stores rates, ISINs, countries, sectors and prices; reque
     { ticker: 'ETFA.DE', sector: 'other', weight: 25 },
     { ticker: 'STK.US', sector: 'health', weight: 100 },
   ]);
+  assert.deepEqual(db.prepare('SELECT ticker, isin, name, weight FROM fund_holdings ORDER BY weight DESC').all().map((x) => ({ ...x })), [
+    { ticker: 'ETFA.DE', isin: 'US0000000002', name: 'Stock Inc.', weight: 5 },
+    { ticker: 'ETFA.DE', isin: 'JP0000000004', name: 'Toyota & Co', weight: 3 },
+  ]);
   const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY country`).all().map((x) => ({ ...x }));
   assert.deepEqual(weights, [
     { country: 'JP', weight: 10 },
@@ -107,9 +116,12 @@ test('updateMarketData stores rates, ISINs, countries, sectors and prices; reque
   assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('dateFrom=2025-01-06')));
 });
 
-test('ETF without a justETF country breakdown falls back to onvista, sectors fall back to justETF; Yahoo provides stock names', async () => {
+test('ETF without a justETF country breakdown or positions falls back to onvista, sectors fall back to justETF; Yahoo provides stock names', async () => {
   const db = seed();
-  const onvista = JSON.stringify({ countryBreakdown: { list: [{ nameBreakdown: 'Polen', investmentPct: 73 }, { nameBreakdown: 'Ungarn', investmentPct: 20.17 }, { nameBreakdown: 'Tschechien', investmentPct: 6.83 }] } });
+  const onvista = JSON.stringify({
+    countryBreakdown: { list: [{ nameBreakdown: 'Polen', investmentPct: 73 }, { nameBreakdown: 'Ungarn', investmentPct: 20.17 }, { nameBreakdown: 'Tschechien', investmentPct: 6.83 }] },
+    fundsHoldingList: { list: [{ instrument: { name: 'Orlen', isin: 'PLPKN0000018' }, investmentPct: 12.5 }, { instrument: { name: 'Bez ISIN' }, investmentPct: 3 }] },
+  });
   const named = yahoo.replace('"currency":"USD"', '"currency":"USD","longName":"Stock Inc."');
   const http = new Http({
     minIntervalMs: 0,
@@ -130,6 +142,7 @@ test('ETF without a justETF country breakdown falls back to onvista, sectors fal
   ]);
   const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x }));
   assert.deepEqual(weights, [{ country: 'PL', weight: 73 }, { country: 'HU', weight: 20.17 }, { country: 'CZ', weight: 6.83 }]);
+  assert.deepEqual(db.prepare('SELECT isin, name, weight FROM fund_holdings').all().map((x) => ({ ...x })), [{ isin: 'PLPKN0000018', name: 'Orlen', weight: 12.5 }]);
   assert.deepEqual(db.prepare('SELECT ticker, name FROM instrument_meta ORDER BY ticker').all().map((x) => ({ ...x })), [
     { ticker: 'ETFA.DE', name: 'Swap ETF' },
     { ticker: 'STK.US', name: 'Stock Inc.' },
@@ -202,6 +215,11 @@ test('analyze values holdings at newer market prices, splits by country and buil
   assert.deepEqual(a.history.map((h) => h.date), ['2025-01-06', '2025-01-07', '2025-01-08', '2025-01-09', '2025-01-10', '2025-01-11', '2025-01-12', '2025-01-13']);
   assert.equal(a.history.at(-1)!.valueCzk, 1200 * 25 + 150 * 25);
   assert.deepEqual(a.instruments['ETFA.DE']!.prices, [['2025-01-06', 100], ['2025-01-13', 120]]);
+  // Look-through: STK.US is 5 % of the ETF (1 500 Kč) plus held directly (3 750 Kč)
+  assert.deepEqual(a.lookThrough.items.map((c) => [c.key, c.czk, c.via.map((v) => v.ticker)]), [
+    ['US0000000002', 5250, ['STK.US', 'ETFA.DE']],
+    ['JP0000000004', 900, ['ETFA.DE']],
+  ]);
 });
 
 test('geography puts holdings without composition into "??"', () => {
@@ -220,6 +238,22 @@ test('sectorBreakdown splits values by sector weights', () => {
     { value: t(400), sectors: [{ sector: 'technology', weight: 100 }] },
   ]);
   assert.deepEqual(s.map((x) => [x.sector, x.czk, x.share]), [['technology', 700, 70], ['financials', 300, 30]]);
+});
+
+test('lookThrough sums the same stock across ETFs and direct holdings, lists ETFs without positions', () => {
+  const t = (czk: number) => ({ czk, eur: czk / 25, native: { EUR: czk / 25 } });
+  const nvda = (weight: number) => ({ isin: 'US67066G1040', name: 'NVIDIA', weight });
+  const lt = lookThrough([
+    { ticker: 'SPYL.DE', name: 'S&P 500', isin: 'IE1', category: 'ETF', value: t(600), topHoldings: [nvda(10), { isin: 'US0378331005', name: 'Apple', weight: 5 }] },
+    { ticker: 'WEBN.DE', name: 'World', isin: 'IE2', category: 'ETF', value: t(300), topHoldings: [nvda(5)] },
+    { ticker: 'LEER.DE', name: 'Eastern Europe', isin: 'LU1', category: 'ETF', value: t(50), topHoldings: [] },
+    { ticker: 'NVDA.US', name: 'NVIDIA Corporation', isin: 'US67066G1040', category: 'STOCK', value: t(50) },
+  ], 1);
+  assert.deepEqual(lt.items.map((c) => [c.name, c.czk, c.share, c.via]), [
+    ['NVIDIA Corporation', 125, 12.5, [{ ticker: 'SPYL.DE', share: 6 }, { ticker: 'NVDA.US', share: 5 }, { ticker: 'WEBN.DE', share: 1.5 }]],
+  ]);
+  assert.equal(lt.coveredShare, 15.5); // limit cuts the list, not the coverage
+  assert.deepEqual(lt.missing, ['LEER.DE']);
 });
 
 test('instruments.json saved by Windows Notepad (UTF-8 BOM) still loads', () => {

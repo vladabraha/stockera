@@ -94,6 +94,8 @@ export interface EtfProfile {
   countries: { name: string; weight: number }[];
   /** Top sectors by weight (%), remainder as "Other". */
   sectors: { name: string; weight: number }[];
+  /** Top 10 positions (ISIN from the stock profile link). */
+  holdings: FundHolding[];
 }
 
 export function parseJustEtfProfile(html: string): EtfProfile {
@@ -103,7 +105,12 @@ export function parseJustEtfProfile(html: string): EtfProfile {
     const re = new RegExp(`data-testid="tl_etf-holdings_${kind}_value_name">([^<]+)<[\\s\\S]*?data-testid="tl_etf-holdings_${kind}_value_percentage">([\\d.,]+)%<`, 'g');
     return [...html.matchAll(re)].map((m) => ({ name: decode(m[1]!), weight: Number(m[2]!.replace(',', '')) }));
   };
-  return { name: title ? decode(title.split('|')[0]!) : null, countries: table('countries'), sectors: table('sectors') };
+  const holdings = html.split('data-testid="etf-holdings_top-holdings_row"').slice(1).flatMap((row) => {
+    const m = /href="\/[a-z]{2}\/stock-profiles\/([A-Z]{2}[A-Z0-9]{9}[0-9])"[^>]*title="([^"]+)"[\s\S]*?top-holdings_value_percentage">([\d.,]+)%</.exec(row.split('</tr>')[0]!);
+    const weight = m ? Number(m[3]!.replace(',', '')) : NaN;
+    return m && weight > 0 ? [{ isin: m[1]!, name: decode(m[2]!), weight }] : [];
+  });
+  return { name: title ? decode(title.split('|')[0]!) : null, countries: table('countries'), sectors: table('sectors'), holdings };
 }
 
 interface JustEtfChart {
@@ -125,7 +132,15 @@ type OnvistaList = { list?: { nameBreakdown?: string; investmentPct?: number }[]
 export interface OnvistaBreakdowns {
   countryBreakdown?: OnvistaList;
   branchBreakdown?: OnvistaList;
+  fundsHoldingList?: { list?: { instrument?: { name?: string; isin?: string }; investmentPct?: number }[] };
 }
+
+export type FundHolding = { isin: string; name: string; weight: number };
+
+/** Largest positions of a fund (onvista lists the top 10) – ISIN lets the same stock be summed across ETFs. */
+export const parseOnvistaHoldings = (data: OnvistaBreakdowns): FundHolding[] => (data.fundsHoldingList?.list ?? [])
+  .filter((h) => /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(h.instrument?.isin ?? '') && h.instrument?.name?.trim() && Number.isFinite(h.investmentPct) && h.investmentPct! > 0)
+  .map((h) => ({ isin: h.instrument!.isin!, name: h.instrument!.name!.trim(), weight: h.investmentPct! }));
 
 const onvistaList = (l: OnvistaList | undefined) => (l?.list ?? [])
   .filter((c) => c.nameBreakdown && Number.isFinite(c.investmentPct))

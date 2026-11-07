@@ -20,8 +20,8 @@ pnpm update-data      # průvodce: ingest → market → report, se srozumiteln�
 ### HTML report
 `out/stockera.html` je jediný soubor, který funguje offline v jakémkoli moderním prohlížeči (i na mobilu – stačí ho
 zkopírovat, např. AirDrop/kabel/USB). Obsahuje taby **Portfolio** (souhrn, vývoj hodnoty, rozložení podle instrumentů
-a zemí, časový test, akordeon instrumentů → nákupy, graf ceny/hodnoty každého instrumentu) a **Prodané** (daňové roky,
-akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v %). Přepínání Kč / €.
+a zemí, sektory, akcie uvnitř ETF sečtené přes všechna ETF, časový test, akordeon instrumentů → nákupy, graf ceny/hodnoty každého instrumentu) a **Prodané** (daňové roky,
+akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v %). Přepínání Kč / € a světlého / tmavého vzhledu.
 
 - Data v souboru jsou zašifrovaná (gzip → AES-256-GCM, klíč z hesla přes PBKDF2-SHA256, 600 000 iterací);
   dešifrují se až v prohlížeči po zadání hesla. Heslo se nikam neukládá, tlačítko *Zamknout* data zahodí z paměti.

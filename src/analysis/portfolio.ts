@@ -4,6 +4,7 @@ import { checkFifo, type FifoMismatch } from './fifo.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
 import { validatePortfolio, type DataCheck } from './validation.ts';
+import { lookThrough, type LookThrough } from './breakdown.ts';
 import {
   DbMarketData, crossConvert, geography, sectorBreakdown, valueHistory, type GeographySlice, type SectorSlice, type HistoryLot, type HistoryPoint,
   type MarketData,
@@ -44,6 +45,8 @@ export interface Holding {
   countries: { country: string; weight: number }[];
   countrySource: string | null;
   sectors: { sector: string; weight: number }[];
+  /** ETF only: largest positions in % of the fund (onvista top 10). */
+  topHoldings: { isin: string; name: string; weight: number }[];
   quantity: number;
   cost: Totals;
   value: Totals;
@@ -145,6 +148,8 @@ export interface Analysis {
   holdings: Holding[];
   geography: GeographySlice[];
   sectors: SectorSlice[];
+  /** Single stocks inside ETFs plus directly held stocks, summed by ISIN (top 100). */
+  lookThrough: LookThrough;
   history: HistoryPoint[];
   /** Price series per instrument for charts (from ~1 month before the first purchase). */
   instruments: Record<string, InstrumentSeries>;
@@ -244,6 +249,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
       countries: m.countries,
       countrySource: m.countrySource,
       sectors: m.sectors,
+      topHoldings: m.topHoldings,
       quantity: lots.reduce((a, l) => a + l.quantity, 0),
       cost,
       value,
@@ -455,6 +461,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     holdings,
     geography: geography(holdings),
     sectors: sectorBreakdown(holdings),
+    lookThrough: lookThrough(holdings),
     history: valueHistory(historyLots(), market, fx, today),
     instruments: instrumentSeries(),
     realized,
