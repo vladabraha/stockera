@@ -543,10 +543,10 @@ function portfolioTab(a: Analysis): HTMLElement {
     h('div', { class: 'grid2' }, allocationPanel(a), geographyPanel(a)),
     sectorsPanel(a),
     lookThroughPanel(a),
-    upcomingPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
       h('div', { class: 'acc-list' }, ...a.holdings.map(holdingRow))),
+    upcomingPanel(a),
     checksPanel(a),
     validationPanel(a),
   );
