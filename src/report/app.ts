@@ -15,6 +15,7 @@ type Point = [x: number, y: number];
 const RANGES: [label: string, days: number | null][] = [
   ['1M', 31], ['3M', 92], ['6M', 183], ['1R', 366], ['3R', 1096], ['Vše', null],
 ];
+const CUSTOM = 'Vlastní';
 const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
 const TAX_LIMIT_CZK = 100_000;
 
@@ -29,6 +30,8 @@ const state = {
   cur: 'czk' as Cur,
   tab: 'portfolio' as 'portfolio' | 'sold',
   range: 'Vše',
+  /** Own range (ISO dates, inclusive) used when range === CUSTOM; null = from the start / up to the last day. */
+  custom: { from: null as string | null, to: null as string | null },
   chart: { kind: 'portfolio' } as ChartMode,
   open: new Set<string>(),
   intro: true,
@@ -627,13 +630,50 @@ function validationPanel(a: Analysis): HTMLElement | null {
 
 // ---------------------------------------------------------------- hero + charts
 
-function rangeButtons(): HTMLElement {
-  return segmented(RANGES.map(([l]) => [l, l] as [string, string]), state.range, (r) => { state.range = r; render(); }, 'small');
+/** Preset buttons plus "Vlastní" with two date fields; first/last = the dates the current chart has data for. */
+function rangeButtons(firstIso: string | undefined, lastIso: string | undefined): HTMLElement {
+  const pick = (r: string) => {
+    if (r === CUSTOM && state.range !== CUSTOM && lastIso) {
+      // start from what is visible now, so switching to "Vlastní" does not jump
+      const start = rangeStart(lastIso);
+      state.custom = { from: start == null ? null : new Date(start).toISOString().slice(0, 10), to: null };
+    }
+    state.range = r;
+    render();
+  };
+  const seg = segmented([...RANGES.map(([l]) => [l, l] as [string, string]), [CUSTOM, CUSTOM]], state.range, pick, 'small');
+  if (state.range !== CUSTOM) return seg;
+  const field = (label: string, key: 'from' | 'to', fallback: string | undefined) => {
+    const input = h('input', { type: 'date', min: firstIso, max: lastIso, value: state.custom[key] ?? fallback ?? '' });
+    input.addEventListener('change', () => {
+      const next = { ...state.custom };
+      next[key] = input.value || null;
+      let { from, to } = next;
+      if (from && to && from > to) [from, to] = [to, from];
+      state.custom = { from, to };
+      render();
+    });
+    return h('label', { class: 'date-field' }, h('span', {}, label), input);
+  };
+  return h('div', { class: 'range-tools' }, seg,
+    h('div', { class: 'range-custom' }, field('Od', 'from', firstIso), field('Do', 'to', lastIso),
+      state.custom.from || state.custom.to ? button('Celé období', () => { state.custom = { from: null, to: null }; render(); }, 'ghost small') : null));
 }
 
+/** Start of the visible range in ms (null = from the beginning). */
 function rangeStart(lastIso: string): number | null {
+  if (state.range === CUSTOM) return state.custom.from ? dayMs(state.custom.from) : null;
   const days = RANGES.find(([l]) => l === state.range)?.[1] ?? null;
   return days == null ? null : dayMs(lastIso) - days * 86_400_000;
+}
+
+/** End of the visible range in ms (null = up to the last data point). */
+function rangeEnd(): number | null {
+  return state.range === CUSTOM && state.custom.to ? dayMs(state.custom.to) : null;
+}
+
+function inRangeMs(t: number, start: number | null, end: number | null): boolean {
+  return (start == null || t >= start) && (end == null || t <= end);
 }
 
 function heroPanel(a: Analysis): HTMLElement {
@@ -654,7 +694,7 @@ function heroPanel(a: Analysis): HTMLElement {
             signed(signedMoney(totals(profit), totalsValue(profit)), totalsValue(profit)), x ? null : h('span', { class: 'muted' }, 'realizováno')) : null),
         h('div', { class: 'hero-tools' },
           segmented([['price', 'Cena'], ['value', 'Hodnota pozice']], mode.view, (v) => { state.chart = { ...mode, view: v }; render(); }, 'small'),
-          rangeButtons())),
+          rangeButtons(a.instruments[mode.ticker]?.prices[0]?.[0], a.instruments[mode.ticker]?.prices.at(-1)?.[0]))),
       instrumentChart(a, mode.ticker, mode.view),
     );
     return hero;
@@ -670,21 +710,25 @@ function heroPanel(a: Analysis): HTMLElement {
         h('div', { class: 'delta' }, chip(pct(s.unrealizedPct), pctValue(s.unrealizedPct)),
           signed(signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit)), totalsValue(s.unrealizedProfit)), h('span', { class: 'muted' }, 'nerealizovaný zisk')),
         rangeChange(a.history)),
-      h('div', { class: 'hero-tools' }, rangeButtons())),
+      h('div', { class: 'hero-tools' }, rangeButtons(a.history[0]?.date, a.history.at(-1)?.date))),
     portfolioChart(a.history),
   );
   return hero;
 }
 
 function rangeChange(history: HistoryPoint[]): HTMLElement | null {
-  if (state.range === 'Vše' || history.length < 2) return null;
-  const start = rangeStart(history.at(-1)!.date)!;
-  const first = history.find((p) => dayMs(p.date) >= start);
-  const last = history.at(-1)!;
-  if (!first || first === last) return null;
+  if (history.length < 2) return null;
+  const start = rangeStart(history.at(-1)!.date);
+  const end = rangeEnd();
+  if (start == null && end == null) return null;
+  const pts = history.filter((p) => inRangeMs(dayMs(p.date), start, end));
+  const first = pts[0];
+  const last = pts.at(-1);
+  if (!first || !last || first === last) return null;
   const gain = (p: HistoryPoint) => (state.cur === 'czk' ? p.valueCzk - p.investedCzk : p.valueEur - p.investedEur);
   const d = gain(last) - gain(first);
-  return h('div', { class: 'muted small' }, `Za období ${state.range}: `, signed(signedMoney(fmtMoney(d, curCode()), d), d), ' zisku');
+  const label = state.range === CUSTOM ? `Od ${czDate(first.date)} do ${czDate(last.date)}: ` : `Za období ${state.range}: `;
+  return h('div', { class: 'muted small' }, label, signed(signedMoney(fmtMoney(d, curCode()), d), d), ' zisku');
 }
 
 interface Series { name: string; color: string; points: Point[]; dashed?: boolean; area?: boolean }
@@ -693,7 +737,9 @@ interface Marker { x: number; y: number; kind: 'buy' | 'sell'; label: string; am
 function portfolioChart(history: HistoryPoint[]): HTMLElement {
   if (!history.length) return h('p', { class: 'empty' }, 'Historie hodnoty není k dispozici (spusť pnpm market).');
   const start = rangeStart(history.at(-1)!.date);
-  const pts = start == null ? history : history.filter((p) => dayMs(p.date) >= start);
+  const end = rangeEnd();
+  const pts = history.filter((p) => inRangeMs(dayMs(p.date), start, end));
+  if (!pts.length) return h('p', { class: 'empty' }, 'Ve zvoleném období nejsou žádná data. Uprav datum Od a Do.');
   const val = (p: HistoryPoint) => (state.cur === 'czk' ? p.valueCzk : p.valueEur);
   const inv = (p: HistoryPoint) => (state.cur === 'czk' ? p.investedCzk : p.investedEur);
   return lineChart(
@@ -719,8 +765,10 @@ function instrumentChart(a: Analysis, ticker: string, view: 'price' | 'value'): 
   const holding = a.holdings.find((x) => x.ticker === ticker);
   const sold = a.realized.find((x) => x.ticker === ticker);
   const start = rangeStart(series.prices.at(-1)![0]);
-  const prices = start == null ? series.prices : series.prices.filter(([d]) => dayMs(d) >= start);
-  const inRange = (iso: string) => start == null || dayMs(iso) >= start;
+  const end = rangeEnd();
+  const prices = series.prices.filter(([d]) => inRangeMs(dayMs(d), start, end));
+  if (!prices.length) return h('p', { class: 'empty' }, 'Ve zvoleném období nejsou žádné ceny. Uprav datum Od a Do.');
+  const inRange = (iso: string) => inRangeMs(dayMs(iso), start, end);
   const fmtP = (v: number) => (currency ? fmtMoney(v, currency, 2) : fmtNum(v, 2));
   const color = colorOf(ticker);
 

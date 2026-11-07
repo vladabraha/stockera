@@ -226,6 +226,10 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), „Brzy bez daně“, akordeon instrumentů → nákupy s časovým testem; „Zobrazit graf“ přepne hlavní
   graf na cenu/hodnotu instrumentu s body nákupů/prodejů) a **Prodané** (realizovaný zisk, daně podle let s limitem
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
+- Rozsah grafů: předvolby 1M–Vše a **„Vlastní“** se dvěma poli `<input type="date">` (Od / Do, min/max = data grafu).
+  Rozsah je jeden společný pro graf portfolia i instrumentů (`state.range` + `state.custom`), prohozené Od > Do se
+  srovná, prázdné pole = od začátku / do konce. Text „Od … do …: zisk“ porovnává první a poslední bod v rozsahu.
+  Žádné tažení myší po grafu – nativní pole data fungují stejně na mobilu i bez nové knihovny.
 - Řádky instrumentů ukazují **plný název** (justETF/Yahoo z `instrument_meta`, jinak krátký z XTB) a pod ním ticker + ks.
   Jednotkové ceny (nákup/prodej) jsou vždy v **měně instrumentu** s jejím symbolem; součty se řídí přepínačem Kč / €.
 - Rozbalený řádek instrumentu (`.acc[open] > summary`) je **sticky** pod hlavičkou stránky; výšku hlavičky (mění se
