@@ -4,24 +4,25 @@ import { HOW_TO_EXPORT, errorText, paths, printSteps } from './friendly.ts';
 import { openDatabase } from '../db/database.ts';
 import { importFile, type ImportReport } from '../importer.ts';
 import { XtbFormatError } from '../xtb/accountHistory.ts';
+import { T212FormatError } from '../t212/history.ts';
 
 const inputDir = paths.input;
 const dbPath = paths.db;
 
 mkdirSync(inputDir, { recursive: true });
 const all = readdirSync(inputDir).filter((f) => !f.startsWith('.'));
-const files = all.filter((f) => f.toLowerCase().endsWith('.xlsx') && !f.startsWith('~$')).sort();
+const files = all.filter((f) => ['.xlsx', '.csv'].includes(extname(f).toLowerCase()) && !f.startsWith('~$')).sort();
 const ignored = all.filter((f) => !files.includes(f) && !f.startsWith('~$'));
 if (ignored.length) {
-  console.log(`Přeskakuji soubory, které nejsou XLSX: ${ignored.join(', ')}`);
-  if (ignored.some((f) => ['.pdf', '.xls', '.csv'].includes(extname(f).toLowerCase()))) {
-    console.log('  (PDF, CSV ani starý formát XLS program neumí – z xStation stáhni export historie účtu ve formátu XLSX.)');
+  console.log(`Přeskakuji soubory, které nejsou XLSX (XTB) ani CSV (Trading 212): ${ignored.join(', ')}`);
+  if (ignored.some((f) => ['.pdf', '.xls'].includes(extname(f).toLowerCase()))) {
+    console.log('  (PDF ani starý formát XLS program neumí – z xStation stáhni export historie účtu ve formátu XLSX.)');
   }
 }
 if (all.some((f) => f.startsWith('~$'))) console.log('Některý výpis je otevřený v Excelu – pro jistotu Excel zavři.');
 
 if (files.length === 0) {
-  console.log(`Ve složce ${inputDir} nejsou žádné výpisy (.xlsx).`);
+  console.log(`Ve složce ${inputDir} nejsou žádné výpisy (.xlsx z XTB, .csv z Trading 212).`);
   printSteps('Jak výpis získat:', HOW_TO_EXPORT);
   process.exit(0);
 }
@@ -90,6 +91,9 @@ function plus(d: number): string {
 function adviceFor(e: unknown): string {
   if (/měnu/.test(errorText(e))) {
     return 'soubor patří k jinému podúčtu se stejným číslem, nebo je upravený. Stáhni ho z xStation znovu; když to nepomůže, soubor ze složky data/input odeber.';
+  }
+  if (e instanceof T212FormatError) {
+    return 'nejde o export historie z Trading 212, nebo je soubor upravený (např. uložený z Excelu). Stáhni export znovu (Historie → Export) a nijak ho neupravuj; ostatní soubory se načetly normálně.';
   }
   if (e instanceof XtbFormatError || /ZIP|XLSX|workbook|Sheet/i.test(errorText(e))) {
     return 'nejde o export historie účtu z xStation, nebo je soubor poškozený či upravený v Excelu. Stáhni export znovu a nijak ho neupravuj; ostatní soubory se načetly normálně.';

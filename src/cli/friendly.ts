@@ -21,7 +21,8 @@ export const HOW_TO_EXPORT = [
   'V xStation (web nebo aplikace) otevři historii účtu a zvol export do Excelu (XLSX).',
   'Jako období zvol celou dobu od založení účtu (jinak budou chybět starší nákupy).',
   'Má-li účet více podúčtů (EUR, CZK), exportuj každý zvlášť.',
-  `Stažené soubory ulož do složky ${paths.input}`,
+  'Trading 212: v aplikaci Historie → ikona exportu (nebo Nastavení → Historie → Exportovat), zaškrtni všechny typy (obchody, dividendy, vklady/výběry, úroky) a stáhni CSV. Jeden export pokryje nejvýš 12 měsíců – stáhni jich víc, aby dohromady pokryly celou dobu od založení účtu (můžou se překrývat).',
+  `Stažené soubory (XLSX z XTB i CSV z Trading 212) ulož do složky ${paths.input}`,
 ];
 
 export function heading(text: string): void {

@@ -13,6 +13,8 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
 1. V xStation exportuj **historii účtu do Excelu (XLSX)**:
    - období **od založení účtu** až do dneška,
    - každý podúčet (EUR, CZK) zvlášť.
+   - **Trading 212:** Historie → Export → zaškrtni všechny typy → CSV. Jeden export má nejvýš 12 měsíců, stáhni
+     proto víc souborů, aby dohromady pokryly celou dobu od založení účtu (můžou se překrývat).
 2. Soubory ulož do `data/input/` (staré výpisy tam klidně nech).
 3. Dvakrát klikni na `aktualizovat-windows.cmd` / `aktualizovat-mac.command`.
    - Po načtení výpisů uvidíš **Shrnutí importu** (kolik záznamů je nových a kolik už v databázi bylo).
@@ -41,8 +43,9 @@ Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastěj
 | Mac: „nelze otevřít, protože pochází od neidentifikovaného vývojáře“ | Pravé tlačítko na soubor → **Otevřít** → Otevřít. |
 | „Složka je ještě zabalená v ZIPu“ | ZIP rozbal (pravé tlačítko → Extrahovat vše) a spouštěj z rozbalené složky. |
 | „Chybí Node.js“ | Spusť nejdřív instalační skript (krok 1). |
-| „Zatím není žádný výpis z XTB“ | Ulož XLSX export do `data/input/`. |
-| „Soubor se nepodařilo načíst“ / „nejsou XLSX“ | Stáhni z xStation znovu export **XLSX** a neotevírej ho/neukládej v Excelu. PDF ani CSV nejde. |
+| „Zatím není žádný výpis z XTB ani Trading 212“ | Ulož XLSX export z XTB nebo CSV z Trading 212 do `data/input/`. |
+| „Soubor se nepodařilo načíst“ / „nejsou XLSX ani CSV“ | Stáhni znovu export (**XLSX** z xStation, **CSV** z Trading 212) a neotevírej ho/neukládej v Excelu. PDF nejde. |
+| „…chybí nákup – nahraj exporty za celé období“ | Z Trading 212 stáhni exporty i za starší roky a ulož je do `data/input/`. |
 | „Nepodařilo se spojit s žádným serverem“ | Zkontroluj připojení a spusť aktualizaci znovu. |
 | Upozornění „⚠“ u některého instrumentu | Report se vytvoří i tak, jen u něj chybí část údajů. Zkus později, nebo ho doplň do `data/instruments.json` (vzor: `config/instruments.example.json`). |
 | „fond je zrušený nebo sloučený“ | Do `data/instruments.json` doplň `"compositionIsin"`: ISIN jiného ETF na stejný index (např. MSCI World = `IE00B4L5Y983`). Vzor je v `config/instruments.example.json`. |

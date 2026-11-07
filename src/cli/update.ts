@@ -6,21 +6,21 @@ import { HOW_TO_EXPORT, fail, heading, paths, printSteps, root } from './friendl
 /** `pnpm update-data`: guided ingest → market → report, with plain-language status and advice after every step. */
 
 mkdirSync(paths.input, { recursive: true });
-const xlsx = readdirSync(paths.input).filter((f) => f.toLowerCase().endsWith('.xlsx') && !f.startsWith('~$'));
+const xlsx = readdirSync(paths.input).filter((f) => /\.(xlsx|csv)$/i.test(f) && !f.startsWith('~$'));
 const hadDb = existsSync(paths.db);
 
 console.log('Stockera – aktualizace portfolia');
 console.log('Všechny výpočty probíhají jen v tomto počítači. Z internetu se stahují pouze kurzy a ceny.');
 
 if (!xlsx.length && !hadDb) {
-  console.log(`\nVe složce ${paths.input} zatím není žádný výpis z XTB.`);
+  console.log(`\nVe složce ${paths.input} zatím není žádný výpis z XTB ani Trading 212.`);
   printSteps('Jak začít:', [...HOW_TO_EXPORT, 'Spusť aktualizaci znovu.']);
   process.exit(1);
 }
 
 const problems: string[] = [];
 
-heading('Krok 1 ze 3: načítám výpisy z XTB');
+heading('Krok 1 ze 3: načítám výpisy z XTB a Trading 212');
 if (!xlsx.length) {
   console.log('Žádné výpisy ve složce data/input – použiju data načtená dříve.');
 } else if (run('import.ts') !== 0) {

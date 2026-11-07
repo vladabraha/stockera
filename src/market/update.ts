@@ -114,7 +114,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
 
   // --- instruments ------------------------------------------------------------
   const metaStmt = db.prepare('SELECT * FROM instrument_meta WHERE ticker = ?');
-  const categoryStmt = db.prepare('SELECT category, name FROM instruments WHERE ticker = ?');
+  const categoryStmt = db.prepare('SELECT category, name, isin FROM instruments WHERE ticker = ?');
   const heldStmt = db.prepare('SELECT 1 FROM open_lots WHERE ticker = ? LIMIT 1');
   const refPriceStmt = db.prepare('SELECT MAX(current_price) AS p FROM open_lots WHERE ticker = ?');
   const lastPriceStmt = db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ? AND source = ?');
@@ -204,14 +204,15 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     const prev = metaStmt.get(ticker) as
       | { isin: string | null; name: string | null; price_source: string | null; price_symbol: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string; holdings_updated: string | null }
       | undefined;
-    const instrument = categoryStmt.get(ticker) as { category: string | null; name: string | null } | undefined;
+    const instrument = categoryStmt.get(ticker) as { category: string | null; name: string | null; isin: string | null } | undefined;
     const isEtf = instrument?.category === 'ETF';
     const xtbName = instrument?.name?.trim() || null;
     const ref = (refPriceStmt.get(ticker) as { p: number | null } | undefined)?.p ?? null;
     // Countries, sectors and positions only matter for what is held now; sold instruments need just prices (history)
     const held = heldStmt.get(ticker) != null;
 
-    let isin = o.isin ?? prev?.isin ?? null;
+    // Trading 212 exports carry the ISIN, XTB does not
+    let isin = o.isin ?? instrument?.isin ?? prev?.isin ?? null;
     let name = prev?.name ?? null;
     if (!isin && ticker.endsWith('.DE')) {
       for (const s of symbolVariants(ticker)) isin ??= (await xetraLookup(s))?.isin ?? null;

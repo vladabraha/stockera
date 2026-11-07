@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { transaction, type Db } from './db/database.ts';
 import { readWorkbook } from './xlsx/reader.ts';
 import { detectExportKind, parseAccountHistory, type AccountHistory } from './xtb/accountHistory.ts';
+import { T212_PREFIX, isT212Csv, parseT212Export, t212Account } from './t212/history.ts';
+import { rebuildT212, storeT212Rows } from './t212/store.ts';
 
 export interface ImportReport {
   file: string;
@@ -44,6 +46,12 @@ export function importBuffer(db: Db, fileName: string, buf: Buffer): ImportRepor
     return r;
   }
 
+  if (!buf.subarray(0, 2).equals(Buffer.from('PK'))) {
+    const text = buf.toString('utf8');
+    if (isT212Csv(text)) return transaction(db, () => storeT212(db, fileName, sha256, text));
+    return emptyReport(fileName, 'unsupported', ['Neznámý formát souboru – nejde o export historie účtu XTB (XLSX) ani Trading 212 (CSV).']);
+  }
+
   const sheets = readWorkbook(buf);
   const kind = detectExportKind(sheets);
   if (kind === 'fiscal-report') {
@@ -57,6 +65,43 @@ export function importBuffer(db: Db, fileName: string, buf: Buffer): ImportRepor
 
   const history = parseAccountHistory(sheets);
   return transaction(db, () => store(db, fileName, sha256, history));
+}
+
+/** T212 rows are stored raw; lots and cash operations of all T212 accounts are then rebuilt from every stored row. */
+function storeT212(db: Db, fileName: string, sha256: string, text: string): ImportReport {
+  const exp = parseT212Export(text);
+  const accounts = [...new Set(exp.rows.map((r) => r.currency))];
+  if (!accounts.length) return emptyReport(fileName, 'unsupported', ['Export z Trading 212 neobsahuje žádné řádky.']);
+  const insertAccount = db.prepare('INSERT INTO accounts (account_number, currency) VALUES (?, ?) ON CONFLICT DO NOTHING');
+  for (const c of accounts) insertAccount.run(t212Account(c), c);
+
+  const derived = () => db.prepare(
+    `SELECT (SELECT COUNT(*) FROM cash_operations WHERE account_number LIKE '${T212_PREFIX}%') cash,
+            (SELECT COUNT(*) FROM closed_lots WHERE account_number LIKE '${T212_PREFIX}%') closed`,
+  ).get() as { cash: number; closed: number };
+  const before = derived();
+  const importId = Number(
+    db.prepare(
+      `INSERT INTO imports (file_name, file_sha256, account_number, period_from, period_to, imported_at, warnings)
+       VALUES (?, ?, ?, ?, ?, ?, '[]')`,
+    ).run(fileName, sha256, t212Account(accounts[0]!), exp.periodFrom, exp.periodTo, new Date().toISOString()).lastInsertRowid,
+  );
+  const rows = storeT212Rows(db, exp, importId);
+  const ledger = rebuildT212(db);
+  const after = derived();
+
+  const report = emptyReport(fileName, 'imported', ledger?.warnings ?? []);
+  report.accountNumber = accounts.map(t212Account).join(', ');
+  report.currency = accounts.join(', ');
+  report.periodFrom = exp.periodFrom;
+  report.periodTo = exp.periodTo;
+  // Derived rows are rebuilt as a whole, so "new" is the growth of the T212 tables; rows known from an
+  // overlapping export count as duplicates.
+  report.cash = { inserted: after.cash - before.cash, duplicates: rows.duplicates };
+  report.closed = { inserted: after.closed - before.closed, duplicates: 0 };
+  report.openPositions = ledger?.open.length ? 'replaced' : 'none';
+  db.prepare('UPDATE imports SET warnings = ? WHERE id = ?').run(JSON.stringify(report.warnings), importId);
+  return report;
 }
 
 function store(db: Db, fileName: string, sha256: string, h: AccountHistory): ImportReport {

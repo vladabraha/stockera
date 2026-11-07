@@ -1,6 +1,7 @@
 import type { Db } from '../db/database.ts';
 import { addDays, daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
 import { checkFifo, type FifoMismatch } from './fifo.ts';
+import { t212Warnings } from '../t212/store.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
 import { validatePortfolio, type DataCheck } from './validation.ts';
@@ -40,6 +41,8 @@ export interface Holding {
   ticker: string;
   name: string | null;
   category: string | null;
+  /** Currency of per-share prices (downloaded quotes); null = unknown, prices then follow the account currency. */
+  priceCurrency: string | null;
   isin: string | null;
   countries: { country: string; weight: number }[];
   countrySource: string | null;
@@ -79,6 +82,8 @@ export interface RealizedInstrument {
   ticker: string;
   name: string | null;
   category: string | null;
+  /** Currency of per-share prices (downloaded quotes); null = unknown, prices then follow the account currency. */
+  priceCurrency: string | null;
   quantity: number;
   cost: Totals;
   proceeds: Totals;
@@ -185,7 +190,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const conv = new Converter(fx);
   const market = options.market ?? new DbMarketData(db);
   const loaded = loadLots(db);
-  const warnings = [...loaded.warnings];
+  const warnings = [...loaded.warnings, ...t212Warnings(db)];
 
   const instruments = new Map(
     // Full fund/company name from market data (justETF, Yahoo) beats XTB's short index-style name.
@@ -203,6 +208,9 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     category: instruments.get(ticker)?.category ?? null,
   });
 
+  // Lot prices are per share in the instrument's trading currency (not the account currency)
+  const quoteCurrency = (ticker: string) => market.series(ticker).at(-1)?.currency ?? null;
+
   // --- holdings -------------------------------------------------------------
   const valueDate = loaded.snapshotAsOf ? pragueDate(loaded.snapshotAsOf) : today;
   const holdingLots = new Map<string, HoldingLot[]>();
@@ -214,7 +222,8 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     let valueSource: HoldingLot['valueSource'] = null;
     let lotValueDate: string | null = null;
     const quote = market.price(l.ticker, today);
-    if (quote && quote.date > valueDate) {
+    // XTB values positions as of its snapshot; Trading 212 positions have no snapshot value, only market prices.
+    if (quote && (quote.date > valueDate || l.value == null)) {
       const native = crossConvert(fx, l.volume * quote.close, quote.currency, l.currency, quote.date);
       if (native != null) [value, valueSource, lotValueDate] = [conv.money(native, l.currency, quote.date), 'market', quote.date];
     }
@@ -250,6 +259,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     return {
       ticker,
       ...info(ticker),
+      priceCurrency: quoteCurrency(ticker),
       isin: m.isin,
       countries: m.countries,
       countrySource: m.countrySource,
@@ -305,6 +315,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     return {
       ticker,
       ...info(ticker),
+      priceCurrency: quoteCurrency(ticker),
       quantity: lots.reduce((a, l) => a + l.quantity, 0),
       cost,
       proceeds,

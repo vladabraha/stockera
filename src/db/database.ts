@@ -152,6 +152,32 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (ticker, isin)
   );
   `,
+  `
+  -- Trading 212: raw export rows (deduplicated across overlapping exports). Lots and cash operations of the
+  -- T212-<currency> accounts are rebuilt from them after every import (T212 does not pair sales with purchases).
+  ALTER TABLE instruments ADD COLUMN isin TEXT;
+  ALTER TABLE open_lots ADD COLUMN purchase_value REAL;
+
+  CREATE TABLE t212_rows (
+    account_number TEXT NOT NULL REFERENCES accounts(account_number),
+    row_key        TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    time_utc       TEXT NOT NULL,
+    isin           TEXT,
+    t212_ticker    TEXT,
+    name           TEXT,
+    shares         REAL,
+    price          REAL,
+    price_currency TEXT,
+    exchange_rate  REAL,
+    total          REAL,
+    currency       TEXT NOT NULL,
+    wht            REAL,
+    wht_currency   TEXT,
+    import_id      INTEGER NOT NULL REFERENCES imports(id),
+    PRIMARY KEY (account_number, row_key)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

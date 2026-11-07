@@ -164,7 +164,8 @@ export function loadLots(db: Db): LoadedLots {
 
   const openRows = db
     .prepare(
-      `SELECT account_number, position_id, ticker, volume, open_price, open_time, current_price, value, gross_profit
+      `SELECT account_number, position_id, ticker, volume, open_price, open_time, current_price, value, gross_profit,
+              purchase_value
        FROM open_lots ORDER BY open_time, position_id`,
     )
     .all() as {
@@ -177,6 +178,7 @@ export function loadLots(db: Db): LoadedLots {
     current_price: number | null;
     value: number | null;
     gross_profit: number | null;
+    purchase_value: number | null;
   }[];
 
   const open: OpenLot[] = openRows.map((r) => {
@@ -184,6 +186,7 @@ export function loadLots(db: Db): LoadedLots {
     let costSource: OpenLot['costSource'];
     const uc = unitCost(r.account_number, r.position_id);
     if (uc != null) [cost, costSource] = [uc * r.volume, 'cash-operation'];
+    else if (r.purchase_value != null && r.purchase_value > 0) [cost, costSource] = [r.purchase_value, 'xtb-column'];
     else if (r.value != null && r.gross_profit != null) [cost, costSource] = [r.value - r.gross_profit, 'xtb-profit'];
     else [cost, costSource] = [r.volume * r.open_price, 'price'];
     return {

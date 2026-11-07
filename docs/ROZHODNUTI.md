@@ -62,6 +62,31 @@ SQL řetězce v jednoduchých uvozovkách.
 - Neznámé typy cash operací se uloží a vypíše se varování (klasifikace regexem: `divid`, `withholding`, `withdraw`,
   `fee|commission|swap|rollover`). Skutečné názvy dividend/srážkové daně/výběrů/splitů zatím **nemáme ověřené** (není vzorek).
 
+### Trading 212 (CSV) – `src/t212`
+
+- Zdroj = **Historie → Export (CSV)** ze stejné složky `data/input`; pozná se podle hlavičky (`Action`, `Time…`,
+  `Total`), ne podle přípony. Jeden export má **nejvýš 12 měsíců** → uživatel nahraje víc souborů, mohou se překrývat.
+- Vlastní RFC 4180 parser (uvozovky, BOM, CRLF) – bez nové závislosti. Hlavičky obou známých verzí: aktuální
+  `Time (UTC)` + `Currency (Total)` a starší `Total (EUR)` s měnou v názvu; čas `2024-01-01 10:00:00+00:00`
+  i `20/11/2020 12:08`.
+- Ověřeno na struktuře skutečného exportu (2024, účet CZK): `Total` je u nákupů i prodejů **kladný** a obsahuje
+  poplatek za konverzi 0,15 % → znaménko se bere z akce. U dividend je `Price / share` **čistá** dividenda na kus,
+  `Exchange rate` = Kč za jednotku měny a sražená daň je v měně dividendy → přepočte se kurzem z řádku (ověřeno,
+  kterým směrem kurz sedí s čistou částkou). Dividendy nemají `ID` → klíč z obsahu řádku (překryvy exportů se tak
+  také odfiltrují).
+- T212 nepáruje prodeje s nákupy → **FIFO per účet a ISIN** počítá program. Surové řádky se ukládají do
+  `t212_rows` (migrace 7, PK účet + klíč), z nich se po každém importu **celé přestaví** odvozené řádky účtů
+  `T212-<měna>` v `cash_operations`, `closed_lots`, `open_lots` (náklad v `open_lots.purchase_value`). Přestavba
+  běží i po stažení tržních dat (`rebuildT212` v `src/cli/market.ts`), protože teprve pak jsou známé ISINy XTB tickerů.
+- **Jeden balík dat:** instrument se stejným ISINem jako už známý XTB ticker dostane XTB ticker → jedna pozice
+  s loty z obou platforem (v detailu „Platformy XTB, Trading 212“ a sloupec Platforma). Jinak ticker
+  `SYMBOL.BURZA` podle měny ceny (USD→US, GBX/GBP→UK, CZK→CZ, EUR→domovská burza akcie, ETF → Xetra `.DE`);
+  ISIN z exportu se uloží do `instruments.isin` a má přednost při stahování dat. Ceny v pencích (GBX) → GBP.
+- Kategorie: ETF, když název obsahuje ETF/UCITS/ETC nebo `(Acc)`/`(Dist)` (T212 slovo ETF v názvu nemá).
+- Splity (`Stock split close` + `open`) zachovají náklad i datum nákupu, mění jen kusy (názvy akcí neověřené vzorkem).
+- Prodej bez nákupu v nahraných exportech → varování v kontrole dat („nahraj exporty za celé období“); takový prodej
+  v daních chybí. Úroky (`Interest on cash`, `Lending interest`) = úrok, převody měn se přeskakují.
+
 ## 3. Databáze a import
 
 - `data/stockera.db` (SQLite, WAL, foreign keys), migrace přes `PRAGMA user_version` v `src/db/database.ts`
@@ -78,7 +103,7 @@ SQL řetězce v jednoduchých uvozovkách.
 
 Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství – v UI je disclaimer.
 
-- **Párování prodejů:** zdrojem pravdy je **párování z XTB** (Position ID). **FIFO** se počítá jen jako kontrola
+- **Párování prodejů:** zdrojem pravdy je **párování z XTB** (Position ID); Trading 212 páruje program FIFO (viz § 2). **FIFO** se počítá jen jako kontrola
   (per účet + ticker) a rozdíly se hlásí. Prodejní událost = uzavřené loty do 5 s; sell cash op se páruje v okně 60 s + stejné množství.
 - **Časový test:** posuzuje se **po lotech**, > 3 roky. První den bez daně = 3. výročí nákupu + 1 den
   (29. 2. → 28. 2. + 1 den). Kalendářní data v **Europe/Prague**, v DB UTC.
@@ -111,8 +136,11 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Model peněz:** `Money {native, currency, czk|null, eur|null}`, `Totals` s mapou `native` podle měn.
   `null` se propaguje, když chybí kurz → UI ukáže nativní měnu, nic se nevymýšlí.
 - **Zdroj nákupní ceny / výnosu** (fake export má prohozené sloupce Purchase/Sale Value): cash operace →
-  sloupce XTB → cena × objem. Otevřené loty: cash op → value − gross_profit → objem × open price.
-- Ocenění držby: tržní cena, pokud je novější než snapshot XTB; jinak hodnota ze snapshotu. Lot bez ceny = nákupní cena.
+  sloupce XTB → cena × objem. Otevřené loty: cash op → `purchase_value` (T212) → value − gross_profit → objem × open price.
+- Ocenění držby: tržní cena, pokud je novější než snapshot XTB nebo lot nemá hodnotu ze snapshotu (T212); jinak
+  hodnota ze snapshotu. Lot bez ceny = nákupní cena.
+- Ceny za kus (nákupní/prodejní) jsou v měně obchodování instrumentu → v UI a CSV se zobrazují v měně stažené kotace
+  (`priceCurrency`), ne v měně účtu.
 - Vývoj hodnoty: denně hodnota vs. investováno v CZK i EUR; dny bez kurzu se vynechají.
 - Neúplná historie (první cash op je později než nejstarší lot) → varování.
 - Splity: **neimplementováno** (chybí vzorek exportu).
@@ -261,7 +289,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   dotazu na heslo). Bez XLSX i bez DB vypíše postup exportu z xStation (exit 1). Na konci shrnutí + „Co dál“.
 - Exit kódy: 0 OK, 1 chyba, `market` 2 = nejde internet (všechny požadavky selhaly) → report se přesto vytvoří
   se staršími cenami.
-- Import: ignoruje ne-XLSX soubory s vysvětlením (PDF/CSV/XLS nejde), upozorní na zámkové soubory Excelu `~$`,
+- Import: bere XLSX (XTB) a CSV (Trading 212), ostatní ignoruje s vysvětlením (PDF/XLS nejde), upozorní na zámkové soubory Excelu `~$`,
   chyba jednoho souboru neblokuje ostatní. `instruments.json` s BOM (Poznámkový blok) se načte.
 - Report (prohlížeč): kontrola `crypto.subtle` + `DecompressionStream` (starý prohlížeč), poškozený payload,
   nápověda u špatného hesla, `<noscript>` pro náhledy bez JS (mail, Files na iPhonu).

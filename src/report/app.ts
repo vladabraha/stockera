@@ -562,6 +562,10 @@ function instrumentName(ticker: string, name: string | null, quantity: number): 
   return h('div', { class: 'iname' }, h('b', { title: name ?? ticker }, name || ticker), h('span', {}, h('span', { class: 'ticker' }, ticker), `${fmtNum(quantity, 4)} ks`));
 }
 
+const platformOf = (account: string) => (account.startsWith('T212-') ? 'Trading 212' : 'XTB');
+const platformsOf = (accounts: string[]) => [...new Set(accounts.map(platformOf))].sort().reverse();
+const brokers = (a: Analysis) => platformsOf(a.cashFlows.map((c) => c.accountNumber)).join(' / ') || 'XTB';
+
 function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
   const taxText = freeShare >= 1 - 1e-9
@@ -584,26 +588,30 @@ function holdingRow(x: Holding): HTMLElement {
     const last = x.lots.find((l) => l.currentPrice)?.currentPrice;
     const countries = x.countries.slice().sort((p, q) => q.weight - p.weight).slice(0, 3)
       .map((c) => `${countryName(c.country)} ${fmtNum(c.weight, 0)} %`).join(', ');
+    const platforms = platformsOf(x.lots.map((l) => l.accountNumber));
+    const many = platforms.length > 1;
     return h('div', { class: 'acc-body' },
       h('div', { class: 'meta' },
+        h('span', {}, many ? 'Platformy ' : 'Platforma ', h('b', {}, platforms.join(', '))),
         x.isin ? h('span', {}, 'ISIN ', h('b', {}, x.isin)) : null,
-        h('span', {}, 'Ø nákup ', h('b', {}, x.lots[0] ? price(avg, x.lots[0].cost.currency) : '—')),
+        h('span', {}, 'Ø nákup ', h('b', {}, x.lots[0] ? price(avg, x.priceCurrency ?? x.lots[0].cost.currency) : '—')),
         last ? h('span', {}, 'Cena ', h('b', {}, fmtMoney(last.close, last.currency)), ` (${czDate(last.date)})`) : null,
         countries ? h('span', {}, 'Země ', h('b', {}, countries)) : null,
         x.sectors?.length ? h('span', {}, 'Sektory ', h('b', {}, x.sectors.slice(0, 3).map((c) => `${sectorName(c.sector)} ${fmtNum(c.weight, 0)} %`).join(', '))) : null,
         button('Zobrazit graf', () => showInstrument(x.ticker), 'link'),
       ),
-      table(['Nákup', 'Ks', 'Nákupní cena', 'Investováno', 'Hodnota', 'Zisk', '%', 'Časový test'],
+      table(['Nákup', ...(many ? ['Platforma'] : []), 'Ks', 'Nákupní cena', 'Investováno', 'Hodnota', 'Zisk', '%', 'Časový test'],
         x.lots.map((l) => h('tr', {},
           h('td', {}, czDate(l.openDate)),
+          many ? h('td', {}, platformOf(l.accountNumber)) : null,
           h('td', { class: 'num' }, fmtNum(l.quantity, 4)),
-          h('td', { class: 'num' }, price(l.openPrice, l.cost.currency)),
+          h('td', { class: 'num' }, price(l.openPrice, x.priceCurrency ?? l.cost.currency)),
           h('td', { class: 'num' }, money(l.cost)),
           h('td', { class: 'num' }, money(l.value)),
           signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit), 'td'),
           signed(pct(l.profitPct), pctValue(l.profitPct), 'td'),
           h('td', {}, lotTax(l)),
-        ))),
+        )), many ? 2 : 1),
     );
   });
 }
@@ -741,7 +749,7 @@ function validationPanel(a: Analysis): HTMLElement | null {
       h('summary', {},
         h('h2', {}, 'Kontrola dat'),
         h('span', { class: warns ? 'check-sum warn' : 'check-sum ok' }, warns ? `${warns} upozornění z ${checks.length} kontrol` : `Vše v pořádku, ${checks.length} kontrol`)),
-      h('p', { class: 'muted hint' }, 'Hodnota portfolia je porovnaná se souhrnem a cenami ve výpisu XTB, kurzy ČNB a párováním prodejů.'),
+      h('p', { class: 'muted hint' }, 'Hodnota portfolia je porovnaná se souhrnem a cenami ve výpisu XTB, kurzy ČNB a párováním prodejů (Trading 212 páruje prodeje tento program sám metodou FIFO).'),
       h('ul', { class: 'check-list' }, ...checks.map((c) => h('li', { class: c.status },
         h('span', { class: 'check-icon', 'aria-hidden': 'true' }, icon[c.status]),
         h('div', {}, h('b', {}, c.title), h('span', { class: 'muted' }, c.detail)))))));
@@ -1333,7 +1341,7 @@ function taxYearsPanel(a: Analysis): HTMLElement {
 
 /** What to fill in the Czech tax return (DAP) for one year and what to attach. */
 function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
-  const lots = a.realized.flatMap((r) => r.lots.map((l) => ({ ticker: r.ticker, name: r.name, lot: l })));
+  const lots = a.realized.flatMap((r) => r.lots.map((l) => ({ ticker: r.ticker, name: r.name, priceCurrency: r.priceCurrency, lot: l })));
   const g: TaxReturnGuide = taxReturnGuide(y.year, y.limitStatus === 'exceeded',
     lots.map(({ ticker, lot }) => ({ ticker, closeDate: lot.closeDate, timeTestMet: lot.timeTestMet, proceedsCzk: lot.proceeds.czk, costCzk: lot.cost.czk })),
     a.dividends.map((d) => ({ ticker: d.ticker, year: d.year, grossCzk: d.gross.czk, withholdingCzk: d.withholdingTax.czk == null ? null : -d.withholdingTax.czk })));
@@ -1386,7 +1394,7 @@ function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
       ]),
       h('p', { class: 'muted small' }, 'Dividendy z českých akcií jsou zdaněné srážkou a neuvádějí se. Místo přílohy č. 4 lze zahraniční dividendy uvést na ř. 38 a zápočet v příloze č. 3 – pak se zdaní spolu s ostatními příjmy (může vyjít sazba 23 %).'),
     );
-    attach.push(h('li', {}, 'Doklad o dani sražené v zahraničí z dividend (výpis z XTB; úřad může chtít potvrzení zahraničního správce daně) a u akcií z USA podepsaný formulář W-8BEN pro sazbu 15 %.'));
+    attach.push(h('li', {}, `Doklad o dani sražené v zahraničí z dividend (výpis z ${brokers(a)}; úřad může chtít potvrzení zahraničního správce daně) a u akcií z USA podepsaný formulář W-8BEN pro sazbu 15 %.`));
   }
   if (g.exemptNoticeCzk > 0) {
     attach.push(h('li', {}, `Oznámení o osvobozených příjmech (§ 38v) – osvobozený příjem z jednoho prodeje přesáhl 5 mil. Kč (celkem ${kc(g.exemptNoticeCzk)}). Podává se samostatným tiskopisem ve stejném termínu jako přiznání.`));
@@ -1394,7 +1402,7 @@ function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
   if (y.timeTestCapExceeded) {
     parts.push(h('p', { class: 'warn' }, 'Příjmy z prodejů po časovém testu přesáhly 40 mil. Kč – část nad limitem je zdanitelná a výpočet výše ji nezahrnuje. Obrať se na daňového poradce.'));
   }
-  if (g.annex2 || g.annex4) attach.push(h('li', {}, 'Roční výpis z XTB si uschovej (přikládat ho není nutné).'));
+  if (g.annex2 || g.annex4) attach.push(h('li', {}, `Roční výpis z ${brokers(a)} si uschovej (přikládat ho není nutné).`));
   if (attach.length) parts.push(h('h4', {}, 'Přiložit / mít připraveno'), h('ul', { class: 'dap-list' }, ...attach));
   if (g.incomplete) parts.push(h('p', { class: 'warn' }, 'Některé částky nemají přepočet do Kč – součty jsou neúplné.'));
   parts.push(h('p', { class: 'hint' }, 'Orientační návod podle tiskopisu MFin 5405. Sazbu 23 %, slevy a celkovou daň dopočítá samotné přiznání. Nenahrazuje daňové poradenství.'));
@@ -1402,7 +1410,7 @@ function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
 }
 
 /** All sales of the year as CSV for the tax office – generated in the browser, nothing is uploaded. */
-function downloadSalesCsv(year: number, lots: { ticker: string; name: string | null; lot: RealizedLot }[]): void {
+function downloadSalesCsv(year: number, lots: { ticker: string; name: string | null; priceCurrency: string | null; lot: RealizedLot }[]): void {
   const y = state.data?.taxYears.find((t) => t.year === year);
   const num = (v: number | null, d = 2) => v == null ? '' : v.toFixed(d).replace('.', ',');
   const cell = (s: string) => /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -1410,8 +1418,8 @@ function downloadSalesCsv(year: number, lots: { ticker: string; name: string | n
     'Výdaj (Kč)', 'Příjem (Kč)', 'Rozdíl (Kč)', 'Dní držby', 'Časový test', 'Zdanitelné'];
   const rows = lots.filter(({ lot }) => lot.closeDate.startsWith(`${year}-`))
     .sort((p, q) => p.lot.closeTime.localeCompare(q.lot.closeTime))
-    .map(({ ticker, name, lot: l }) => [ticker, name ?? '', l.accountNumber, l.openDate, l.closeDate, num(l.quantity, 4),
-      num(l.openPrice, 4), num(l.closePrice, 4), l.proceeds.currency, num(l.cost.czk), num(l.proceeds.czk), num(l.proceeds.czk == null || l.cost.czk == null ? null : l.proceeds.czk - l.cost.czk),
+    .map(({ ticker, name, priceCurrency, lot: l }) => [ticker, name ?? '', l.accountNumber, l.openDate, l.closeDate, num(l.quantity, 4),
+      num(l.openPrice, 4), num(l.closePrice, 4), priceCurrency ?? l.proceeds.currency, num(l.cost.czk), num(l.proceeds.czk), num(l.proceeds.czk == null || l.cost.czk == null ? null : l.proceeds.czk - l.cost.czk),
       String(l.holdingDays), l.timeTestMet ? 'splněn' : 'nesplněn', !l.timeTestMet && y?.limitStatus === 'exceeded' ? 'ano' : 'ne']);
   const csv = '\ufeff' + [head, ...rows].map((r) => r.map(cell).join(';')).join('\r\n');
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -1458,15 +1466,21 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
         signed(signedMoney(totals(r.profit), totalsValue(r.profit)), totalsValue(r.profit), 'b'),
         chip(pct(r.profitPct), pctValue(r.profitPct))),
     ),
-  ], () => h('div', { class: 'acc-body' },
-    h('div', { class: 'meta' }, button('Zobrazit graf', () => showInstrument(r.ticker), 'link')),
-    table(['Nákup', 'Prodej', 'Ks', 'Nák. cena', 'Prod. cena', 'Náklad', 'Výnos', 'Zisk', '%', 'Držba', 'Časový test'],
+  ], () => {
+    const platforms = platformsOf(r.lots.map((l) => l.accountNumber));
+    const many = platforms.length > 1;
+    return h('div', { class: 'acc-body' },
+    h('div', { class: 'meta' },
+      h('span', {}, many ? 'Platformy ' : 'Platforma ', h('b', {}, platforms.join(', '))),
+      button('Zobrazit graf', () => showInstrument(r.ticker), 'link')),
+    table(['Nákup', 'Prodej', ...(many ? ['Platforma'] : []), 'Ks', 'Nák. cena', 'Prod. cena', 'Náklad', 'Výnos', 'Zisk', '%', 'Držba', 'Časový test'],
       [...r.lots].sort((p, q) => q.closeTime.localeCompare(p.closeTime) || p.openTime.localeCompare(q.openTime)).map((l: RealizedLot) => h('tr', {},
         h('td', {}, czDate(l.openDate)),
         h('td', {}, czDate(l.closeDate)),
+        many ? h('td', {}, platformOf(l.accountNumber)) : null,
         h('td', { class: 'num' }, fmtNum(l.quantity, 4)),
-        h('td', { class: 'num' }, price(l.openPrice, l.cost.currency)),
-        h('td', { class: 'num' }, price(l.closePrice, l.proceeds.currency)),
+        h('td', { class: 'num' }, price(l.openPrice, r.priceCurrency ?? l.cost.currency)),
+        h('td', { class: 'num' }, price(l.closePrice, r.priceCurrency ?? l.proceeds.currency)),
         h('td', { class: 'num' }, money(l.cost)),
         h('td', { class: 'num' }, money(l.proceeds)),
         signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit), 'td'),
@@ -1474,8 +1488,8 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
         h('td', { class: 'num' }, `${fmtNum(l.holdingDays, 0)} d`),
         h('td', {}, l.timeTestMet ? tag('splněn', 'ok') : tag('nesplněn', 'wait')),
       )),
-      2),
-  ));
+      many ? 3 : 2));
+  });
 }
 
 function dividendsPanel(divs: DividendSummary[]): HTMLElement | null {

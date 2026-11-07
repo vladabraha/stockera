@@ -10,7 +10,7 @@ const dbPath = join(root, 'data/stockera.db');
 const outDir = join(root, 'out');
 
 if (!existsSync(dbPath)) {
-  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť `pnpm ingest`.']);
+  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť `pnpm ingest`.']);
 }
 
 const db = openDatabase(dbPath);

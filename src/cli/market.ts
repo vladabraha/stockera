@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { fail, paths } from './friendly.ts';
-import { openDatabase } from '../db/database.ts';
+import { openDatabase, transaction } from '../db/database.ts';
+import { rebuildT212 } from '../t212/store.ts';
 import { Http, ALLOWED_HOSTS } from '../net/http.ts';
 import { loadInstrumentConfig, updateMarketData } from '../market/update.ts';
 import { pragueDate } from '../analysis/calendar.ts';
@@ -8,7 +9,7 @@ import { pragueDate } from '../analysis/calendar.ts';
 const { db: dbPath, config: configPath, networkLog: auditLog } = paths;
 
 if (!existsSync(dbPath)) {
-  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
+  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
 }
 
 console.log(`Stahuji tržní data. Povolené servery: ${[...ALLOWED_HOSTS].join(', ')}`);
@@ -31,6 +32,8 @@ const report = await updateMarketData(db, http, {
   config,
   log: (m) => console.log(`  ${m}`),
 });
+// ISINs of XTB instruments are known now – the same instrument bought at Trading 212 joins the XTB holding.
+transaction(db, () => rebuildT212(db));
 db.close();
 
 console.log(`\nKurzy ČNB: ${report.fxYears.length ? `${report.fxYears.join(', ')} (${report.fxRows} kurzů)` : 'aktuální'}`);

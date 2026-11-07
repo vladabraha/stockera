@@ -9,7 +9,7 @@ Lokální analýza portfolia z výpisů XTB. Data i výpočty zůstávají na to
 ## Použití
 ```bash
 pnpm install          # jen vývojové nástroje (typescript, @types/node)
-# vlož export historie účtu z xStation (XLSX) do data/input/
+# vlož export historie účtu z xStation (XLSX) a/nebo z Trading 212 (CSV) do data/input/
 pnpm ingest           # import do data/stockera.db (opakovatelné, bez duplicit)
 pnpm market           # stažení kurzů ČNB, cen a složení ETF (jediný krok se sítí)
 pnpm analyze          # výpočty → výpis do terminálu (--json uloží i NEŠIFROVANÝ out/analysis.json)
@@ -34,6 +34,9 @@ akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v 
 - Zapomenuté heslo nevadí – report se dá kdykoli vygenerovat znovu z databáze s novým heslem.
 
 Export z xStation: **Historie účtu → zvolit celé období → Export (XLSX)**, pro každý subúčet zvlášť.
+Export z Trading 212: **Historie → Export (CSV)**, všechny typy záznamů; jeden soubor má max. 12 měsíců, takže celou
+historii pokryj více soubory (překryvy nevadí). Data obou brokerů tvoří jedno portfolio – stejný ISIN = jedna pozice,
+v detailu je vidět platforma každého nákupu.
 Formát je popsán v [docs/xtb-format.md](docs/xtb-format.md), zdroje tržních dat v [docs/zdroje-dat.md](docs/zdroje-dat.md).
 
 Ruční doplnění (ISIN, země akcie, sektor, složení ETF bez dat, zdroj cen): zkopíruj `config/instruments.example.json` do `data/instruments.json`.
@@ -57,6 +60,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | Cesta | Obsah |
 |---|---|
 | `src/xlsx/` | vlastní čtečka XLSX (ZIP + XML), bez externích knihoven |
+| `src/t212/` | import CSV z Trading 212: parser, FIFO párování prodejů, přestavba účtů `T212-<měna>` |
 | `src/xtb/` | parser exportu XTB → typovaná data; při změně formátu hlásí `XtbFormatError` |
 | `src/db/` | SQLite schéma a migrace (`PRAGMA user_version`) |
 | `src/net/` | jediný HTTP klient: allowlist domén, jen GET, audit log |

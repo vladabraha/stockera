@@ -8,7 +8,7 @@ import { buildReport } from '../report/build.ts';
 const { db: dbPath, report: outPath } = paths;
 
 if (!existsSync(dbPath)) {
-  fail('Zatím nejsou načtené žádné výpisy z XTB.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
+  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
 }
 
 const db = openDatabase(dbPath);

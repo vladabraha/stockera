@@ -5,7 +5,7 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 
 ## Architektura
 1. **Zpracovací aplikace (Node/TypeScript, lokálně na PC)**
-   - Import výpisů XTB ve formátu **XLSX** (CZK i EUR subúčty).
+   - Import výpisů XTB ve formátu **XLSX** (CZK i EUR subúčty) a **Trading 212 (CSV)** – vše do jednoho portfolia; v detailu instrumentu je vidět platforma.
    - Uložení do lokální **SQLite** DB (idempotentní import – opakované nahrání nevytvoří duplicity).
    - Stažení cen (veřejné API), kurzů ČNB (denní).
    - Složení ETF podle zemí – původně plánovaná kaskáda: (1) data emitenta, (2) proxy přes stejný index, (3) justETF dle ISIN, (4) ruční konfigurace. **Implementováno (fáze 3):** justETF dle ISIN → onvista dle ISIN → ruční konfigurace; emitenti vyžadují JavaScript a „související ETF“ na justETF nejsou spolehlivá proxy (viz [zdroje-dat.md](zdroje-dat.md)). U každého ETF se eviduje zdroj a datum.
@@ -34,7 +34,7 @@ Lokální aplikace pro analýzu portfolia z výpisů XTB. **Všechna data i výp
 
 ## Výpočetní pravidla
 - Zdroj dat: export **historie účtu** z xStation (XLSX), každý subúčet zvlášť. Daňový výpis (Fiscal Report) jen případně ke kontrole.
-- Párování prodejů s nákupy: použít **párování z XTB** (Closed Positions / Position ID), **FIFO** přepočítat jako kontrolu a upozornit na rozdíly.
+- Párování prodejů s nákupy: použít **párování z XTB** (Closed Positions / Position ID), **FIFO** přepočítat jako kontrolu a upozornit na rozdíly. Trading 212 párování neuvádí → FIFO po účtech a ISINech počítá program.
 - Kalendářní data (časový test, roky pro limit) počítat v časové zóně **Europe/Prague**; v DB ukládat UTC.
 - Přepočet do CZK: **denní kurz ČNB ke dni obchodu**.
 - Časový test: 3 roky od nákupu daného lotu → zobrazit, co už splnilo a kdy splní zbytek.
