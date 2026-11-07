@@ -5,7 +5,7 @@ import { importBuffer } from '../src/importer.ts';
 import { pragueDate, taxFreeFrom } from '../src/analysis/calendar.ts';
 import { Converter, DbFxRates, type FxRates, type Money } from '../src/analysis/fx.ts';
 import { analyze, classifyCashOperation, computeTaxYears, type RealizedLot } from '../src/analysis/portfolio.ts';
-import { lossOffsetPlan, type OffsetLot } from '../src/analysis/tax.ts';
+import { lossOffsetPlan, taxReturnGuide, type OffsetLot } from '../src/analysis/tax.ts';
 import { fakeXtbExport, type FakeExport } from './helpers/fakeXtb.ts';
 
 const EUR_CZK = 25;
@@ -206,4 +206,37 @@ test('loss offset: FIFO prefix per account, time-tested lots ignored, biggest lo
   // Not enough losses → the rest stays taxed at 15 %.
   assert.equal(lossOffsetPlan(16_000, lots).remainingTaxCzk, 1_500);
   assert.deepEqual(lossOffsetPlan(1_000, [lot('X', '2025-01-01', 1, 500)]).sales, []);
+});
+
+test('tax return guide: Příloha č. 2 rows 207–209, foreign dividends in Příloha č. 4, §38v notice', () => {
+  const sale = (ticker: string, closeDate: string, timeTestMet: boolean, proceedsCzk: number, costCzk: number) =>
+    ({ ticker, closeDate, timeTestMet, proceedsCzk, costCzk });
+  const lots = [
+    sale('AAPL.US', '2025-03-01', false, 80_000, 60_000),
+    sale('VWCE.DE', '2025-06-01', false, 30_000, 40_000), // loss offsets the gain
+    sale('CEZ.CZ', '2025-07-01', false, 10_000, 9_000),
+    sale('SPY.US', '2025-08-01', true, 6_000_000, 1_000_000), // exempt, one sale over 5 mil.
+    sale('AAPL.US', '2024-03-01', false, 500_000, 1),
+  ];
+  const divs = [
+    { ticker: 'AAPL.US', year: 2025, grossCzk: 1_000, withholdingCzk: 150 },
+    { ticker: 'VWCE.DE', year: 2025, grossCzk: 500, withholdingCzk: 0 },
+    { ticker: 'CEZ.CZ', year: 2025, grossCzk: 2_000, withholdingCzk: 300 }, // taxed finally in CZ
+  ];
+  const g = taxReturnGuide(2025, true, lots, divs);
+  assert.deepEqual(g.annex2, {
+    rows: [
+      { kind: 'D – prodej cenných papírů (zahraniční)', incomeCzk: 110_000, expenseCzk: 100_000, diffCzk: 10_000, code: 'z' },
+      { kind: 'D – prodej cenných papírů (tuzemské)', incomeCzk: 10_000, expenseCzk: 9_000, diffCzk: 1_000, code: '' },
+    ],
+    r207: 120_000, r208: 109_000, r209: 11_000,
+  });
+  assert.deepEqual(g.annex4, { r401a: 1_500, r411: 1_000, r412: 150, taxCzk: 225, creditCzk: 150, r414: 75 });
+  assert.equal(g.exemptNoticeCzk, 6_000_000);
+  assert.equal(g.incomplete, false);
+
+  // Within the 100k limit nothing from the sales goes to the return; a total loss caps expenses at the income.
+  assert.equal(taxReturnGuide(2025, false, lots, []).annex2, null);
+  const loss = taxReturnGuide(2025, true, [sale('X.US', '2025-01-02', false, 120_000, 150_000)], []).annex2!;
+  assert.deepEqual([loss.r207, loss.r208, loss.r209], [120_000, 120_000, 0]);
 });

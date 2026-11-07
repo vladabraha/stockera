@@ -303,6 +303,17 @@ tbody tr:hover td { background: var(--sunk); }
 .year dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 4px 0 0; font-size: .86rem; }
 .year dt { color: var(--muted); }
 .year dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.year > .ghost { align-self: flex-start; margin-top: auto; }
+.year.active { border-color: var(--accent); }
+.dap-guide { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; font-size: .9rem; }
+.dap-guide h3 { margin: 0 0 4px; font-size: 1.05rem; }
+.dap-guide h4 { margin: 18px 0 8px; font-size: .92rem; }
+.dap-guide p { margin: 6px 0; }
+.dap-guide .warn { color: var(--warn); }
+.dap { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; margin: 10px 0; }
+.dap dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dap-list { margin: 0; padding-left: 18px; }
+.dap-list li { margin-bottom: 6px; }
 
 /* notices */
 .checks > summary { list-style: none; cursor: pointer; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
@@ -343,6 +354,7 @@ noscript { display: block; padding: 40px; text-align: center; }
 
 /* phone */
 @media (max-width: 640px) {
+  .dap-guide { padding: 12px; }
   #app { padding: 0 12px 24px; }
   .irow { grid-template-columns: 40px minmax(0, 1fr) auto 14px; row-gap: 8px; column-gap: 12px; }
   .irow .iname { grid-column: 2 / 4; grid-row: 1; }

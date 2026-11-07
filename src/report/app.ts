@@ -6,7 +6,7 @@ import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
 import { applyLive, fetchLive, type LiveSources } from './live.ts';
-import { SALES_LIMIT_CZK, lossOffsetPlan } from '../analysis/tax.ts';
+import { SALES_LIMIT_CZK, lossOffsetPlan, taxReturnGuide, type TaxReturnGuide } from '../analysis/tax.ts';
 
 type Cur = 'czk' | 'eur';
 type Child = Node | string | null | undefined | false;
@@ -42,6 +42,8 @@ const state = {
   upcomingShown: 5,
   /** "Bez daně k datu" (ISO date); null = list of upcoming dates. */
   taxFreeDate: null as string | null,
+  /** Year whose tax-return guide is open in "Daně podle let". */
+  taxGuideYear: null as number | null,
 };
 
 // ---------------------------------------------------------------- DOM helpers
@@ -1289,7 +1291,7 @@ function soldTab(a: Analysis): HTMLElement {
       stat('Počet prodejů', String(sales), `${a.realized.length} instrumentů`),
       stat('Dividendy čistě', totals(a.summary.dividendsNet)),
     ),
-    taxYearsPanel(a.taxYears, a.holdings),
+    taxYearsPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
       h('div', { class: 'acc-list' }, ...a.realized.map(realizedRow))),
@@ -1297,12 +1299,14 @@ function soldTab(a: Analysis): HTMLElement {
   );
 }
 
-function taxYearsPanel(years: TaxYear[], holdings: Holding[]): HTMLElement {
+function taxYearsPanel(a: Analysis): HTMLElement {
+  const years = a.taxYears, holdings = a.holdings;
   const yearCard = (y: TaxYear) => {
     const used = y.shortTermProceeds.czk;
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
-    return h('div', { class: 'year' },
+    const open = state.taxGuideYear === y.year;
+    return h('div', { class: open ? 'year active' : 'year' },
       h('div', { class: 'year-head' }, h('b', {}, String(y.year)), limit),
       used != null ? progress(used / SALES_LIMIT_CZK, y.limitStatus === 'exceeded' ? 'over' : 'done') : null,
       h('div', { class: 'muted small' }, `Příjmy z prodejů bez časového testu ${fmtMoney(used, 'CZK')} z limitu ${fmtMoney(SALES_LIMIT_CZK, 'CZK')}`),
@@ -1313,12 +1317,109 @@ function taxYearsPanel(years: TaxYear[], holdings: Holding[]): HTMLElement {
         h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
         h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
       y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0 ? lossOffsetNote(y.taxable.baseCzk!, holdings) : null,
+      button(open ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
+        state.taxGuideYear = open ? null : y.year;
+        render();
+      }, 'ghost'),
     );
   };
+  const guideYear = years.find((y) => y.year === state.taxGuideYear);
   return panel('Daně podle let',
     h('div', { class: 'years' }, ...[...years].sort((p, q) => q.year - p.year).map(yearCard)),
+    guideYear ? taxGuidePanel(a, guideYear) : null,
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok z prodejů bez časového testu, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
   );
+}
+
+/** What to fill in the Czech tax return (DAP) for one year and what to attach. */
+function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
+  const lots = a.realized.flatMap((r) => r.lots.map((l) => ({ ticker: r.ticker, name: r.name, lot: l })));
+  const g: TaxReturnGuide = taxReturnGuide(y.year, y.limitStatus === 'exceeded',
+    lots.map(({ ticker, lot }) => ({ ticker, closeDate: lot.closeDate, timeTestMet: lot.timeTestMet, proceedsCzk: lot.proceeds.czk, costCzk: lot.cost.czk })),
+    a.dividends.map((d) => ({ ticker: d.ticker, year: d.year, grossCzk: d.gross.czk, withholdingCzk: d.withholdingTax.czk == null ? null : -d.withholdingTax.czk })));
+  const kc = (v: number) => fmtMoney(v, 'CZK');
+  const rowList = (items: [string, string, string?][]) => h('dl', { class: 'dap' },
+    ...items.flatMap(([row, label, value]) => [h('dt', {}, h('b', {}, row), ` ${label}`), h('dd', {}, value ?? '')]));
+  const ongoing = y.year >= new Date().getFullYear();
+  const attach: Child[] = [];
+  const parts: Child[] = [
+    h('h3', {}, `Daňové přiznání za ${y.year}`),
+    h('p', { class: 'muted small' }, ongoing
+      ? 'Rok ještě neskončil – čísla se budou měnit.'
+      : `Přiznání k dani z příjmů FO (MFin 5405) podej do 1. 4. ${y.year + 1}, elektronicky do 1. 5. ${y.year + 1} (připadne-li termín na víkend či svátek, posouvá se na další pracovní den).`),
+  ];
+  if (y.limitStatus === 'unknown') parts.push(h('p', { class: 'warn' }, 'U některých prodejů chybí kurz ČNB, limit 100 000 Kč nejde ověřit. Spusť znovu aktualizaci dat.'));
+  if (!g.annex2 && !g.annex4) {
+    parts.push(h('p', {}, y.limitStatus === 'within'
+      ? `Kvůli prodejům přiznání podávat nemusíš: prodeje bez časového testu za ${fmtMoney(y.shortTermProceeds.czk, 'CZK')} jsou v limitu 100 000 Kč a prodeje po časovém testu jsou osvobozené. Pokud přiznání podáváš z jiného důvodu, tyto prodeje do něj neuváděj.`
+      : 'Prodeje za tento rok jsou osvobozené, do přiznání se neuvádějí.'));
+  }
+  if (g.annex2) {
+    parts.push(
+      h('h4', {}, 'Příloha č. 2 – oddíl 2, ostatní příjmy (§ 10)'),
+      table(['Sl. 1 Druh příjmu', 'Sl. 2 Příjmy', 'Sl. 3 Výdaje', 'Sl. 4 Rozdíl', 'Sl. 5 Kód'],
+        g.annex2.rows.map((r) => h('tr', {},
+          h('td', {}, r.kind),
+          h('td', { class: 'num' }, kc(r.incomeCzk)),
+          h('td', { class: 'num' }, kc(r.expenseCzk)),
+          signed(signedMoney(kc(r.diffCzk), r.diffCzk), r.diffCzk, 'td'),
+          h('td', { class: 'num' }, r.code || '—'))), 1),
+      rowList([
+        ['ř. 207', 'Příjmy podle § 10', kc(g.annex2.r207)],
+        ['ř. 208', 'Výdaje podle § 10 (nejvýše do výše příjmů)', kc(g.annex2.r208)],
+        ['ř. 209', 'Dílčí základ daně (ř. 207 − ř. 208)', kc(g.annex2.r209)],
+        ['DAP ř. 40', 'Dílčí základ daně z ostatních příjmů – přenes z ř. 209', kc(g.annex2.r209)],
+      ]),
+      h('p', { class: 'muted small' }, `Zahrnuty jsou všechny prodeje bez časového testu (${y.taxable.count}×), i ty ve ztrátě – ztráty se odečtou od zisků. Příjem = prodejní cena, výdaj = nákupní cena prodaných kusů, obojí kurzem ČNB ke dni obchodu. Poplatky za obchody můžeš přičíst k výdajům. Kód „z“ = příjem ze zahraničí (zahraniční cenné papíry).`),
+    );
+    attach.push(h('li', {}, 'Přehled zdanitelných prodejů (nákup, prodej, kusy, ceny, kurz) – zákon ho jako přílohu nevyžaduje, ale je dobré ho přiložit nebo mít připravený na vyžádání úřadu: ',
+      button(`Stáhnout přehled prodejů ${y.year} (CSV)`, () => downloadSalesCsv(y.year, lots), 'link')));
+  }
+  if (g.annex4) {
+    parts.push(
+      h('h4', {}, 'Příloha č. 4 – zahraniční dividendy v samostatném základu daně (§ 16a)'),
+      rowList([
+        ['ř. 401a', 'Příjmy podle § 8 ze zahraničí (hrubé dividendy)', kc(g.annex4.r401a)],
+        ['ř. 411', 'Příjmy, u nichž uplatňuješ zápočet daně', kc(g.annex4.r411)],
+        ['ř. 412', 'Daň zaplacená v zahraničí (nejvýše podle smlouvy)', kc(g.annex4.r412)],
+        ['ř. 414', `Daň po zápočtu (15 % = ${kc(g.annex4.taxCzk)} − zápočet ${kc(g.annex4.creditCzk)}) → přenes na DAP ř. 74a`, kc(g.annex4.r414)],
+      ]),
+      h('p', { class: 'muted small' }, 'Dividendy z českých akcií jsou zdaněné srážkou a neuvádějí se. Místo přílohy č. 4 lze zahraniční dividendy uvést na ř. 38 a zápočet v příloze č. 3 – pak se zdaní spolu s ostatními příjmy (může vyjít sazba 23 %).'),
+    );
+    attach.push(h('li', {}, 'Doklad o dani sražené v zahraničí z dividend (výpis z XTB; úřad může chtít potvrzení zahraničního správce daně) a u akcií z USA podepsaný formulář W-8BEN pro sazbu 15 %.'));
+  }
+  if (g.exemptNoticeCzk > 0) {
+    attach.push(h('li', {}, `Oznámení o osvobozených příjmech (§ 38v) – osvobozený příjem z jednoho prodeje přesáhl 5 mil. Kč (celkem ${kc(g.exemptNoticeCzk)}). Podává se samostatným tiskopisem ve stejném termínu jako přiznání.`));
+  }
+  if (y.timeTestCapExceeded) {
+    parts.push(h('p', { class: 'warn' }, 'Příjmy z prodejů po časovém testu přesáhly 40 mil. Kč – část nad limitem je zdanitelná a výpočet výše ji nezahrnuje. Obrať se na daňového poradce.'));
+  }
+  if (g.annex2 || g.annex4) attach.push(h('li', {}, 'Roční výpis z XTB si uschovej (přikládat ho není nutné).'));
+  if (attach.length) parts.push(h('h4', {}, 'Přiložit / mít připraveno'), h('ul', { class: 'dap-list' }, ...attach));
+  if (g.incomplete) parts.push(h('p', { class: 'warn' }, 'Některé částky nemají přepočet do Kč – součty jsou neúplné.'));
+  parts.push(h('p', { class: 'hint' }, 'Orientační návod podle tiskopisu MFin 5405. Sazbu 23 %, slevy a celkovou daň dopočítá samotné přiznání. Nenahrazuje daňové poradenství.'));
+  return h('div', { class: 'dap-guide' }, ...parts);
+}
+
+/** All sales of the year as CSV for the tax office – generated in the browser, nothing is uploaded. */
+function downloadSalesCsv(year: number, lots: { ticker: string; name: string | null; lot: RealizedLot }[]): void {
+  const y = state.data?.taxYears.find((t) => t.year === year);
+  const num = (v: number | null, d = 2) => v == null ? '' : v.toFixed(d).replace('.', ',');
+  const cell = (s: string) => /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  const head = ['Instrument', 'Název', 'Účet', 'Datum nákupu', 'Datum prodeje', 'Kusy', 'Nákupní cena', 'Prodejní cena', 'Měna',
+    'Výdaj (Kč)', 'Příjem (Kč)', 'Rozdíl (Kč)', 'Dní držby', 'Časový test', 'Zdanitelné'];
+  const rows = lots.filter(({ lot }) => lot.closeDate.startsWith(`${year}-`))
+    .sort((p, q) => p.lot.closeTime.localeCompare(q.lot.closeTime))
+    .map(({ ticker, name, lot: l }) => [ticker, name ?? '', l.accountNumber, l.openDate, l.closeDate, num(l.quantity, 4),
+      num(l.openPrice, 4), num(l.closePrice, 4), l.proceeds.currency, num(l.cost.czk), num(l.proceeds.czk), num(l.proceeds.czk == null || l.cost.czk == null ? null : l.proceeds.czk - l.cost.czk),
+      String(l.holdingDays), l.timeTestMet ? 'splněn' : 'nesplněn', !l.timeTestMet && y?.limitStatus === 'exceeded' ? 'ano' : 'ne']);
+  const csv = '\ufeff' + [head, ...rows].map((r) => r.map(cell).join(';')).join('\r\n');
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = h('a', { href: url, download: `stockera-prodeje-${year}.csv` });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** This year's tax can still be lowered by selling held positions at a loss before 31 December. */

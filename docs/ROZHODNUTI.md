@@ -95,6 +95,17 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Podle aktuálních (i živých) cen.
   Když FIFO prodá i staré loty se splněným testem (`taxFreeQuantity`), doporučení na to upozorní – po zpětném nákupu
   by časový test běžel znovu. Při více účtech se u doporučení uvádí účet.
+- **Návod k daňovému přiznání** (tlačítko „Co vyplnit v přiznání“ v kartě roku, `taxReturnGuide` v `tax.ts`), podle
+  tiskopisu MFin 5405 a pokynů Finanční správy:
+  - zdanitelné prodeje (limit překročen, bez časového testu, i ztrátové) → **Příloha č. 2, oddíl 2**, druh příjmu
+    **D**, řádek zvlášť pro zahraniční (sloupec 5 kód **„z“**) a tuzemské (`.CZ`) cenné papíry; ř. 207 příjmy,
+    ř. 208 výdaje (nejvýše do výše příjmů, § 10 odst. 4), ř. 209 → **ř. 40** DAP;
+  - zahraniční dividendy → **Příloha č. 4** (samostatný základ § 16a): ř. 401a hrubé dividendy, ř. 411 příjmy se
+    sraženou daní, ř. 412 sražená daň, ř. 414 (15 % − zápočet, zápočet nejvýše 15 %) → ř. 74a DAP; alternativa ř. 38
+    + Příloha č. 3 je jen zmíněná. České dividendy (`.CZ`) jsou zdaněné srážkou a neuvádějí se;
+  - osvobozený příjem z jednoho prodeje (ticker + den) nad 5 mil. Kč → upozornění na **oznámení podle § 38v**;
+  - co přiložit: přehled prodejů jako **CSV** (generuje se v prohlížeči, nic se neodesílá; `;` a desetinná čárka
+    pro český Excel), doklad o sražené dani u dividend, W-8BEN; roční výpis XTB uschovat.
 - **Kurzy:** denní kurz ČNB ke dni obchodu (nákup kurzem dne nákupu, prodej kurzem dne prodeje); víkend/svátek
   = poslední fixing max. 7 dní zpět. EUR = CZK / kurz EUR (nebo nativně u EUR účtu).
 - **Model peněz:** `Money {native, currency, czk|null, eur|null}`, `Totals` s mapou `native` podle měn.
