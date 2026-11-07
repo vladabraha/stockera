@@ -3,6 +3,7 @@
 import type { Analysis, Holding, HoldingLot } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import { breakdown } from '../analysis/breakdown.ts';
+import { parseSafeJson, UnsafeDataError } from '../net/inspect.ts';
 
 /** Primary sources first, then their fallbacks (Tradegate for quotes, ECB for rates). */
 export const LIVE_HOSTS = ['https://api.onvista.de', 'https://api.frankfurter.dev', 'https://www.tradegatebsx.com', 'https://data-api.ecb.europa.eu'] as const;
@@ -21,6 +22,8 @@ export interface LiveSources {
   quoteFallback: string[];
   /** Short technical reasons of failed primary requests (no personal data). */
   errors: string[];
+  /** Responses discarded by the content check (`source: reason`). */
+  unsafe: string[];
 }
 
 export interface LiveResult {
@@ -38,6 +41,11 @@ const EU_MARKETS = new Set(['_XET', '_GAT', '_FRA', '_STU', '_TRO', '_AMS']);
 const MAX_JUMP = 0.5;
 const CONCURRENCY = 4;
 const TIMEOUT_MS = 10_000;
+/** Real responses are a few kB; anything far bigger is not a quote. */
+const MAX_BYTES = 2_000_000;
+const SOURCE_NAMES: Record<string, string> = {
+  'api.onvista.de': 'onvista', 'api.frankfurter.dev': 'Frankfurter', 'www.tradegatebsx.com': 'Tradegate', 'data-api.ecb.europa.eu': 'ECB',
+};
 
 export const liveFxUrl = (currencies: string[]) =>
   `https://api.frankfurter.dev/v1/latest?base=EUR&symbols=${currencyList(currencies).join(',')}`;
@@ -121,14 +129,20 @@ function instrumentCurrency(a: Analysis, x: Holding): string | null {
 }
 
 /** Downloads rates and quotes; any failure just leaves that instrument (or everything) at the stored snapshot. */
-export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now = new Date()): Promise<{ czkPer: Record<string, number>; quotes: Record<string, LiveQuote>; sources: LiveSources }> {
+/** `czkPer` is null when no rates could be loaded – then nothing is revalued (offline). */
+export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now = new Date()): Promise<{ czkPer: Record<string, number> | null; quotes: Record<string, LiveQuote>; sources: LiveSources }> {
   const get = async (url: string): Promise<unknown> => {
+    const source = SOURCE_NAMES[new URL(url).hostname] ?? 'neznámý zdroj';
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
     try {
       const r = await fetchFn(url, { method: 'GET', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store', redirect: 'error', signal: ctrl.signal });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      return await r.json();
+      if (!/json/i.test(r.headers.get('content-type') ?? '')) throw new UnsafeDataError(source, `nečekaný typ ${r.headers.get('content-type') || 'bez typu'}`);
+      if (Number(r.headers.get('content-length') ?? 0) > MAX_BYTES) throw new UnsafeDataError(source, 'příliš velká odpověď');
+      const text = await r.text();
+      if (text.length > MAX_BYTES) throw new UnsafeDataError(source, 'příliš velká odpověď');
+      return parseSafeJson(text, source);
     } finally {
       clearTimeout(timer);
     }
@@ -138,8 +152,12 @@ export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now 
   for (const x of a.holdings) for (const l of x.lots) currencies.add(l.cost.currency);
   for (const t of targets) if (t.currency) currencies.add(t.currency);
 
-  const sources: LiveSources = { fxFallback: false, quoteFallback: [], errors: [] };
+  const sources: LiveSources = { fxFallback: false, quoteFallback: [], errors: [], unsafe: [] };
   const fail = (source: string, e: unknown) => {
+    if (e instanceof UnsafeDataError) {
+      const msg = `${e.source}: ${e.reason}`;
+      if (!sources.unsafe.includes(msg)) sources.unsafe.push(msg);
+    }
     const msg = `${source}: ${e instanceof Error ? (e.name === 'AbortError' ? 'neodpověděl včas' : e.message) : String(e)}`;
     if (!sources.errors.includes(msg)) sources.errors.push(msg);
   };
@@ -161,7 +179,9 @@ export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now 
           quotes[t.ticker] = q;
           sources.quoteFallback.push(t.ticker);
         }
-      } catch { /* keep the stored value */ }
+      } catch (e) {
+        if (e instanceof UnsafeDataError) fail('Tradegate', e);
+      }
     }
   };
   const loadFx = async () => {
@@ -170,7 +190,12 @@ export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now 
     } catch (e) {
       fail('Frankfurter', e);
       sources.fxFallback = true;
+    }
+    try {
       return parseEcbFx(await get(ecbFxUrl([...currencies])));
+    } catch (e) {
+      fail('ECB', e);
+      return null;
     }
   };
   const [czkPer] = await Promise.all([loadFx(), ...Array.from({ length: CONCURRENCY }, worker)]);

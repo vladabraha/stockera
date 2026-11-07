@@ -1,5 +1,6 @@
 import { appendFileSync, chmodSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { assertSafe, parseSafeJson, UnsafeDataError } from './inspect.ts';
 
 /**
  * The only hosts the application may contact. Requests carry only tickers, ISINs and dates –
@@ -13,6 +14,16 @@ export const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
   'query2.finance.yahoo.com',
   'api.onvista.de', // ETF country breakdown fallback (when justETF has none)
 ]);
+
+const SOURCE_NAMES: Record<string, string> = {
+  'www.cnb.cz': 'ČNB',
+  'www.cashmarket.deutsche-boerse.com': 'Deutsche Börse',
+  'www.justetf.com': 'justETF',
+  'query1.finance.yahoo.com': 'Yahoo',
+  'query2.finance.yahoo.com': 'Yahoo',
+  'api.onvista.de': 'onvista',
+};
+const sourceName = (url: string) => SOURCE_NAMES[new URL(url).hostname] ?? new URL(url).hostname;
 
 const MAX_REDIRECTS = 5;
 const TIMEOUT_MS = 60_000;
@@ -28,7 +39,8 @@ const RETRY_DELAYS_MS = [2_000, 5_000];
 export interface AuditEntry {
   time: string;
   url: string;
-  status: number | 'blocked' | 'error';
+  /** `unsafe` = response downloaded but thrown away by the content check (src/net/inspect.ts). */
+  status: number | 'blocked' | 'error' | 'unsafe';
   bytes?: number;
   ms?: number;
   error?: string;
@@ -112,8 +124,24 @@ export class Http {
     throw new Error(`Příliš mnoho přesměrování: ${url}`);
   }
 
+  /** Parsed JSON that passed the content check; suspicious responses are discarded with {@link UnsafeDataError}. */
   async getJson<T>(url: string): Promise<T> {
-    return JSON.parse(await this.getText(url, 'application/json')) as T;
+    const text = await this.getText(url, 'application/json');
+    return this.checked(url, () => parseSafeJson<T>(text, sourceName(url)));
+  }
+
+  /** Content check for values extracted from HTML/CSV/text responses (the raw page may legitimately contain scripts). */
+  checkExtracted<T>(url: string, value: T): T {
+    return this.checked(url, () => assertSafe(value, sourceName(url)));
+  }
+
+  private checked<T>(url: string, fn: () => T): T {
+    try {
+      return fn();
+    } catch (e) {
+      if (e instanceof UnsafeDataError) this.audit({ url, status: 'unsafe', error: e.reason });
+      throw e;
+    }
   }
 
   private assertAllowed(url: string): void {

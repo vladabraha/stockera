@@ -79,7 +79,8 @@ pnpm audit        # kontrola zranitelností závislostí
   - posílá jen tickery, ISINy a data (ověřeno testem `tests/market.test.ts`), bez cookies,
   - každý požadavek se zapíše do `data/logs/network.log`,
   - ceny se stahují od 1. 12. roku před prvním nákupem pro všechny tickery stejně (z požadavků nejde vyčíst, kdy jsi co koupil),
-  - odpovědi nad 20 MB se zahodí.
+  - odpovědi nad 20 MB se zahodí,
+  - odpovědi s podezřelým obsahem (HTML/skripty, řídicí znaky, `__proto__`…) se zahodí a vypíše se varování (`src/net/inspect.ts`); totéž dělají živé ceny v reportu.
 - `data/stockera.db` a `network.log` mají na macOS/Linuxu práva jen pro vlastníka (600); na Windows platí oprávnění uživatelského profilu.
 - Nešifrovaný `out/analysis.json` vzniká jen na vyžádání (`pnpm analyze --json`); bez přepínače se starý smaže.
 - Bezpečnostní revize (security review) celého projektu: žádná zneužitelná chyba; doporučená zpevnění výše jsou zapracovaná.

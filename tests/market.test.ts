@@ -151,6 +151,21 @@ test('manual overrides win and failures become warnings', async () => {
   assert.match(r.warnings[0]!, /STK\.US.*HTTP 429/);
 });
 
+test('suspicious downloads are discarded: warning, audit entry, nothing stored', async () => {
+  const db = seed();
+  const evil = (u: string) => u.includes('finance.yahoo.com')
+    ? new Response(yahoo.replace('"currency":"USD"', '"currency":"USD","longName":"Evil\\u001b]8;;https://x\\u0007"'), { headers: { 'content-type': 'application/json' } })
+    : u.includes('etf-profile') ? new Response(profile.replace('World ETF', 'World ETF javascript:alert(1)'), { headers: { 'content-type': 'text/html' } })
+    : routes(u);
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(evil) });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.ok(r.warnings.some((w) => /STK\.US.*Yahoo poslal podezřelá data/.test(w)), r.warnings.join('\n'));
+  assert.equal(db.prepare(`SELECT COUNT(*) AS n FROM prices WHERE ticker = 'STK.US'`).get()!.n, 0);
+  const names = db.prepare('SELECT name FROM instrument_meta').all().map((x) => String(x.name));
+  assert.ok(names.every((n) => !/<|javascript:|\u001b/.test(n)), names.join());
+  assert.deepEqual(http.log.filter((e) => e.status === 'unsafe').map((e) => new URL(e.url).hostname).sort(), ['query1.finance.yahoo.com', 'www.justetf.com']);
+});
+
 test('manual sectors win; unknown sector keys are reported', async () => {
   const db = seed();
   const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(routes) });

@@ -132,6 +132,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Ceny se stahují od společného hrubého data** (1. 12. roku před prvním nákupem) pro všechny tickery, aby
   z požadavků nešlo vyčíst, kdy byl který instrument koupen. Dál inkrementálně od posledního data − 7 dní.
 - Selhání zdroje = varování, nikdy pád celého běhu.
+- **Kontrola stažených dat na škodlivý obsah** (`src/net/inspect.ts`, přání uživatele; čistý soubor bez importů,
+  sdílí ho CLI i report). Hledá: HTML/`<script>` značky, `on…=` handlery, `javascript:`/`vbscript:`, `data:text/html`,
+  řídicí znaky C0/C1 (mimo tab/CR/LF – ochrana terminálu před escape sekvencemi), bidi přepisy, klíče
+  `__proto__`/`constructor`/`prototype`, hloubku > 64, > 2 mil. uzlů a nekonečná čísla. JSON (`getJson`) se kontroluje
+  celý; u HTML/CSV/textu (justETF profil, Xetra CSV, ČNB) **jen vytažené hodnoty** přes `http.checkExtracted` – surové
+  HTML justETF legitimně obsahuje skripty. Nález = `UnsafeDataError` → celá odpověď se zahodí (nic se neuloží),
+  audit `status: 'unsafe'`, instrument dostane varování a použije se zbytek řetězce zdrojů / hodnota z výpisu.
+  `pnpm market` na konci vypíše blok „⛔ Bezpečnostní kontrola“ (host + důvod). Ověřeno na reálných odpovědích
+  všech zdrojů – žádné falešné poplachy. Report vše vykresluje přes `textContent`, takže jde o obranu do hloubky.
 
 ## 6. Report – `src/report`
 
@@ -173,6 +182,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     - kurzy: když selže Frankfurter → oficiální API ECB `data-api.ecb.europa.eu/service/data/EXR/D.CZK+USD….EUR.SP00.A?lastNObservations=1&format=jsondata` (SDMX-JSON, stejná data ECB).
     - V reportu se pak pod stavem ukáže upozornění „Hlavní zdroj (…) teď nefunguje. N z M cen je ze záložního zdroje
       Tradegate. Kurzy jsou ze záložního zdroje ECB.“ a technická příčina jde do konzole prohlížeče.
+  - **Kontrola odpovědí** (`get()` v `live.ts`): `content-type` musí obsahovat `json`, max 2 MB, pak `parseSafeJson`
+    (viz §5). Podezřelá odpověď se zahodí, zkusí se záloha a nad stavem se ukáže červené upozornění (`role=alert`)
+    „Bezpečnostní kontrola zahodila podezřelá data (…)“. Když selžou oba zdroje kurzů, report zůstane u snímku.
   - **Proč tyto zdroje:** jediné ověřené s CORS `*` i pro `Origin: null` (soubor z disku). justETF, Yahoo, Börse
     Frankfurt, Consorsbank, finanzen.net ani L&S CORS nemají; Euronext má CORS, ale data šifruje. onvista je rychlá
     (~0,1 s, jeden dotaz vrátí všechny burzy) – primární zůstává. (onvista vrací 429 jen na ne-prohlížečový User-Agent.)

@@ -18,7 +18,7 @@ const RANGES: [label: string, days: number | null][] = [
 const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
 const TAX_LIMIT_CZK = 100_000;
 
-type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; notice?: string };
+type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; notice?: string; alert?: string };
 
 const state = {
   data: null as Analysis | null,
@@ -307,10 +307,18 @@ async function refreshLive(): Promise<void> {
   try {
     const { czkPer, quotes, sources } = await fetchLive(base);
     if (run !== state.liveRun || state.base !== base) return;
-    const r = applyLive(base, czkPer, quotes);
-    state.data = r.analysis;
-    next = { status: r.updated.length ? 'live' : 'stale', date: r.date, updated: r.updated.length, total, notice: fallbackNotice(sources, total) };
-    if (sources.errors.length) console.warn('Stockera – hlavní zdroj živých dat selhal:', sources.errors.join('; '));
+    const alert = sources.unsafe.length
+      ? `Bezpečnostní kontrola zahodila podezřelá data (${sources.unsafe.join(', ')}). Nic z nich se nepoužilo ani nezobrazilo; dotčené hodnoty jsou z výpisu nebo ze záložního zdroje.`
+      : undefined;
+    if (sources.errors.length) console.warn('Stockera – zdroj živých dat selhal:', sources.errors.join('; '));
+    if (czkPer) {
+      const r = applyLive(base, czkPer, quotes);
+      state.data = r.analysis;
+      next = { status: r.updated.length ? 'live' : 'stale', date: r.date, updated: r.updated.length, total, notice: fallbackNotice(sources, total), alert };
+    } else {
+      state.data = base;
+      next = { status: 'offline', date: null, updated: 0, total, alert };
+    }
   } catch {
     if (run !== state.liveRun || state.base !== base) return;
     state.data = base;
@@ -596,7 +604,8 @@ function heroPanel(a: Analysis): HTMLElement {
     h('div', { class: 'hero-head' },
       h('div', {},
         h('div', { class: `eyebrow live-${state.live.status}`, role: 'status' }, liveStatus(s.valueDate)),
-        state.live.notice ? h('div', { class: 'live-notice', role: 'alert' }, state.live.notice) : null,
+        state.live.alert ? h('div', { class: 'live-notice danger', role: 'alert' }, state.live.alert) : null,
+        state.live.notice ? h('div', { class: 'live-notice', role: 'status' }, state.live.notice) : null,
         h('div', { class: 'big' }, totals(s.value)),
         h('div', { class: 'delta' }, chip(pct(s.unrealizedPct), pctValue(s.unrealizedPct)),
           signed(signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit)), totalsValue(s.unrealizedProfit)), h('span', { class: 'muted' }, 'nerealizovaný zisk')),

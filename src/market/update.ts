@@ -126,7 +126,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     if (xetra === undefined) {
       log('Seznam instrumentů Xetra (ticker → ISIN)…');
       try {
-        xetra = parseXetraInstruments(await http.getText(XETRA_INSTRUMENTS_URL, 'text/csv'));
+        xetra = http.checkExtracted(XETRA_INSTRUMENTS_URL, parseXetraInstruments(await http.getText(XETRA_INSTRUMENTS_URL, 'text/csv')));
       } catch (e) {
         xetra = null;
         warnings.push(`Seznam instrumentů Xetra se nepodařilo stáhnout: ${(e as Error).message}`);
@@ -157,7 +157,8 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
 
     // Each source is downloaded at most once per instrument (countries and sectors come from the same response)
     let profile: Promise<EtfProfile> | undefined;
-    const justEtf = () => (profile ??= http.getText(justEtfProfileUrl(isin!), 'text/html').then(parseJustEtfProfile));
+    const justEtf = () => (profile ??= http.getText(justEtfProfileUrl(isin!), 'text/html')
+      .then((html) => http.checkExtracted(justEtfProfileUrl(isin!), parseJustEtfProfile(html))));
     let breakdowns: Promise<OnvistaBreakdowns> | undefined;
     const onvista = () => (breakdowns ??= http.getJson<OnvistaBreakdowns>(onvistaBreakdownsUrl(isin!)));
     const ageDays = prev?.updated_at ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;

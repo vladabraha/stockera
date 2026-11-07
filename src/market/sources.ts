@@ -44,7 +44,8 @@ export function parseCnbYear(text: string): FxRow[] {
 }
 
 export async function fetchCnbYear(http: Http, year: number): Promise<FxRow[]> {
-  return parseCnbYear(await http.getText(cnbYearUrl(year), 'text/plain'));
+  const url = cnbYearUrl(year);
+  return http.checkExtracted(url, parseCnbYear(await http.getText(url, 'text/plain')));
 }
 
 // -------------------------------------------------------------- Xetra ------

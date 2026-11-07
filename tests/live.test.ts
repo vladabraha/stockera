@@ -102,8 +102,8 @@ test('fetchLive sends only ISIN / currency GETs without credentials and survives
   }) as unknown as typeof fetch;
   const r = await fetchLive(base(), fake);
   assert.deepEqual(r.quotes, {});
-  assert.equal(r.czkPer.USD, 20);
-  assert.deepEqual(r.sources, { fxFallback: false, quoteFallback: [], errors: ['onvista: HTTP 429'] });
+  assert.equal(r.czkPer?.USD, 20);
+  assert.deepEqual(r.sources, { fxFallback: false, quoteFallback: [], errors: ['onvista: HTTP 429'], unsafe: [] });
   assert.deepEqual(calls.map((c) => c.url).sort(), [
     'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=CHF,CZK,GBP,USD',
     'https://api.onvista.de/api/v1/stocks/ISIN:US0000000001/snapshot',
@@ -153,4 +153,18 @@ test('fetchLive falls back to Tradegate and ECB when the primary sources fail an
   assert.deepEqual(r.sources.quoteFallback, ['AAA.US']);
   assert.deepEqual([...r.sources.errors].sort(), ['Frankfurter: HTTP 503', 'onvista: HTTP 503']);
   assert.ok(urls.every((u) => !/quantity|value|cost/i.test(u)));
+});
+
+test('fetchLive discards suspicious responses, reports them and falls back', async () => {
+  const fake = (async (url: string) => {
+    if (url.includes('onvista')) return Response.json({ quote: { last: 60, isoCurrency: 'USD', datetimeLast: '2026-11-06T15:00:00Z', market: { codeMarket: '<img src=x onerror=alert(1)>' } } });
+    if (url.includes('frankfurter')) return new Response('<html><script>alert(1)</script></html>', { headers: { 'content-type': 'text/html' } });
+    if (url.includes('tradegatebsx')) return Response.json({ last: 61, __proto__x: 1, ['__proto__']: { polluted: true } });
+    return Response.json({ dataSets: [{ series: { '0:0': { observations: { 0: [25] } } } }], structure: { dimensions: { series: [{ id: 'FREQ', values: [{ id: 'D' }] }, { id: 'CURRENCY', values: [{ id: 'CZK' }] }] } } });
+  }) as unknown as typeof fetch;
+  const r = await fetchLive(base(), fake, new Date('2026-11-06T15:00:00Z'));
+  assert.deepEqual(r.quotes, {}, 'nothing from a suspicious response is used');
+  assert.deepEqual(r.czkPer, { CZK: 1, EUR: 25 });
+  assert.deepEqual([...r.sources.unsafe].sort(), ['Frankfurter: nečekaný typ text/html', 'Tradegate: zakázaný klíč "__proto__"', 'onvista: HTML s obsluhou události']);
+  assert.equal(({} as Record<string, unknown>).polluted, undefined);
 });

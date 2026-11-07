@@ -29,6 +29,7 @@ Prohlížeč po odemknutí stáhne aktuální ceny a kurzy (CSP povoluje jen tyt
 Když hlavní zdroj selže, použije se záložní a report na to upozorní. Bez připojení report ukáže hodnoty z poslední aktualizace. Ostatní zdroje (justETF, Yahoo, burzy) prohlížeči přístup nepovolují (CORS).
 
 ## Pravidla a omezení
+- **Bezpečnostní kontrola:** každá stažená odpověď se před použitím zkontroluje (HTML/skripty, `javascript:` odkazy, řídicí znaky, podivná struktura JSON – `src/net/inspect.ts`). Podezřelá se celá zahodí, nic z ní se neuloží ani nezobrazí; `pnpm market` vypíše „⛔ Bezpečnostní kontrola“, report červené upozornění. V `network.log` má stav `unsafe`.
 - **Ocenění:** použije se stažená cena, pokud je novější než stav ve výpisu XTB; jinak hodnota z výpisu.
 - **Země ETF:** justETF ukazuje hlavní země a zbytek jako „Other“ → v grafu „Ostatní“ (`XX`). Některé ETF (swapové, nové, aktivně řízené – např. LEER, DEGT) tam rozpad nemají → použije se onvista; až když nemá ani ta, „Neznámé složení“ (`??`) a doplnění ručně (`countries`).
 - **Sektory:** názvy ze zdrojů se převádí na 10 hrubých sektorů (technologie a komunikace, finance, zdravotnictví, průmysl, spotřební zboží, energie, suroviny, veřejné služby, nemovitosti, ostatní). Zbytek do 100 % = „Ostatní“. Když sektor chybí nebo nesedí, doplň `sector`/`sectors`.

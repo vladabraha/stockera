@@ -42,6 +42,13 @@ for (const i of report.instruments) {
   );
 }
 for (const w of report.warnings) console.log(`⚠ ${w}`);
+const unsafe = http.log.filter((e) => e.status === 'unsafe');
+if (unsafe.length) {
+  console.log(`\n⛔ Bezpečnostní kontrola: ${unsafe.length} ${unsafe.length === 1 ? 'odpověď obsahovala' : 'odpovědí obsahovalo'} podezřelý obsah (např. kód) a byly zahozeny:`);
+  for (const e of unsafe) console.log(`  • ${new URL(e.url).hostname}: ${e.error}`);
+  console.log('  Nic z nich se neuložilo, dotčené instrumenty mají poslední známé údaje nebo hodnotu z výpisu.');
+  console.log('  Když se to opakuje, zdroj je nejspíš napadený nebo změnil formát – podrobnosti jsou v data/logs/network.log.');
+}
 const failedRequests = http.log.filter((e) => e.status === 'error').length;
 console.log(`\nSíťových požadavků: ${http.log.length} (zablokovaných ${http.log.filter((e) => e.status === 'blocked').length}, nedostupných ${failedRequests})`);
 

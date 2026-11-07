@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BlockedRequestError, Http, HttpError, MAX_BODY_BYTES } from '../src/net/http.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
+import { findThreat, parseSafeJson, UnsafeDataError } from '../src/net/inspect.ts';
 import {
   countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, pickOnvistaStock, sectorKey,
   yahooSymbol,
@@ -174,4 +175,31 @@ test('pickOnvistaStock returns an ISIN only for an unambiguous match', () => {
   assert.equal(pickOnvistaStock(data, 'csg', 'NL'), 'NL0015073TS8');
   assert.equal(pickOnvistaStock(data, 'CSG', null), null);
   assert.equal(pickOnvistaStock({ facets: [{ type: 'FUND', results: [r('CSG', 'NL0015073TS8', 'NL')] }] }, 'CSG', 'NL'), null);
+});
+
+test('findThreat flags code, terminal escapes, bidi tricks and prototype keys but passes normal market data', () => {
+  for (const bad of [
+    '<script>alert(1)</script>', '< SCRIPT src=//x>', '<img src=x onerror=alert(1)>', 'javascript:alert(1)', 'data:text/html;base64,PHM+',
+    'Apple\u001b[2J', 'abc\u0007', 'Fund\u202egnp.exe', '<svg/onload=x>',
+  ]) assert.ok(findThreat({ name: bad }), bad);
+  assert.equal(findThreat(JSON.parse('{"__proto__": {"x": 1}}')), 'zakázaný klíč "__proto__"');
+  assert.equal(findThreat({ a: [{ constructor: { prototype: 1 } }] }), 'zakázaný klíč "constructor"');
+  assert.ok(findThreat(new Map([['DE', '<script>']])));
+  let deep: unknown = 1;
+  for (let i = 0; i < 100; i++) deep = [deep];
+  assert.equal(findThreat(deep), 'příliš hluboké zanoření');
+  for (const ok of [
+    { name: 'iShares Core S&P 500 UCITS ETF (Acc)', url: 'https://www.ishares.com/x?a=1&b=2', note: 'Rüstung & Verteidigung – Česká zbrojovka', v: [1.5, -2, null, true] },
+    { text: 'Zeile 1\nZeile 2\tTab', cmp: 'P/E < 15 and yield > 2 %', pct: '5 %' },
+  ]) assert.equal(findThreat(ok), null);
+  assert.throws(() => parseSafeJson('{"n":"<script>"}', 'Test'), (e: unknown) => e instanceof UnsafeDataError && e.source === 'Test');
+  assert.throws(() => parseSafeJson('<html>', 'Test'), /není to JSON/);
+});
+
+test('Http discards suspicious JSON and extracted values and audits them as unsafe', async () => {
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(() => Response.json({ chart: { name: 'x<script>steal()</script>' } })) });
+  await assert.rejects(http.getJson('https://query1.finance.yahoo.com/v8/finance/chart/X'), (e: unknown) =>
+    e instanceof UnsafeDataError && /Yahoo poslal podezřelá data \(HTML\/skript\)/.test(e.message));
+  assert.throws(() => http.checkExtracted('https://www.justetf.com/p', { name: 'ETF\u001b]0;pwned\u0007' }), UnsafeDataError);
+  assert.deepEqual(http.log.map((e) => [e.status, e.error ?? '']), [[200, ''], ['unsafe', 'HTML/skript'], ['unsafe', 'řídicí znaky']]);
 });
