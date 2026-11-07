@@ -86,6 +86,11 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   započítávají všechny prodeje včetně těch s časovým testem** (výklad nejistý – raději přísněji).
 - Strop 40 mil. Kč pro osvobození časovým testem platí **jen pro rok 2025** (`TIME_TEST_CAP_YEARS`).
 - Ztráty se v rámci roku započítají proti ziskům, základ ≥ 0, ztráty se nepřevádí.
+- **Daň** = 15 % ze základu (`src/analysis/tax.ts`, sdíleno s reportem). Pásmo 23 % závisí na všech příjmech, které
+  aplikace nezná → jen poznámka v UI.
+- **Daň při prodeji teď** (panel „Brzy bez daně“): kdyby se prodaly všechny nákupy bez splněného testu za aktuální
+  hodnotu. Zisky i ztráty se sečtou s letošními prodeji bez testu, limit 100 000 Kč počítá i letošní prodeje.
+  Ukazuje se rozdíl daně proti stavu bez prodeje (záporný = ztráty sníží daň z letošních zisků). Přepočítá se i s živými cenami.
 - **Kurzy:** denní kurz ČNB ke dni obchodu (nákup kurzem dne nákupu, prodej kurzem dne prodeje); víkend/svátek
   = poslední fixing max. 7 dní zpět. EUR = CZK / kurz EUR (nebo nativně u EUR účtu).
 - **Model peněz:** `Money {native, currency, czk|null, eur|null}`, `Totals` s mapou `native` podle měn.

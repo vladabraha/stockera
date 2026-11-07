@@ -5,6 +5,7 @@ import { importBuffer } from '../src/importer.ts';
 import { pragueDate, taxFreeFrom } from '../src/analysis/calendar.ts';
 import { Converter, DbFxRates, type FxRates, type Money } from '../src/analysis/fx.ts';
 import { analyze, classifyCashOperation, computeTaxYears, type RealizedLot } from '../src/analysis/portfolio.ts';
+import { saleTaxEstimate } from '../src/analysis/tax.ts';
 import { fakeXtbExport, type FakeExport } from './helpers/fakeXtb.ts';
 
 const EUR_CZK = 25;
@@ -69,6 +70,8 @@ test('tax years: above the limit, losses offset gains, time-tested lots excluded
   assert.equal(y!.limitStatus, 'exceeded');
   assert.equal(y!.taxable.count, 2);
   assert.equal(y!.taxable.baseCzk, 10_000);
+  assert.equal(y!.taxable.taxCzk, 1_500);
+  assert.equal(y!.shortTermProfitCzk, 10_000);
   assert.equal(y!.timeTestCapExceeded, false);
 
   const [loss] = computeTaxYears([lot('2024-03-01', 150_000, 101_000)]);
@@ -155,4 +158,16 @@ test('analyze: warns when cash history starts after the first purchase; amounts 
   close(a.summary.value.native.EUR, 64);
   assert.ok(a.checks.missingRates.length > 0);
   assert.equal(a.taxYears[0]!.limitStatus, 'unknown');
+});
+
+test('sale tax estimate: losses offset gains, earlier sales of the year and the 100k limit count', () => {
+  const lots = [{ valueCzk: 80_000, profitCzk: 30_000 }, { valueCzk: 40_000, profitCzk: -10_000 }];
+  assert.deepEqual(saleTaxEstimate(lots), { count: 2, proceedsCzk: 120_000, gainsCzk: 30_000, lossesCzk: -10_000, limitExceeded: true, taxCzk: 3_000 });
+  // Within the limit → no tax at all.
+  assert.equal(saleTaxEstimate([{ valueCzk: 90_000, profitCzk: 30_000 }])!.taxCzk, 0);
+  // Small sale pushes the year over the limit: earlier short-term gains become taxable too.
+  assert.equal(saleTaxEstimate([{ valueCzk: 20_000, profitCzk: 0 }], { proceedsCzk: 90_000, shortTermProfitCzk: 10_000 })!.taxCzk, 1_500);
+  // Selling at a loss lowers tax on this year's earlier gains.
+  assert.equal(saleTaxEstimate([{ valueCzk: 50_000, profitCzk: -20_000 }], { proceedsCzk: 200_000, shortTermProfitCzk: 50_000 })!.taxCzk, -3_000);
+  assert.equal(saleTaxEstimate([{ valueCzk: null, profitCzk: 1 }]), null);
 });

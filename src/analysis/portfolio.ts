@@ -10,8 +10,7 @@ import {
   type MarketData,
 } from './market.ts';
 
-/** Annual tax-exempt limit for gross income from selling securities (§4(1)(w) ZDP). */
-export const SALES_LIMIT_CZK = 100_000;
+import { SALES_LIMIT_CZK, incomeTax } from './tax.ts';
 /** 2025 only: cap on income exempted by the time test. */
 export const TIME_TEST_CAP_CZK = 40_000_000;
 export const TIME_TEST_CAP_YEARS = new Set([2025]);
@@ -99,7 +98,9 @@ export interface TaxYear {
   limitRemainingCzk: number | null;
   timeTestedProceeds: Totals;
   /** Sales that are neither time-tested nor covered by the limit. */
-  taxable: { count: number; proceeds: Totals; cost: Totals; profit: Totals; baseCzk: number | null };
+  taxable: { count: number; proceeds: Totals; cost: Totals; profit: Totals; baseCzk: number | null; taxCzk: number | null };
+  /** Net result of all sales without the time test, regardless of the limit (for "what if I sell now"). */
+  shortTermProfitCzk: number | null;
   timeTestCapExceeded: boolean | null;
 }
 
@@ -498,10 +499,12 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
       const limitStatus = proceeds.czk == null ? 'unknown' : proceeds.czk <= SALES_LIMIT_CZK ? 'within' : 'exceeded';
       const timeTested = ls.filter((l) => l.timeTestMet);
       const timeTestedProceeds = sumMoney(timeTested.map((l) => l.proceeds));
-      const taxableLots = limitStatus === 'within' ? [] : ls.filter((l) => !l.timeTestMet);
+      const shortTerm = ls.filter((l) => !l.timeTestMet);
+      const taxableLots = limitStatus === 'within' ? [] : shortTerm;
       const tCost = sumMoney(taxableLots.map((l) => l.cost));
       const tProceeds = sumMoney(taxableLots.map((l) => l.proceeds));
       const tProfit = subTotals(tProceeds, tCost);
+      const baseCzk = limitStatus === 'unknown' || tProfit.czk == null ? null : Math.max(0, tProfit.czk);
       return {
         year,
         salesCount: ls.length,
@@ -514,8 +517,10 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
           proceeds: tProceeds,
           cost: tCost,
           profit: tProfit,
-          baseCzk: limitStatus === 'unknown' || tProfit.czk == null ? null : Math.max(0, tProfit.czk),
+          baseCzk,
+          taxCzk: incomeTax(baseCzk),
         },
+        shortTermProfitCzk: subTotals(sumMoney(shortTerm.map((l) => l.proceeds)), sumMoney(shortTerm.map((l) => l.cost))).czk,
         timeTestCapExceeded: !TIME_TEST_CAP_YEARS.has(year)
           ? false
           : timeTestedProceeds.czk == null

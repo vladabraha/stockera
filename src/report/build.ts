@@ -17,9 +17,9 @@ export function toBrowserScript(source: string): string {
   return js;
 }
 
-/** Bundled frontend: crypto + shared breakdown + content check + live prices + app, wrapped so nothing leaks into the global scope. */
+/** Bundled frontend: crypto + shared breakdown and tax + content check + live prices + app, wrapped so nothing leaks into the global scope. */
 export function frontendScript(): string {
-  const parts = ['crypto.ts', '../analysis/breakdown.ts', '../net/inspect.ts', 'live.ts', 'app.ts'].map((f) => toBrowserScript(readFileSync(join(dir, f), 'utf8')));
+  const parts = ['crypto.ts', '../analysis/breakdown.ts', '../analysis/tax.ts', '../net/inspect.ts', 'live.ts', 'app.ts'].map((f) => toBrowserScript(readFileSync(join(dir, f), 'utf8')));
   return `(() => {\n'use strict';\n${parts.join('\n')}\n})();`;
 }
 

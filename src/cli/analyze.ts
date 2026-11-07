@@ -79,7 +79,7 @@ function print(a: Analysis): void {
     }[y.limitStatus];
     console.log(`${y.year}: ${y.salesCount} prodejů, příjmy ${t(y.proceeds)} – ${limit}`);
     if (y.limitStatus === 'exceeded') {
-      console.log(`      zdanitelné prodeje ${y.taxable.count}, základ daně ${fmt(y.taxable.baseCzk ?? 0, 0)} Kč`);
+      console.log(`      zdanitelné prodeje ${y.taxable.count}, základ daně ${fmt(y.taxable.baseCzk ?? 0, 0)} Kč, daň 15 % ${fmt(y.taxable.taxCzk ?? 0, 0)} Kč`);
     }
     if (y.timeTestCapExceeded) console.log('      ⚠ překročen strop 40 mil. Kč pro časový test (2025)');
   }
