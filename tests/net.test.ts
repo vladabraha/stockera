@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { BlockedRequestError, Http, HttpError, MAX_BODY_BYTES } from '../src/net/http.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
 import {
-  countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, yahooSymbol,
+  countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, pickOnvistaStock, sectorKey,
+  yahooSymbol,
 } from '../src/market/sources.ts';
 
 test('Http blocks hosts outside the allowlist, non-HTTPS and redirects to foreign hosts', async () => {
@@ -122,15 +123,19 @@ test('parseXetraInstruments maps mnemonics to ISINs, preferring active instrumen
   assert.throws(() => parseXetraInstruments('a;b\n1;2'));
 });
 
-test('parseJustEtfProfile extracts name and country weights', () => {
-  const row = (n: string, p: string) =>
-    `<tr><td data-testid="tl_etf-holdings_countries_value_name">${n}</td><td><div><span data-testid="tl_etf-holdings_countries_value_percentage">${p}%</span></div></td></tr>`;
-  const html = `<meta property="og:title" content="S&amp;P 500 ETF | SPYL | IE000XZSV718" />${row('United States', '97.58')}${row('Other', '2.42')}`;
+test('parseJustEtfProfile extracts name, country and sector weights', () => {
+  const row = (kind: string, n: string, p: string) =>
+    `<tr><td data-testid="tl_etf-holdings_${kind}_value_name">${n}</td><td><div><span data-testid="tl_etf-holdings_${kind}_value_percentage">${p}%</span></div></td></tr>`;
+  const html = `<meta property="og:title" content="S&amp;P 500 ETF | SPYL | IE000XZSV718" />${row('countries', 'United States', '97.58')}${row('countries', 'Other', '2.42')}${row('sectors', 'Technology', '33.10')}${row('sectors', 'Other', '66.90')}`;
   assert.deepEqual(parseJustEtfProfile(html), {
     name: 'S&P 500 ETF',
     countries: [
       { name: 'United States', weight: 97.58 },
       { name: 'Other', weight: 2.42 },
+    ],
+    sectors: [
+      { name: 'Technology', weight: 33.1 },
+      { name: 'Other', weight: 66.9 },
     ],
   });
 });
@@ -150,4 +155,23 @@ test('ticker, country and exchange mappings', () => {
   assert.deepEqual(['United States', 'United Kingdom', 'South Korea', 'Other', 'Atlantis'].map(countryCode), ['US', 'GB', 'KR', 'XX', null]);
   assert.deepEqual(['Polen', 'Tschechien', 'USA', 'Großbritannien', 'Barmittel'].map(countryCode), ['PL', 'CZ', 'US', 'GB', 'XX']);
   assert.equal(exchangeCountry('VWRL.UK'), 'GB');
+});
+
+test('sectorKey maps English and German sector names to the coarse taxonomy', () => {
+  const cases: [string, string | null][] = [
+    ['Technology', 'technology'], ['IT/Telekommunikation', 'technology'], ['Sonstige Technologie', 'technology'],
+    ['Telecommunication', 'technology'], ['Financials', 'financials'], ['Finanzen', 'financials'],
+    ['Health Care', 'health'], ['Gesundheitswesen', 'health'], ['Konsumgüter zyklisch', 'consumer'],
+    ['Consumer Staples', 'consumer'], ['Energieversorger', 'utilities'], ['Energie', 'energy'],
+    ['Immobilien', 'real_estate'], ['Other', 'other'], ['Xyz', null],
+  ];
+  assert.deepEqual(cases.map(([n]) => [n, sectorKey(n)]), cases);
+});
+
+test('pickOnvistaStock returns an ISIN only for an unambiguous match', () => {
+  const r = (name: string, isin: string, cc: string) => ({ name, isin, additionalData: { countryCode: cc } });
+  const data = { facets: [{ type: 'STOCK', results: [r('CSG', 'NL0015073TS8', 'NL'), r('CSG', 'US0000000001', 'US'), r('CSGX', 'NL0000000009', 'NL')] }] };
+  assert.equal(pickOnvistaStock(data, 'csg', 'NL'), 'NL0015073TS8');
+  assert.equal(pickOnvistaStock(data, 'CSG', null), null);
+  assert.equal(pickOnvistaStock({ facets: [{ type: 'FUND', results: [r('CSG', 'NL0015073TS8', 'NL')] }] }, 'CSG', 'NL'), null);
 });

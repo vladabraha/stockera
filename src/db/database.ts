@@ -130,6 +130,16 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (ticker, country)
   );
   `,
+  `
+  ALTER TABLE instrument_meta ADD COLUMN sector_source TEXT;
+
+  CREATE TABLE sector_weights (
+    ticker TEXT NOT NULL,
+    sector TEXT NOT NULL,
+    weight REAL NOT NULL,
+    PRIMARY KEY (ticker, sector)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

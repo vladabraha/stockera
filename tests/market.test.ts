@@ -8,7 +8,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { analyze } from '../src/analysis/portfolio.ts';
-import { geography } from '../src/analysis/market.ts';
+import { geography, sectorBreakdown } from '../src/analysis/market.ts';
 import { fakeXtbExport } from './helpers/fakeXtb.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
 
@@ -45,8 +45,17 @@ const yahoo = JSON.stringify({
   chart: { result: [{ meta: { currency: 'USD', gmtoffset: -18000 }, timestamp: [1736784000], indicators: { quote: [{ close: [75] }] } }] },
 });
 
+const fundBreakdowns = JSON.stringify({ branchBreakdown: { list: [{ nameBreakdown: 'IT/Telekommunikation', investmentPct: 40 }, { nameBreakdown: 'Finanzen', investmentPct: 35 }] } });
+const search = JSON.stringify({
+  facets: [{ type: 'STOCK', results: [{ name: 'STK', isin: 'US0000000002', additionalData: { countryCode: 'US' } }, { name: 'STK', isin: 'DE0000000003', additionalData: { countryCode: 'DE' } }] }],
+});
+const snapshot = JSON.stringify({ company: { branch: { name: 'Pharma', sector: { name: 'Gesundheitswesen' } } } });
+
 function routes(u: string): Response | undefined {
   if (u.includes('cnb.cz')) return new Response(cnb);
+  if (u.includes('api.onvista.de/api/v1/funds/')) return new Response(fundBreakdowns);
+  if (u.includes('api.onvista.de/api/v1/instruments/search')) return new Response(search);
+  if (u.includes('api.onvista.de/api/v1/stocks/ISIN:US0000000002/snapshot')) return new Response(snapshot);
   if (u.includes('allTradableInstruments')) return new Response(xetra);
   if (u.includes('etf-profile')) return new Response(profile);
   if (u.includes('performance-chart')) return new Response(chart);
@@ -54,7 +63,7 @@ function routes(u: string): Response | undefined {
   return undefined;
 }
 
-test('updateMarketData stores rates, ISINs, countries and prices; requests carry no personal data', async () => {
+test('updateMarketData stores rates, ISINs, countries, sectors and prices; requests carry no personal data', async () => {
   const db = seed();
   const calls: string[] = [];
   const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(routes, calls) });
@@ -66,9 +75,17 @@ test('updateMarketData stores rates, ISINs, countries and prices; requests carry
     r.instruments.map((i) => [i.ticker, i.isin, i.priceSource, i.newPrices, i.countrySource]),
     [
       ['ETFA.DE', 'IE0000000001', 'justetf', 2, 'justetf'],
-      ['STK.US', null, 'yahoo', 1, 'exchange'],
+      ['STK.US', 'US0000000002', 'yahoo', 1, 'isin'],
     ],
   );
+  assert.deepEqual(r.instruments.map((i) => i.sectorSource), ['onvista', 'onvista']);
+  const sectors = db.prepare(`SELECT ticker, sector, weight FROM sector_weights ORDER BY ticker, weight DESC`).all().map((x) => ({ ...x }));
+  assert.deepEqual(sectors, [
+    { ticker: 'ETFA.DE', sector: 'technology', weight: 40 },
+    { ticker: 'ETFA.DE', sector: 'financials', weight: 35 },
+    { ticker: 'ETFA.DE', sector: 'other', weight: 25 },
+    { ticker: 'STK.US', sector: 'health', weight: 100 },
+  ]);
   const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY country`).all().map((x) => ({ ...x }));
   assert.deepEqual(weights, [
     { country: 'JP', weight: 10 },
@@ -81,7 +98,7 @@ test('updateMarketData stores rates, ISINs, countries and prices; requests carry
     assert.ok(!url.includes(ACCOUNT), url);
     assert.ok(!/[?&](volume|qty|amount|value|price)=/i.test(url), url);
   }
-  assert.ok(calls.every((u) => /^https:\/\/(www\.cnb\.cz|www\.cashmarket\.deutsche-boerse\.com|www\.justetf\.com|query1\.finance\.yahoo\.com)\//.test(u)));
+  assert.ok(calls.every((u) => /^https:\/\/(www\.cnb\.cz|www\.cashmarket\.deutsche-boerse\.com|www\.justetf\.com|api\.onvista\.de|query1\.finance\.yahoo\.com)\//.test(u)));
 
   // Second run is incremental: no Xetra list / profile re-download, prices from last date − 7 days
   calls.length = 0;
@@ -90,21 +107,27 @@ test('updateMarketData stores rates, ISINs, countries and prices; requests carry
   assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('dateFrom=2025-01-06')));
 });
 
-test('ETF without a justETF country breakdown falls back to onvista; Yahoo provides stock names', async () => {
+test('ETF without a justETF country breakdown falls back to onvista, sectors fall back to justETF; Yahoo provides stock names', async () => {
   const db = seed();
   const onvista = JSON.stringify({ countryBreakdown: { list: [{ nameBreakdown: 'Polen', investmentPct: 73 }, { nameBreakdown: 'Ungarn', investmentPct: 20.17 }, { nameBreakdown: 'Tschechien', investmentPct: 6.83 }] } });
   const named = yahoo.replace('"currency":"USD"', '"currency":"USD","longName":"Stock Inc."');
   const http = new Http({
     minIntervalMs: 0,
     fetch: fakeFetch((u) =>
-      u.includes('etf-profile') ? new Response('<meta property="og:title" content="Swap ETF | X | IE0000000001" />')
-        : u.includes('api.onvista.de') ? new Response(onvista)
+      u.includes('etf-profile') ? new Response('<meta property="og:title" content="Swap ETF | X | IE0000000001" />' +
+        '<td data-testid="tl_etf-holdings_sectors_value_name">Financials</td><span data-testid="tl_etf-holdings_sectors_value_percentage">55.00%</span>')
+        : u.includes('api.onvista.de/api/v1/funds/') ? new Response(onvista)
           : u.includes('finance.yahoo.com') ? new Response(named)
             : routes(u)),
   });
   const r = await updateMarketData(db, http, { today: '2025-01-13' });
   assert.deepEqual(r.warnings, []);
   assert.equal(r.instruments[0]!.countrySource, 'onvista');
+  assert.equal(r.instruments[0]!.sectorSource, 'justetf');
+  assert.deepEqual(db.prepare(`SELECT sector, weight FROM sector_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x })), [
+    { sector: 'financials', weight: 55 },
+    { sector: 'other', weight: 45 },
+  ]);
   const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x }));
   assert.deepEqual(weights, [{ country: 'PL', weight: 73 }, { country: 'HU', weight: 20.17 }, { country: 'CZ', weight: 6.83 }]);
   assert.deepEqual(db.prepare('SELECT ticker, name FROM instrument_meta ORDER BY ticker').all().map((x) => ({ ...x })), [
@@ -126,6 +149,22 @@ test('manual overrides win and failures become warnings', async () => {
   ]);
   assert.equal(r.warnings.length, 1);
   assert.match(r.warnings[0]!, /STK\.US.*HTTP 429/);
+});
+
+test('manual sectors win; unknown sector keys are reported', async () => {
+  const db = seed();
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(routes) });
+  const r = await updateMarketData(db, http, {
+    today: '2025-01-13',
+    config: { 'ETFA.DE': { sectors: { energy: 70, health: 30 } }, 'STK.US': { sector: 'defense' } },
+  });
+  assert.equal(r.instruments[0]!.sectorSource, 'manual');
+  assert.deepEqual(db.prepare(`SELECT sector, weight FROM sector_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x })), [
+    { sector: 'energy', weight: 70 },
+    { sector: 'health', weight: 30 },
+  ]);
+  assert.equal(r.warnings.length, 1);
+  assert.match(r.warnings[0]!, /STK\.US: neznámý sektor defense/);
 });
 
 test('analyze values holdings at newer market prices, splits by country and builds history', async () => {
@@ -157,6 +196,15 @@ test('geography puts holdings without composition into "??"', () => {
     { value: t(250), countries: [] },
   ]);
   assert.deepEqual(g.map((s) => [s.country, s.share]), [['US', 75], ['??', 25]]);
+});
+
+test('sectorBreakdown splits values by sector weights', () => {
+  const t = (czk: number) => ({ czk, eur: czk / 25, native: { EUR: czk / 25 } });
+  const s = sectorBreakdown([
+    { value: t(600), sectors: [{ sector: 'technology', weight: 50 }, { sector: 'financials', weight: 50 }] },
+    { value: t(400), sectors: [{ sector: 'technology', weight: 100 }] },
+  ]);
+  assert.deepEqual(s.map((x) => [x.sector, x.czk, x.share]), [['technology', 700, 70], ['financials', 300, 30]]);
 });
 
 test('instruments.json saved by Windows Notepad (UTF-8 BOM) still loads', () => {

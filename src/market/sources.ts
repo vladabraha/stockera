@@ -91,16 +91,18 @@ export interface EtfProfile {
   name: string | null;
   /** Top countries by weight (%), remainder reported by justETF as "Other". */
   countries: { name: string; weight: number }[];
+  /** Top sectors by weight (%), remainder as "Other". */
+  sectors: { name: string; weight: number }[];
 }
 
 export function parseJustEtfProfile(html: string): EtfProfile {
   const decode = (s: string) => s.replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"').trim();
   const title = /<meta property="og:title" content="([^"]*)"/.exec(html)?.[1];
-  const countries: EtfProfile['countries'] = [];
-  const re =
-    /data-testid="tl_etf-holdings_countries_value_name">([^<]+)<[\s\S]*?data-testid="tl_etf-holdings_countries_value_percentage">([\d.,]+)%</g;
-  for (const m of html.matchAll(re)) countries.push({ name: decode(m[1]!), weight: Number(m[2]!.replace(',', '')) });
-  return { name: title ? decode(title.split('|')[0]!) : null, countries };
+  const table = (kind: string) => {
+    const re = new RegExp(`data-testid="tl_etf-holdings_${kind}_value_name">([^<]+)<[\\s\\S]*?data-testid="tl_etf-holdings_${kind}_value_percentage">([\\d.,]+)%<`, 'g');
+    return [...html.matchAll(re)].map((m) => ({ name: decode(m[1]!), weight: Number(m[2]!.replace(',', '')) }));
+  };
+  return { name: title ? decode(title.split('|')[0]!) : null, countries: table('countries'), sectors: table('sectors') };
 }
 
 interface JustEtfChart {
@@ -118,14 +120,75 @@ export async function fetchJustEtfPrices(http: Http, isin: string, from: string,
 /** Fallback for ETFs whose justETF profile has no country breakdown (swap ETFs, new funds). Country names are German. */
 export const onvistaBreakdownsUrl = (isin: string) => `https://api.onvista.de/api/v1/funds/ISIN:${encodeURIComponent(isin)}/breakdowns`;
 
-interface OnvistaBreakdowns {
-  countryBreakdown?: { list?: { nameBreakdown?: string; investmentPct?: number }[] };
+type OnvistaList = { list?: { nameBreakdown?: string; investmentPct?: number }[] };
+export interface OnvistaBreakdowns {
+  countryBreakdown?: OnvistaList;
+  branchBreakdown?: OnvistaList;
 }
 
-export function parseOnvistaCountries(data: OnvistaBreakdowns): { name: string; weight: number }[] {
-  return (data.countryBreakdown?.list ?? [])
-    .filter((c) => c.nameBreakdown && Number.isFinite(c.investmentPct))
-    .map((c) => ({ name: c.nameBreakdown!.trim(), weight: c.investmentPct! }));
+const onvistaList = (l: OnvistaList | undefined) => (l?.list ?? [])
+  .filter((c) => c.nameBreakdown && Number.isFinite(c.investmentPct))
+  .map((c) => ({ name: c.nameBreakdown!.trim(), weight: c.investmentPct! }));
+
+export const parseOnvistaCountries = (data: OnvistaBreakdowns) => onvistaList(data.countryBreakdown);
+/** Fund sectors (German names, complete breakdown – more detailed than justETF's top 4 + Other). */
+export const parseOnvistaSectors = (data: OnvistaBreakdowns) => onvistaList(data.branchBreakdown);
+
+/** Instrument search; used only to find the ISIN of a stock from its XTB ticker. */
+export const onvistaSearchUrl = (query: string) =>
+  `https://api.onvista.de/api/v1/instruments/search/facet?searchValue=${encodeURIComponent(query)}&perType=10`;
+
+interface OnvistaSearch {
+  facets?: { type?: string; results?: { name?: string; symbol?: string; isin?: string; additionalData?: { countryCode?: string } }[] }[];
+}
+
+/** ISIN of the only stock whose name or symbol equals the ticker and whose company country matches; else null (no guessing). */
+export function pickOnvistaStock(data: OnvistaSearch, symbol: string, country: string | null): string | null {
+  const s = symbol.toUpperCase();
+  const hits = (data.facets ?? []).filter((f) => f.type === 'STOCK').flatMap((f) => f.results ?? [])
+    .filter((r) => r.isin && (r.name?.toUpperCase() === s || r.symbol?.toUpperCase() === s))
+    .filter((r) => !country || r.additionalData?.countryCode === country);
+  const isins = [...new Set(hits.map((r) => r.isin!))];
+  return isins.length === 1 ? isins[0]! : null;
+}
+
+export const onvistaStockUrl = (isin: string) => `https://api.onvista.de/api/v1/stocks/ISIN:${encodeURIComponent(isin)}/snapshot`;
+
+interface OnvistaStock {
+  company?: { branch?: { name?: string; sector?: { name?: string } } };
+}
+
+/** Company sector of a stock (German), e.g. "Technologie". */
+export function parseOnvistaStockSector(data: OnvistaStock): string | null {
+  return data.company?.branch?.sector?.name?.trim() || null;
+}
+
+// ------------------------------------------------------------ sectors ------
+
+// Coarse on purpose: sources differ in granularity (onvista often reports "IT/Telekommunikation" and one "Konsumgüter"),
+// so technology + communication and cyclical + staples consumer goods are merged to keep ETFs comparable.
+export const SECTORS = [
+  'technology', 'financials', 'health', 'industrials', 'consumer', 'energy', 'materials', 'utilities', 'real_estate', 'other',
+] as const;
+export type Sector = (typeof SECTORS)[number];
+
+// Order matters: the first match wins ("Sonstige Technologie" is technology, "Energieversorger" a utility).
+const SECTOR_PATTERNS: [RegExp, Sector][] = [
+  [/technolog|software|halbleiter|semiconductor|computer|elektronik|\bit\b|telekom|telecom|kommunikation|communication|medien|media/i, 'technology'],
+  [/financ|finanz|bank|versicher|insurance/i, 'financials'],
+  [/health|gesundheit|pharma|biotech|medizin/i, 'health'],
+  [/industr|maschinen|luftfahrt|aerospace|defen[cs]e|rüstung|transport|logistik/i, 'industrials'],
+  [/konsum|consumer|einzelhandel|retail|nahrung|food|getränk|zyklisch|cyclical|discretionary|staples/i, 'consumer'],
+  [/versorg|utilit/i, 'utilities'],
+  [/energ|öl|oil|gas/i, 'energy'],
+  [/rohstoff|material|grundstoff|chemie|chemical|bergbau|mining|metal/i, 'materials'],
+  [/immobil|real estate/i, 'real_estate'],
+  [/sonstig|other|andere|barmittel|cash|liquid|diverse/i, 'other'],
+];
+
+/** English (justETF) or German (onvista) sector name → common sector key; null if unknown. */
+export function sectorKey(name: string): Sector | null {
+  return SECTOR_PATTERNS.find(([re]) => re.test(name))?.[1] ?? null;
 }
 
 // -------------------------------------------------------------- Yahoo ------

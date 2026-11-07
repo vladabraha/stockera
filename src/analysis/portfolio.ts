@@ -4,7 +4,7 @@ import { checkFifo, type FifoMismatch } from './fifo.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
 import {
-  DbMarketData, crossConvert, geography, valueHistory, type GeographySlice, type HistoryLot, type HistoryPoint,
+  DbMarketData, crossConvert, geography, sectorBreakdown, valueHistory, type GeographySlice, type SectorSlice, type HistoryLot, type HistoryPoint,
   type MarketData,
 } from './market.ts';
 
@@ -42,6 +42,7 @@ export interface Holding {
   isin: string | null;
   countries: { country: string; weight: number }[];
   countrySource: string | null;
+  sectors: { sector: string; weight: number }[];
   quantity: number;
   cost: Totals;
   value: Totals;
@@ -142,6 +143,7 @@ export interface Analysis {
   summary: Summary;
   holdings: Holding[];
   geography: GeographySlice[];
+  sectors: SectorSlice[];
   history: HistoryPoint[];
   /** Price series per instrument for charts (from ~1 month before the first purchase). */
   instruments: Record<string, InstrumentSeries>;
@@ -240,6 +242,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
       isin: m.isin,
       countries: m.countries,
       countrySource: m.countrySource,
+      sectors: m.sectors,
       quantity: lots.reduce((a, l) => a + l.quantity, 0),
       cost,
       value,
@@ -428,6 +431,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     summary,
     holdings,
     geography: geography(holdings),
+    sectors: sectorBreakdown(holdings),
     history: valueHistory(historyLots(), market, fx, today),
     instruments: instrumentSeries(),
     realized,

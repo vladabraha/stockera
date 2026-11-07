@@ -2,7 +2,7 @@
 
 Záznam všech architektonických, bezpečnostních a výpočetních rozhodnutí včetně důvodů. Před úpravou si přečti
 celý soubor; když rozhodnutí měníš, uprav ho tady (a v `README.md` / `docs/ZADANI.md`).
-Související: `docs/ZADANI.md` (zadání), `docs/xtb-format.md` (formát exportu), `docs/zdroje-dat.md` (zdroje dat).
+Související: `docs/ZADANI.md` (zadání), `docs/architektura.md` (architektura, import, DB, frontend), `docs/xtb-format.md` (formát exportu), `docs/zdroje-dat.md` (zdroje dat).
 
 ## 0. Nepřekročitelná pravidla od uživatele
 
@@ -115,10 +115,19 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     `Mozilla/5.0`. Obecně: HTTP 429/502/503/504 se 2× zopakuje (po 2 s a 5 s), pak varování, ne pád.
     Z odpovědi se bere i `longName` → plný název akcie. Mapování `.UK`→`.L`, `.NL`→`.AS`, `.US`→bez přípony; GBp ÷ 100.
   - Země akcie: prefix ISIN, jinak země burzy. Kód `GB`, ne `UK`.
+  - ISIN akcie (mimo `.DE`): onvista vyhledávání `api/v1/instruments/search/facet?searchValue={symbol}` – posílá se jen
+    symbol bez přípony burzy; ISIN se vezme **jen při jednoznačné shodě** (název/symbol = ticker a země burzy sedí), jinak nic.
+  - **Sektory** (`sector_weights`, `instrument_meta.sector_source`): ETF → onvista `breakdowns` (`branchBreakdown`, úplný
+    rozpad), záložně justETF profil (jen top 4 + „Other“); akcie → onvista `stocks/ISIN:{isin}/snapshot`
+    (`company.branch.sector`). Názvy (EN/DE) mapuje `sectorKey()` regexy na **hrubou taxonomii** 10 sektorů
+    (`SECTORS`): technologie + komunikace a cyklické + necyklické spotřební zboží jsou **sloučené**, protože onvista
+    u části ETF vrací jen „IT/Telekommunikation“ a jediné „Konsumgüter“ – jemnější dělení by ETF nešlo porovnat.
+    Zbytek do 100 % = `other`. ETF se obnovují po 30 dnech, sektor akcie se stáhne jednou. Neznámý název → varování
+    a `other`. CSG.NL onvista vede jako „Sonstige Technologie“ (ve skutečnosti obrana) → ruční `"sector": "industrials"`.
 - **Zamítnuto:** Stooq (vyžaduje JS), OpenFIGI (nevrací ISIN), vyhledávání Börse Frankfurt/Euronext (prázdné),
   „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční doplnění.
 - Ruční přepisy: `data/instruments.json` (vzor `config/instruments.example.json`, klíče začínající `$` se ignorují):
-  `isin`, `countries`/`country`, `priceSource` (`justetf`|`yahoo`|`none`), `yahooSymbol`.
+  `isin`, `countries`/`country`, `sector`/`sectors` (klíče z `SECTORS`), `priceSource` (`justetf`|`yahoo`|`none`), `yahooSymbol`.
   Swapové/aktivní ETF (LEER, DEGT) nemají na justETF země → onvista; teprve když selže i ta, `??` = „Neznámé složení“.
 - **Ceny se stahují od společného hrubého data** (1. 12. roku před prvním nákupem) pro všechny tickery, aby
   z požadavků nešlo vyčíst, kdy byl který instrument koupen. Dál inkrementálně od posledního data − 7 dní.
@@ -178,11 +187,20 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Body nákupů/prodejů v grafu instrumentu: částka (zaplaceno / utrženo + zisk, v měně instrumentu i v Kč/€) se ukazuje
   v **tooltipu** nejbližšího bodu grafu (funguje i dotykem, `<title>` na mobilu nejde); max 3 obchody, zbytek jen počtem.
   V režimu „Hodnota pozice“ leží body na křivce hodnoty.
-- Vědomě **ne „typický AI dashboard“**: teplé neutrální pozadí (#f4f2ed), tlumená zelenomodrá akcentní barva
-  (#127a6b), vlastní paleta tickerů (ne Tableau), barevné „avatary“ tickerů, segmentové přepínače, bez barevných
-  levých okrajů karet a gradientů. Systémové fonty (CSP blokuje webfonty), tabulkové číslice.
+- Panel **Podle sektorů** (Portfolio, pod zeměmi): skládaný pruh + seznam sektorů s hodnotou v Kč/€ a podílem;
+  ETF jsou rozpočítané podle sektorů firem uvnitř. Řádek instrumentu ukazuje v detailu top 3 sektory.
+- **Design = moderní trading aplikace** (přání uživatele; zamítnuté směry „úřední razítko“ a „vkladní knížka“).
+  Jediný výrazný prvek: **tmavě modrý pás s hodnotou portfolia a grafem** (`.hero`, `--band #0f1d3a`, přepisuje
+  barevné proměnné uvnitř). Okolí klidné: pozadí #eef1f6, bílé panely bez stínů, text #14213d, akcent #2f5bff,
+  zisk #0b9a6d, ztráta #e03a55 (tmavý režim bg #0a1222). Čísla a nadpisy v `--fig` (Bahnschrift / DIN Alternate –
+  systémové „burzovní“ fonty, CSP blokuje webfonty), UI v systémovém sans, tabulkové číslice.
+  Taby = podtržené tlačítka s počtem, změny jako **pill `chip()`** (zelená/červená), **sparkline** posledních ~3 měsíců
+  v řádku pozice, kulaté avatary tickerů. Jediná nevyžádaná animace: jednorázové vykreslení čáry grafu po odemčení
+  (respektuje `prefers-reduced-motion`).
+  Pravidla (skill frontend-design): žádné VERZÁLKY u popisků, žádné meta řetězce s „·“, žádné šipky „→/←“ v textu
+  odkazů, žádné stíny/gradienty jako dekorace, šedé pro „Ostatní/Neznámé“ studené (#9aa3b2 / #cfd5de).
 - Světlý i tmavý režim podle `prefers-color-scheme` (CSS proměnné v `styles.css`).
-- Responzivita: < 860 px jeden sloupec, < 640 px statistiky 2×, taby na celou šířku, **tabulky → karty**
+- Responzivita: < 960 px řádek pozice na 2 řádky, < 860 px jeden sloupec, < 640 px statistiky 2×, bez sparkline, taby na celou šířku, **tabulky → karty**
   (`td[data-label]` + `td::before`). Každá buňka tabulky musí mít `data-label`.
 - Vlastní SVG grafy bez knihoven. Výkon: decimace na ~2 body/px, hover přes `requestAnimationFrame`, binární
   hledání bodu, min/max cyklem (ne spread – velká pole). Změřeno na 40 instrumentech × 10 let při 4× zpomaleném

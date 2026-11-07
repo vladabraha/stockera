@@ -14,7 +14,7 @@ type Point = [x: number, y: number];
 const RANGES: [label: string, days: number | null][] = [
   ['1M', 31], ['3M', 92], ['6M', 183], ['1R', 366], ['3R', 1096], ['Vše', null],
 ];
-const PALETTE = ['#127a6b', '#e0662b', '#3566c9', '#c23a6b', '#7a9a1f', '#d99a16', '#5a6b80', '#8d4a9e', '#1b8fb0', '#a3442b', '#4f7d4a', '#b38b59'];
+const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
 const TAX_LIMIT_CZK = 100_000;
 
 const state = {
@@ -24,6 +24,7 @@ const state = {
   range: 'Vše',
   chart: { kind: 'portfolio' } as ChartMode,
   open: new Set<string>(),
+  intro: true,
   colors: new Map<string, string>(),
 };
 
@@ -163,6 +164,37 @@ function avatar(ticker: string): HTMLElement {
   return paint(h('span', { class: `avatar${label.length > 3 ? ' long' : ''}`, 'aria-hidden': 'true' }, label), { background: colorOf(ticker) });
 }
 
+/** Coloured change pill (percent), optional absolute amount as a tooltip. */
+function chip(text: string, value: number | null | undefined, title?: string): HTMLElement {
+  return h('span', { class: `chip num ${sign(value)}`, title }, text);
+}
+
+/** Last ~3 months of the instrument price, coloured by direction. */
+function sparkline(ticker: string): SVGElement | HTMLElement {
+  const all = state.data!.instruments[ticker]?.prices ?? [];
+  const pts = all.slice(-66);
+  if (pts.length < 2) return h('span', { class: 'spark' });
+  const W = 120, H = 36;
+  let lo = Infinity, hi = -Infinity;
+  for (const [, c] of pts) { if (c < lo) lo = c; if (c > hi) hi = c; }
+  const y = (c: number) => (H - 3 - ((c - lo) / (hi - lo || 1)) * (H - 6)).toFixed(1);
+  const d = pts.map(([, c], i) => `${i ? 'L' : 'M'}${((i / (pts.length - 1)) * W).toFixed(1)},${y(c)}`).join('');
+  const up = pts.at(-1)![1] >= pts[0]![1];
+  return s('svg', { viewBox: `0 0 ${W} ${H}`, class: `spark ${up ? 'pos' : 'neg'}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `Cena za 3 měsíce ${up ? 'roste' : 'klesá'}` },
+    s('title', {}, 'Vývoj ceny za poslední 3 měsíce'), s('path', { d }));
+}
+
+const SECTOR_NAMES: Record<string, string> = {
+  technology: 'Technologie a komunikace', financials: 'Finance', health: 'Zdravotnictví', industrials: 'Průmysl',
+  consumer: 'Spotřební zboží', energy: 'Energie', materials: 'Suroviny', utilities: 'Veřejné služby',
+  real_estate: 'Nemovitosti', other: 'Ostatní a hotovost', '??': 'Neznámé složení',
+};
+const SECTOR_COLORS: Record<string, string> = {
+  technology: '#3d6bff', financials: '#12a17d', health: '#e5486a', industrials: '#f0a020', consumer: '#8a63e8',
+  energy: '#f07a3c', materials: '#9aa63a', utilities: '#1aa3c8', real_estate: '#c2559e', other: '#9aa3b2', '??': '#cfd5de',
+};
+const sectorName = (k: string) => SECTOR_NAMES[k] ?? k;
+
 function progress(fraction: number, cls = ''): HTMLElement {
   const f = Math.max(0, Math.min(1, fraction));
   return h('div', { class: `progress ${cls}` }, paint(h('div', { class: 'fill' }), { width: `${(f * 100).toFixed(1)}%` }));
@@ -190,7 +222,7 @@ function lotTax(l: HoldingLot): HTMLElement {
     progress(lotProgress(l), l.taxFree ? 'done' : ''),
     l.taxFree
       ? h('span', { class: 'ok-text' }, 'bez daně')
-      : h('span', {}, czDate(l.taxFreeFrom), h('small', {}, ` · ${inDays(l.daysUntilTaxFree)}`)));
+      : h('span', {}, czDate(l.taxFreeFrom), h('small', {}, inDays(l.daysUntilTaxFree))));
 }
 
 // ---------------------------------------------------------------- unlock
@@ -262,18 +294,25 @@ function render(): void {
     header(a),
     h('main', {}, state.tab === 'portfolio' ? portfolioTab(a) : soldTab(a)),
     h('footer', {},
-      `Data XTB k ${czDate(a.snapshotAsOf)} · vygenerováno ${new Date(a.generatedAt).toLocaleString('cs-CZ')} · zpracováno lokálně, bez odesílání dat`),
+      h('span', {}, `Data XTB k ${czDate(a.snapshotAsOf)}`),
+      h('span', {}, `Vygenerováno ${new Date(a.generatedAt).toLocaleString('cs-CZ')}`),
+      h('span', {}, 'Zpracováno jen na tvém počítači')),
   );
   window.scrollTo(0, scrollY);
+  state.intro = false;
 }
 
 function header(a: Analysis): HTMLElement {
   return h('header', {},
     h('div', { class: 'brand' }, logo(), h('span', {}, 'Stockera')),
-    h('nav', { class: 'tabs' }, segmented([['portfolio', 'Portfolio'], ['sold', `Prodané${a.realized.length ? ` (${a.realized.length})` : ''}`]], state.tab, (t) => {
-      state.tab = t;
-      render();
-      window.scrollTo(0, 0);
+    h('nav', { class: 'tabs' }, ...([['portfolio', 'Portfolio', null], ['sold', 'Prodané', a.realized.length || null]] as const).map(([t, label, count]) => {
+      const b = button(h('span', {}, label, count ? h('span', { class: 'count' }, String(count)) : null), () => {
+        state.tab = t;
+        render();
+        window.scrollTo(0, 0);
+      }, state.tab === t ? 'on' : '');
+      if (state.tab === t) b.setAttribute('aria-current', 'page');
+      return b;
     })),
     h('div', { class: 'tools' },
       segmented([['czk', 'Kč'], ['eur', '€']], state.cur, (c) => { state.cur = c; render(); }, 'cur'),
@@ -281,6 +320,7 @@ function header(a: Analysis): HTMLElement {
         state.data = null;
         state.open.clear();
         state.chart = { kind: 'portfolio' };
+        state.intro = true;
         renderLogin();
       }, 'ghost', 'Zahodit dešifrovaná data a zamknout')),
   );
@@ -334,30 +374,32 @@ function portfolioTab(a: Analysis): HTMLElement {
       stat('Lze prodat bez daně', fmtMoney(freeValue, curCode()), `${free.length} z ${lots.length} nákupů`),
     ),
     h('div', { class: 'grid2' }, allocationPanel(a), geographyPanel(a)),
+    sectorsPanel(a),
     upcomingPanel(a),
     panel(null,
-      h('div', { class: 'panel-head' }, h('h2', {}, 'Držené instrumenty'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů · ${lots.length} nákupů`)),
+      h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
       h('div', { class: 'acc-list' }, ...a.holdings.map(holdingRow))),
     checksPanel(a),
   );
 }
 
 function instrumentName(ticker: string, name: string | null, quantity: number): HTMLElement {
-  return h('div', { class: 'iname' }, h('b', { title: name ?? ticker }, name || ticker), h('span', {}, `${ticker} · ${fmtNum(quantity, 4)} ks`));
+  return h('div', { class: 'iname' }, h('b', { title: name ?? ticker }, name || ticker), h('span', {}, h('span', { class: 'ticker' }, ticker), `${fmtNum(quantity, 4)} ks`));
 }
 
 function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
   const taxText = freeShare >= 1 - 1e-9
     ? h('span', { class: 'ok-text' }, 'vše bez daně')
-    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně · ` : '', 'další ', h('b', {}, czDate(x.nextTaxFreeDate)));
+    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně, ` : '', 'bez daně od ', h('b', {}, czDate(x.nextTaxFreeDate)));
   return accordion(`h:${x.ticker}`, [
     h('div', { class: 'irow' },
       avatar(x.ticker),
       instrumentName(x.ticker, x.name, x.quantity),
+      sparkline(x.ticker),
       h('div', { class: 'ival' },
         h('b', { class: 'num' }, totals(x.value)),
-        signed(`${signedMoney(totals(x.profit), totalsValue(x.profit))} · ${pct(x.profitPct)}`, totalsValue(x.profit))),
+        chip(pct(x.profitPct), pctValue(x.profitPct), signedMoney(totals(x.profit), totalsValue(x.profit)))),
       h('div', { class: 'itax' }, progress(freeShare, freeShare >= 1 - 1e-9 ? 'done' : ''), taxText),
     ),
   ], () => {
@@ -370,7 +412,8 @@ function holdingRow(x: Holding): HTMLElement {
         x.isin ? h('span', {}, 'ISIN ', h('b', {}, x.isin)) : null,
         h('span', {}, 'Ø nákup ', h('b', {}, x.lots[0] ? price(avg, x.lots[0].cost.currency) : '—')),
         last ? h('span', {}, 'Cena ', h('b', {}, fmtMoney(last.close, last.currency)), ` (${czDate(last.date)})`) : null,
-        countries ? h('span', {}, countries) : null,
+        countries ? h('span', {}, 'Země ', h('b', {}, countries)) : null,
+        x.sectors?.length ? h('span', {}, 'Sektory ', h('b', {}, x.sectors.slice(0, 3).map((c) => `${sectorName(c.sector)} ${fmtNum(c.weight, 0)} %`).join(', '))) : null,
         button('Zobrazit graf', () => showInstrument(x.ticker), 'link'),
       ),
       table(['Nákup', 'Ks', 'Nákupní cena', 'Investováno', 'Hodnota', 'Zisk', '%', 'Časový test'],
@@ -405,11 +448,11 @@ function upcomingPanel(a: Analysis): HTMLElement | null {
     h('ul', { class: 'upcoming' }, ...items.map(({ x, l }) => h('li', {},
       avatar(x.ticker),
       h('div', { class: 'grow' },
-        h('div', {}, h('b', {}, x.ticker), h('span', { class: 'muted' }, ` · ${fmtNum(l.quantity, 4)} ks z ${czDate(l.openDate)}`)),
+        h('div', {}, h('b', {}, x.ticker), h('span', { class: 'muted' }, ` ${fmtNum(l.quantity, 4)} ks z ${czDate(l.openDate)}`)),
         progress(lotProgress(l))),
       h('div', { class: 'right' },
         h('b', {}, czDate(l.taxFreeFrom)),
-        h('div', { class: 'muted small' }, inDays(l.daysUntilTaxFree), ' · ', signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))),
+        h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))),
     ))));
 }
 
@@ -419,6 +462,8 @@ function checksPanel(a: Analysis): HTMLElement | null {
   if (a.checks.missingRates.length) items.push(`Chybí kurzy ČNB: ${a.checks.missingRates.slice(0, 10).join(', ')}${a.checks.missingRates.length > 10 ? '…' : ''}`);
   const unknown = a.holdings.filter((x) => !x.countries.length).map((x) => x.ticker);
   if (unknown.length) items.push(`Neznámé geografické složení: ${unknown.join(', ')} (doplň data/instruments.json)`);
+  const noSector = a.holdings.filter((x) => !x.sectors?.length).map((x) => x.ticker);
+  if (noSector.length) items.push(`Neznámé sektory: ${noSector.join(', ')} (doplň "sector" do data/instruments.json)`);
   const noPrice = a.holdings.filter((x) => !(a.instruments[x.ticker]?.prices.length)).map((x) => x.ticker);
   if (noPrice.length) items.push(`Chybí historie cen: ${noPrice.join(', ')}`);
   if (!items.length) return null;
@@ -447,10 +492,11 @@ function heroPanel(a: Analysis): HTMLElement {
     hero.append(
       h('div', { class: 'hero-head' },
         h('div', {},
-          h('div', { class: 'eyebrow' }, button('← Celé portfolio', () => { state.chart = { kind: 'portfolio' }; render(); }, 'link')),
+          h('div', { class: 'eyebrow' }, button('Zpět na celé portfolio', () => { state.chart = { kind: 'portfolio' }; render(); }, 'link back')),
           h('div', { class: 'hero-title' }, avatar(mode.ticker), h('div', {}, h('b', {}, mode.ticker), h('span', { class: 'muted' }, name))),
           x ? h('div', { class: 'big' }, totals(x.value)) : h('div', { class: 'big' }, r ? `prodáno za ${totals(r.proceeds)}` : '—'),
-          profit ? signed(`${signedMoney(totals(profit), totalsValue(profit))} · ${pct(x ? x.profitPct : r!.profitPct)}${x ? '' : ' realizováno'}`, totalsValue(profit), 'div', 'delta') : null),
+          profit ? h('div', { class: 'delta' }, chip(pct(x ? x.profitPct : r!.profitPct), pctValue(x ? x.profitPct : r!.profitPct)),
+            signed(signedMoney(totals(profit), totalsValue(profit)), totalsValue(profit)), x ? null : h('span', { class: 'muted' }, 'realizováno')) : null),
         h('div', { class: 'hero-tools' },
           segmented([['price', 'Cena'], ['value', 'Hodnota pozice']], mode.view, (v) => { state.chart = { ...mode, view: v }; render(); }, 'small'),
           rangeButtons())),
@@ -462,9 +508,10 @@ function heroPanel(a: Analysis): HTMLElement {
   hero.append(
     h('div', { class: 'hero-head' },
       h('div', {},
-        h('div', { class: 'eyebrow' }, `Hodnota portfolia${s.valueDate ? ` · ${czDate(s.valueDate)}` : ''}`),
+        h('div', { class: 'eyebrow' }, `Hodnota portfolia${s.valueDate ? ` k ${czDate(s.valueDate)}` : ''}`),
         h('div', { class: 'big' }, totals(s.value)),
-        signed(`${signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit))} · ${pct(s.unrealizedPct)}`, totalsValue(s.unrealizedProfit), 'div', 'delta'),
+        h('div', { class: 'delta' }, chip(pct(s.unrealizedPct), pctValue(s.unrealizedPct)),
+          signed(signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit)), totalsValue(s.unrealizedProfit)), h('span', { class: 'muted' }, 'nerealizovaný zisk')),
         rangeChange(a.history)),
       h('div', { class: 'hero-tools' }, rangeButtons())),
     portfolioChart(a.history),
@@ -503,7 +550,7 @@ function portfolioChart(history: HistoryPoint[]): HTMLElement {
     (i) => {
       const p = pts[i]!;
       const d = val(p) - inv(p);
-      return signed(`Zisk ${signedMoney(fmtMoney(d, curCode(), 0), d)} · ${pct(inv(p) ? (d / inv(p)) * 100 : null)}`, d, 'div');
+      return signed(`Zisk ${signedMoney(fmtMoney(d, curCode(), 0), d)} (${pct(inv(p) ? (d / inv(p)) * 100 : null)})`, d, 'div');
     },
   );
 }
@@ -564,7 +611,7 @@ function tradeMarkers(holding: Holding | undefined, sold: RealizedInstrument | u
       ...(inRange(l.closeDate) ? [{
         x: dayMs(l.closeDate), y: l.closePrice, kind: 'sell' as const,
         label: `Prodej ${czDate(l.closeDate)}: ${fmtNum(l.quantity, 4)} ks à ${fmtP(l.closePrice)}`,
-        amount: `utrženo ${tradeAmount(l.proceeds)} · zisk ${signedMoney(money(l.profit), moneyValue(l.profit))}`,
+        amount: `utrženo ${tradeAmount(l.proceeds)}, zisk ${signedMoney(money(l.profit), moneyValue(l.profit))}`,
       }] : []),
     ]),
   ];
@@ -675,7 +722,8 @@ function lineChart(series: Series[], markers: Marker[], fmtY: (v: number) => str
         paint(s('stop', { offset: '100%', 'stop-opacity': 0 }), { 'stop-color': sr.color })));
       svg.append(s('path', { d: `${d}L${X(pts.at(-1)![0]).toFixed(1)},${Y(y0).toFixed(1)}L${X(pts[0]![0]).toFixed(1)},${Y(y0).toFixed(1)}Z`, fill: `url(#${id})`, stroke: 'none' }));
     }
-    svg.append(paint(s('path', { d, class: `line${sr.dashed ? ' dashed' : ''}` }), { stroke: sr.color }));
+    const intro = state.intro && sr === main && !sr.dashed;
+    svg.append(paint(s('path', { d, class: `line${sr.dashed ? ' dashed' : ''}${intro ? ' intro' : ''}`, ...(intro ? { pathLength: 1 } : {}) }), { stroke: sr.color }));
   }
   for (const m of markers) {
     svg.append(s('circle', { cx: X(m.x), cy: Y(m.y), r: narrow ? 3.5 : 4.5, class: `marker ${m.kind}` }, s('title', {}, `${m.label}, ${m.amount ?? ''}`)));
@@ -795,8 +843,8 @@ function allocationPanel(a: Analysis): HTMLElement {
 }
 
 const COUNTRY_SLICES = 8;
-const OTHER_COLOR = '#a8a29e';
-const UNKNOWN_COLOR = '#d6d3d1';
+const OTHER_COLOR = '#9aa3b2';
+const UNKNOWN_COLOR = '#cfd5de';
 
 function geographyPanel(a: Analysis): HTMLElement {
   const known = a.geography.filter((g) => g.country !== '??' && g.country !== 'XX');
@@ -818,6 +866,24 @@ function geographyPanel(a: Analysis): HTMLElement {
   );
 }
 
+function sectorsPanel(a: Analysis): HTMLElement | null {
+  const items = (a.sectors ?? []).filter((x) => x.share >= 0.05);
+  if (!items.length) return null;
+  const sorted = [...items].sort((p, q) => (p.sector === 'other' || p.sector === '??' ? 1 : 0) - (q.sector === 'other' || q.sector === '??' ? 1 : 0) || q.share - p.share);
+  const colour = (k: string) => SECTOR_COLORS[k] ?? '#9aa3b2';
+  const value = (x: (typeof items)[number]) => { const v = x[state.cur]; return v == null ? null : fmtMoney(v, curCode()); };
+  return panel('Podle sektorů',
+    h('div', { class: 'stackbar', role: 'img', 'aria-label': sorted.map((x) => `${sectorName(x.sector)} ${fmtNum(x.share, 1)} %`).join(', ') },
+      ...sorted.map((x) => paint(h('span', { title: `${sectorName(x.sector)}: ${fmtNum(x.share, 1)} %` }), { width: `${x.share}%`, background: colour(x.sector) }))),
+    h('ul', { class: 'sector-list' }, ...sorted.map((x) => h('li', {},
+      paint(h('i', {}), { background: colour(x.sector) }),
+      h('span', { class: 'lname' }, sectorName(x.sector)),
+      h('span', { class: 'num muted' }, value(x) ?? ''),
+      h('b', { class: 'num' }, `${fmtNum(x.share, 1)} %`)))),
+    h('p', { class: 'hint' }, 'ETF jsou rozpočítané podle sektorů firem, do kterých investují (onvista, případně justETF).'),
+  );
+}
+
 // ---------------------------------------------------------------- sold tab
 
 function soldTab(a: Analysis): HTMLElement {
@@ -832,8 +898,8 @@ function soldTab(a: Analysis): HTMLElement {
   return h('div', { class: 'stack' },
     h('section', { class: 'panel hero' },
       h('div', { class: 'eyebrow' }, 'Realizovaný zisk ze všech prodejů'),
-      signed(profit == null ? '—' : signedMoney(fmtMoney(profit, curCode()), profit), profit, 'div', 'big'),
-      h('div', { class: 'muted' }, pct(cost ? ((profit ?? 0) / cost) * 100 : null), ' z nákupní ceny'),
+      h('div', { class: 'big' }, profit == null ? '—' : signedMoney(fmtMoney(profit, curCode()), profit)),
+      h('div', { class: 'delta' }, chip(pct(cost ? ((profit ?? 0) / cost) * 100 : null), profit), h('span', { class: 'muted' }, 'z nákupní ceny prodaného')),
     ),
     h('section', { class: 'stats' },
       stat('Prodáno za', proceeds == null ? '—' : fmtMoney(proceeds, curCode())),
@@ -843,7 +909,7 @@ function soldTab(a: Analysis): HTMLElement {
     ),
     taxYearsPanel(a.taxYears),
     panel(null,
-      h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'rozklikni pro jednotlivé prodeje')),
+      h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
       h('div', { class: 'acc-list' }, ...a.realized.map(realizedRow))),
     dividendsPanel(a.dividends),
   );
@@ -861,7 +927,7 @@ function taxYearsPanel(years: TaxYear[]): HTMLElement {
       h('dl', {},
         h('dt', {}, 'Prodejů'), h('dd', {}, String(y.salesCount)),
         h('dt', {}, 'Osvobozeno časovým testem'), h('dd', {}, totals(y.timeTestedProceeds)),
-        h('dt', {}, 'Zdanitelné prodeje'), h('dd', {}, y.taxable.count ? `${y.taxable.count}× · ${totals(y.taxable.proceeds)}` : 'žádné'),
+        h('dt', {}, 'Zdanitelné prodeje'), h('dd', {}, y.taxable.count ? `${y.taxable.count}× za ${totals(y.taxable.proceeds)}` : 'žádné'),
         h('dt', {}, 'Základ daně'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.baseCzk, 'CZK'))),
     );
   };
@@ -881,7 +947,7 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
         h('span', { class: 'muted small' }, r.firstSale === r.lastSale ? czDate(r.lastSale) : `${czDate(r.firstSale)} – ${czDate(r.lastSale)}`)),
       h('div', { class: 'ival' },
         signed(signedMoney(totals(r.profit), totalsValue(r.profit)), totalsValue(r.profit), 'b'),
-        signed(pct(r.profitPct), pctValue(r.profitPct), 'span', 'small')),
+        chip(pct(r.profitPct), pctValue(r.profitPct))),
     ),
   ], () => h('div', { class: 'acc-body' },
     h('div', { class: 'meta' }, button('Zobrazit graf', () => showInstrument(r.ticker), 'link')),

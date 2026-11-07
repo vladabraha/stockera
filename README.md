@@ -1,6 +1,6 @@
 # Stockera
 
-Lokální analýza portfolia z výpisů XTB. Data i výpočty zůstávají na tomto počítači – viz [zadání](docs/ZADANI.md) a [rozhodnutí](docs/ROZHODNUTI.md). **Krátký návod k použití: [NAVOD.md](NAVOD.md).**
+Lokální analýza portfolia z výpisů XTB. Data i výpočty zůstávají na tomto počítači – viz [zadání](docs/ZADANI.md), [architektura a fungování](docs/architektura.md) a [rozhodnutí](docs/ROZHODNUTI.md). **Krátký návod k použití: [NAVOD.md](NAVOD.md).**
 
 ## Požadavky
 - Node.js ≥ 24 (vestavěné `node:sqlite`, `node:test`, spouštění TypeScriptu bez kompilace)
@@ -34,7 +34,7 @@ akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v 
 Export z xStation: **Historie účtu → zvolit celé období → Export (XLSX)**, pro každý subúčet zvlášť.
 Formát je popsán v [docs/xtb-format.md](docs/xtb-format.md), zdroje tržních dat v [docs/zdroje-dat.md](docs/zdroje-dat.md).
 
-Ruční doplnění (ISIN, země akcie, složení ETF bez dat, zdroj cen): zkopíruj `config/instruments.example.json` do `data/instruments.json`.
+Ruční doplnění (ISIN, země akcie, sektor, složení ETF bez dat, zdroj cen): zkopíruj `config/instruments.example.json` do `data/instruments.json`.
 
 ## Přenos na jiný počítač (i Windows)
 Vše potřebné je ve složce projektu; mimo ni jsou jen Node.js a pnpm.
@@ -60,7 +60,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `src/net/` | jediný HTTP klient: allowlist domén, jen GET, audit log |
 | `src/market/` | parsery zdrojů (ČNB, Xetra, justETF, onvista, Yahoo) a inkrementální aktualizace |
 | `src/importer.ts` | idempotentní import do DB |
-| `src/analysis/` | výpočty: kurzy (`fx`), časový test (`calendar`), loty, FIFO kontrola, portfolio a daně, ocenění, země, vývoj hodnoty (`market`) |
+| `src/analysis/` | výpočty: kurzy (`fx`), časový test (`calendar`), loty, FIFO kontrola, portfolio a daně, ocenění, země, sektory, vývoj hodnoty (`market`) |
 | `src/report/` | HTML report: šifrování (`crypto`), frontend (`app.ts`, `styles.css`, bez knihoven), sestavení (`build`) |
 | `src/cli/` | příkazy (`pnpm ingest`, `pnpm market`, `pnpm analyze`, `pnpm report`, průvodce `update.ts`); hlášky a log chyb v `friendly.ts` |
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |

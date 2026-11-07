@@ -4,7 +4,9 @@ import type { Http } from '../net/http.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
   XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
-  justEtfProfileUrl, onvistaBreakdownsUrl, parseJustEtfProfile, parseOnvistaCountries, parseXetraInstruments, yahooSymbol, type PricePoint, type XetraInstrument,
+  justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaSectors,
+  parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, sectorKey, SECTORS, yahooSymbol,
+  type EtfProfile, type OnvistaBreakdowns, type PricePoint, type Sector, type XetraInstrument,
 } from './sources.ts';
 
 /** Manual overrides per XTB ticker (data/instruments.json, see config/instruments.example.json). */
@@ -17,6 +19,10 @@ export interface InstrumentOverride {
   country?: string;
   /** Country weights in % for an ETF (ISO alpha-2, `XX` = other). */
   countries?: Record<string, number>;
+  /** Single sector for a stock (see SECTORS in sources.ts, e.g. "industrials"). */
+  sector?: string;
+  /** Sector weights in % for an ETF (`other` = rest). */
+  sectors?: Record<string, number>;
 }
 export type InstrumentConfig = Record<string, InstrumentOverride>;
 
@@ -43,6 +49,7 @@ export interface InstrumentReport {
   newPrices: number;
   lastPrice: string | null;
   countrySource: string | null;
+  sectorSource: string | null;
 }
 
 export interface UpdateReport {
@@ -107,11 +114,11 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
      ON CONFLICT (ticker, date) DO UPDATE SET close = excluded.close, currency = excluded.currency, source = excluded.source`,
   );
   const upsertMeta = db.prepare(
-    `INSERT INTO instrument_meta (ticker, isin, name, price_source, price_symbol, price_currency, country_source, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO instrument_meta (ticker, isin, name, price_source, price_symbol, price_currency, country_source, sector_source, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (ticker) DO UPDATE SET isin = excluded.isin, name = excluded.name, price_source = excluded.price_source,
        price_symbol = excluded.price_symbol, price_currency = excluded.price_currency,
-       country_source = excluded.country_source, updated_at = excluded.updated_at`,
+       country_source = excluded.country_source, sector_source = excluded.sector_source, updated_at = excluded.updated_at`,
   );
 
   let xetra: Map<string, XetraInstrument> | null | undefined;
@@ -131,14 +138,30 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
   for (const { ticker } of tickers) {
     const o = config[ticker] ?? {};
     const prev = metaStmt.get(ticker) as
-      | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; updated_at: string }
+      | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string }
       | undefined;
     const isEtf = (categoryStmt.get(ticker) as { category: string | null } | undefined)?.category === 'ETF';
 
     let isin = o.isin ?? prev?.isin ?? null;
     let name = prev?.name ?? null;
     if (!isin && ticker.endsWith('.DE')) isin = (await xetraLookup(ticker.slice(0, -3)))?.isin ?? null;
+    if (!isin && !isEtf && ticker.includes('.')) {
+      log(`${ticker}: ISIN akcie (onvista)…`);
+      try {
+        isin = pickOnvistaStock(await http.getJson(onvistaSearchUrl(ticker.slice(0, ticker.lastIndexOf('.')))), ticker.slice(0, ticker.lastIndexOf('.')), exchangeCountry(ticker));
+      } catch (e) {
+        warnings.push(`${ticker}: ISIN se nepodařilo dohledat (${(e as Error).message}).`);
+      }
+    }
     if (!isin && isEtf) warnings.push(`${ticker}: ISIN nenalezen – doplň "isin" do data/instruments.json (bez něj chybí země a ceny ETF).`);
+
+    // Each source is downloaded at most once per instrument (countries and sectors come from the same response)
+    let profile: Promise<EtfProfile> | undefined;
+    const justEtf = () => (profile ??= http.getText(justEtfProfileUrl(isin!), 'text/html').then(parseJustEtfProfile));
+    let breakdowns: Promise<OnvistaBreakdowns> | undefined;
+    const onvista = () => (breakdowns ??= http.getJson<OnvistaBreakdowns>(onvistaBreakdownsUrl(isin!)));
+    const ageDays = prev?.updated_at ? (Date.parse(opts.today) - Date.parse(prev.updated_at)) / 86_400_000 : Infinity;
+    const stale = ageDays > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS);
 
     // countries
     let countrySource = prev?.country_source ?? null;
@@ -153,9 +176,9 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         let rawSource: string | null = null;
         const problems: string[] = [];
         try {
-          const profile = parseJustEtfProfile(await http.getText(justEtfProfileUrl(isin), 'text/html'));
-          name = profile.name ?? name;
-          if (profile.countries.length) [raw, rawSource] = [profile.countries, 'justetf'];
+          const p = await justEtf();
+          name = p.name ?? name;
+          if (p.countries.length) [raw, rawSource] = [p.countries, 'justetf'];
           else problems.push('justETF rozpad podle zemí neuvádí');
         } catch (e) {
           problems.push(`justETF: ${(e as Error).message}`);
@@ -163,7 +186,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         if (!raw.length) {
           log(`${ticker}: složení podle zemí (onvista)…`);
           try {
-            raw = parseOnvistaCountries(await http.getJson(onvistaBreakdownsUrl(isin)));
+            raw = parseOnvistaCountries(await onvista());
             if (raw.length) rawSource = 'onvista';
             else problems.push('onvista rozpad podle zemí neuvádí');
           } catch (e) {
@@ -199,6 +222,64 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       });
     }
 
+    // sectors
+    let sectorSource = prev?.sector_source ?? null;
+    let sectors: Partial<Record<Sector, number>> | null = null;
+    const addSectors = (raw: { name: string; weight: number }[]) => {
+      const out: Partial<Record<Sector, number>> = {};
+      for (const r of raw) {
+        const key = sectorKey(r.name);
+        if (!key) warnings.push(`${ticker}: neznámý sektor "${r.name}" – započten jako Ostatní.`);
+        out[key ?? 'other'] = (out[key ?? 'other'] ?? 0) + r.weight;
+      }
+      return out;
+    };
+    const manualSectors = o.sectors ?? (o.sector ? { [o.sector]: 100 } : null);
+    if (manualSectors) {
+      const bad = Object.keys(manualSectors).filter((k) => !(SECTORS as readonly string[]).includes(k));
+      if (bad.length) warnings.push(`${ticker}: neznámý sektor ${bad.join(', ')} v data/instruments.json – povolené: ${SECTORS.join(', ')}.`);
+      else [sectors, sectorSource] = [manualSectors as Partial<Record<Sector, number>>, 'manual'];
+    } else if (isin && (!sectorSource || (sectorSource !== 'manual' && stale))) {
+      log(`${ticker}: složení podle sektorů…`);
+      const problems: string[] = [];
+      if (isEtf) {
+        try {
+          const raw = parseOnvistaSectors(await onvista());
+          if (raw.length) [sectors, sectorSource] = [addSectors(raw), 'onvista'];
+          else problems.push('onvista sektory neuvádí');
+        } catch (e) {
+          problems.push(`onvista: ${(e as Error).message}`);
+        }
+        if (!sectors) {
+          try {
+            const raw = (await justEtf()).sectors;
+            if (raw.length) [sectors, sectorSource] = [addSectors(raw), 'justetf'];
+            else problems.push('justETF sektory neuvádí');
+          } catch (e) {
+            problems.push(`justETF: ${(e as Error).message}`);
+          }
+        }
+      } else {
+        try {
+          const raw = parseOnvistaStockSector(await http.getJson(onvistaStockUrl(isin)));
+          if (raw) [sectors, sectorSource] = [addSectors([{ name: raw, weight: 100 }]), 'onvista'];
+          else problems.push('onvista sektor firmy neuvádí');
+        } catch (e) {
+          problems.push(`onvista: ${(e as Error).message}`);
+        }
+      }
+      if (!sectors) warnings.push(`${ticker}: sektory se nepodařilo zjistit (${problems.join('; ')})${sectorSource ? ' – zůstávají poslední známé' : ' – doplň "sector" nebo "sectors" do data/instruments.json'}.`);
+    } else if (!isin && !sectorSource) warnings.push(`${ticker}: bez ISIN nelze zjistit sektor – doplň "isin" nebo "sector" do data/instruments.json.`);
+    if (sectors) {
+      const sum = Object.values(sectors).reduce((a, b) => a + b, 0);
+      transaction(db, () => {
+        db.prepare('DELETE FROM sector_weights WHERE ticker = ?').run(ticker);
+        const ins = db.prepare('INSERT INTO sector_weights (ticker, sector, weight) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET weight = weight + excluded.weight');
+        for (const [k, w] of Object.entries(sectors!)) ins.run(ticker, k, w);
+        if (sum < 99.5) ins.run(ticker, 'other', 100 - sum);
+      });
+    }
+
     // prices
     const source = o.priceSource ?? (isEtf && isin ? 'justetf' : 'yahoo');
     let symbol: string | null = null;
@@ -229,9 +310,10 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       }
     }
 
-    upsertMeta.run(ticker, isin, name, source, symbol, currency, countrySource, countrySource === prev?.country_source && !countries ? (prev?.updated_at ?? opts.today) : opts.today);
+    const refreshed = countries || sectors || countrySource !== prev?.country_source;
+    upsertMeta.run(ticker, isin, name, source, symbol, currency, countrySource, sectorSource, refreshed ? opts.today : (prev?.updated_at ?? opts.today));
     const lastPrice = (db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ?').get(ticker) as { d: string | null }).d;
-    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource });
+    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource });
   }
   return report;
 }
