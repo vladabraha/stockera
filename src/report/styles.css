@@ -135,7 +135,7 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .chip.neg { background: color-mix(in srgb, var(--neg) 16%, transparent); color: var(--neg); }
 
 /* key figures: a quiet row, no boxes */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px 24px; padding: 4px 4px 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px 20px; padding: 4px 4px 0; }
 .stat .label { color: var(--muted); font-size: .82rem; }
 .stat .value { font: 600 1.4rem/1.25 var(--fig); font-variant-numeric: tabular-nums; }
 .stat .sub { color: var(--muted); font-size: .8rem; }
