@@ -63,7 +63,7 @@ test('buildReport: CSP allows only the live-price APIs and the inline blocks by 
   const { csp, style, script } = parts(html);
   assert.match(csp, /default-src 'none'/);
   assert.match(csp, /(^|; )connect-src https:\/\/api\.onvista\.de https:\/\/api\.frankfurter\.dev https:\/\/www\.tradegatebsx\.com https:\/\/data-api\.ecb\.europa\.eu(;|$)/);
-  for (const d of ["img-src 'none'", "form-action 'none'", "base-uri 'none'"]) assert.ok(csp.includes(d), d);
+  for (const d of ['img-src data:;', "form-action 'none'", "base-uri 'none'"]) assert.ok(csp.includes(d), d);
   assert.ok(csp.includes(`script-src ${hash(script)}`));
   assert.ok(csp.includes(`style-src ${hash(style)}`));
   assert.ok(!/unsafe-inline|unsafe-eval/.test(csp));
@@ -71,7 +71,11 @@ test('buildReport: CSP allows only the live-price APIs and the inline blocks by 
   const urls = html.match(/https?:\/\/[^\s"'<>`]+/g) ?? [];
   const allowed = /^https:\/\/(api\.onvista\.de|api\.frankfurter\.dev|www\.tradegatebsx\.com|data-api\.ecb\.europa\.eu)([/;?]|$)/;
   assert.deepEqual(urls.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.test(u)), []);
-  assert.ok(!/\sstyle=|\son[a-z]+=|<link|<iframe|<img/i.test(html));
+  // The only <link> is the inline favicon.
+  const links = html.match(/<link[^>]*>/gi) ?? [];
+  assert.equal(links.length, 1);
+  assert.match(links[0]!, /^<link rel="icon" type="image\/svg\+xml" href="data:image\/svg\+xml;base64,[A-Za-z0-9+/=]+">$/);
+  assert.ok(!/\sstyle=|\son[a-z]+=|<iframe|<img/i.test(html));
   assert.equal((html.match(/<script/g) ?? []).length, 2);
 });
 

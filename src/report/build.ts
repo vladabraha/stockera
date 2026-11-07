@@ -39,6 +39,13 @@ export interface BuildOptions {
  * (PBKDF2-SHA256 → AES-256-GCM); the page decrypts it in the browser after entering the password.
  * The CSP forbids every network request, so the opened report cannot send data anywhere.
  */
+/** The header logo as a self-contained favicon (base64, so no URL ends up in the HTML). */
+const FAVICON = `data:image/svg+xml;base64,${Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="6" fill="#0f1d3a"/>'
+  + '<path d="M6 16.5l4-4 3 2.5 5-6.5" fill="none" stroke="#6f93ff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>'
+  + '<circle cx="18" cy="8.5" r="1.6" fill="#fff"/></svg>',
+).toString('base64')}`;
+
 export async function buildReport(analysis: Analysis, password: string, options: BuildOptions = {}): Promise<string> {
   if (!password) throw new Error('Heslo nesmí být prázdné');
   const payload = await encryptPayload(JSON.stringify(analysis), password, options.iterations ?? PBKDF2_ITERATIONS);
@@ -48,7 +55,8 @@ export async function buildReport(analysis: Analysis, password: string, options:
     "default-src 'none'",
     `script-src ${sha256(script)}`,
     `style-src ${sha256(style)}`,
-    "img-src 'none'",
+    // Only the inline favicon below; a data: image cannot contact any server.
+    'img-src data:',
     // Live prices only: GET with ISIN / currency codes (see live.ts). Nothing else can be contacted.
     `connect-src ${LIVE_HOSTS.join(' ')}`,
     "form-action 'none'",
@@ -65,6 +73,7 @@ export async function buildReport(analysis: Analysis, password: string, options:
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex, nofollow">
 <title>Stockera</title>
+<link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <style>${style}</style>
 </head>
 <body>

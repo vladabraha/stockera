@@ -157,8 +157,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Heslo: interaktivně (skryté, 2×, raw mode – funguje i ve Windows Terminal/PowerShell/cmd), nebo
   `STOCKERA_PASSWORD` (varování o historii příkazů, proměnná se po přečtení smaže). Bez minimální délky (přání uživatele – volba je na něm), jen neprázdné; při psaní se zobrazují `*`.
 - **CSP** v `<meta>`: `default-src 'none'`, `script-src`/`style-src` jen **sha256 hash** vložených bloků,
-  `img-src`/`form-action`/`base-uri` `'none'`, **`connect-src https://api.onvista.de https://api.frankfurter.dev https://www.tradegatebsx.com https://data-api.ecb.europa.eu`**
-  (jen živé ceny, viz níže) → stránka nemůže nic načíst ani odeslat nikam jinam (formuláře, obrázky, odkazy jsou blokované).
+  `form-action`/`base-uri` `'none'`, `img-src data:` (jen vložená favicona – logo jako base64 SVG v `<link rel="icon">`;
+  `data:` obrázek nic nestahuje ani neodesílá), **`connect-src https://api.onvista.de https://api.frankfurter.dev https://www.tradegatebsx.com https://data-api.ecb.europa.eu`**
+  (jen živé ceny, viz níže) → stránka nemůže nic načíst ani odeslat nikam jinam (formuláře, vzdálené obrázky, odkazy jsou blokované).
   Důsledky pro kód frontendu:
   - **žádné `style="…"` atributy v markupu** (CSP je blokuje) – barvy/šířky jen přes CSSOM (`el.style.setProperty`, helper `paint()`),
   - SVG barvy přes `var()` nastavovat přes `style`, ne prezentační atributy,
