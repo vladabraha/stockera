@@ -58,17 +58,19 @@ test('buildReport embeds only encrypted data that decrypts to the analysis', asy
   }
 });
 
-test('buildReport: CSP blocks all network access and allows only the inline blocks by hash', async () => {
+test('buildReport: CSP allows only the live-price APIs and the inline blocks by hash', async () => {
   const html = await buildReport(sampleAnalysis(), PASSWORD, { iterations: ITER });
   const { csp, style, script } = parts(html);
   assert.match(csp, /default-src 'none'/);
-  assert.match(csp, /connect-src 'none'/);
+  assert.match(csp, /(^|; )connect-src https:\/\/api\.onvista\.de https:\/\/api\.frankfurter\.dev(;|$)/);
+  for (const d of ["img-src 'none'", "form-action 'none'", "base-uri 'none'"]) assert.ok(csp.includes(d), d);
   assert.ok(csp.includes(`script-src ${hash(script)}`));
   assert.ok(csp.includes(`style-src ${hash(style)}`));
   assert.ok(!/unsafe-inline|unsafe-eval/.test(csp));
-  // No external resources or links (the SVG namespace is an identifier, not a request).
-  const urls = html.match(/https?:\/\/[^\s"'<>]+/g) ?? [];
-  assert.deepEqual(urls.filter((u) => u !== 'http://www.w3.org/2000/svg'), []);
+  // No external resources or links except the two price APIs (the SVG namespace is an identifier, not a request).
+  const urls = html.match(/https?:\/\/[^\s"'<>`]+/g) ?? [];
+  const allowed = /^https:\/\/api\.(onvista\.de|frankfurter\.dev)([/;]|$)/;
+  assert.deepEqual(urls.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.test(u)), []);
   assert.ok(!/\sstyle=|\son[a-z]+=|<link|<iframe|<img/i.test(html));
   assert.equal((html.match(/<script/g) ?? []).length, 2);
 });

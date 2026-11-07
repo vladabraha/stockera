@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { stripTypeScriptTypes } from 'node:module';
 import type { Analysis } from '../analysis/portfolio.ts';
 import { encryptPayload, PBKDF2_ITERATIONS } from './crypto.ts';
+import { LIVE_HOSTS } from './live.ts';
 
 const dir = import.meta.dirname;
 
@@ -16,9 +17,9 @@ export function toBrowserScript(source: string): string {
   return js;
 }
 
-/** Bundled frontend: crypto helpers + app, wrapped so nothing leaks into the global scope. */
+/** Bundled frontend: crypto + shared breakdown + live prices + app, wrapped so nothing leaks into the global scope. */
 export function frontendScript(): string {
-  const parts = ['crypto.ts', 'app.ts'].map((f) => toBrowserScript(readFileSync(join(dir, f), 'utf8')));
+  const parts = ['crypto.ts', '../analysis/breakdown.ts', 'live.ts', 'app.ts'].map((f) => toBrowserScript(readFileSync(join(dir, f), 'utf8')));
   return `(() => {\n'use strict';\n${parts.join('\n')}\n})();`;
 }
 
@@ -48,7 +49,8 @@ export async function buildReport(analysis: Analysis, password: string, options:
     `script-src ${sha256(script)}`,
     `style-src ${sha256(style)}`,
     "img-src 'none'",
-    "connect-src 'none'",
+    // Live prices only: GET with ISIN / currency codes (see live.ts). Nothing else can be contacted.
+    `connect-src ${LIVE_HOSTS.join(' ')}`,
     "form-action 'none'",
     "base-uri 'none'",
   ].join('; ');

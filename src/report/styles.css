@@ -80,6 +80,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .seg.small button { padding: 4px 10px; font-size: .82rem; }
 .ghost { border: 1px solid var(--line); background: none; border-radius: 10px; padding: 5px 12px; font-size: .85rem; color: var(--muted); }
 .ghost:hover { color: var(--text); border-color: var(--muted); }
+.ghost:disabled { opacity: .6; cursor: progress; }
+.refresh .narrow { display: none; }
 .link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 600; }
 .link:hover { text-decoration: underline; }
 
@@ -97,6 +99,7 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .hero-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 14px 24px; margin-bottom: 14px; }
 .hero-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .eyebrow { color: var(--muted); font-size: .88rem; margin-bottom: 4px; }
+.eyebrow.live-live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--pos); vertical-align: 1px; }
 .big { font: 600 clamp(2.4rem, 7vw, 3.8rem)/1.05 var(--fig); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .delta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; font-weight: 600; }
 .delta .muted { font-weight: 400; }
@@ -304,6 +307,8 @@ noscript { display: block; padding: 40px; text-align: center; }
   header { flex-wrap: wrap; gap: 0 10px; padding-top: 8px; }
   .brand { padding-bottom: 6px; }
   .tools { padding-bottom: 6px; }
+  .refresh .wide { display: none; }
+  .refresh .narrow { display: inline; }
   .tabs { order: 3; width: 100%; }
   .tabs button { flex: 1; justify-content: center; padding: 8px 8px 10px; }
   .panel { padding: 16px; }

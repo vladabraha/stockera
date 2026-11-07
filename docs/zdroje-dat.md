@@ -1,7 +1,7 @@
 # Zdroje tržních dat (`pnpm market`)
 
 Všechny požadavky jdou přes `src/net/http.ts` (allowlist, jen GET, HTTPS, bez cookies, audit log `data/logs/network.log`).
-Ven se posílá jen ticker, ISIN, rok nebo datum.
+Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a kódy měn).
 
 | Data | Zdroj | Požadavek | Kdy se stahuje |
 |---|---|---|---|
@@ -14,6 +14,17 @@ Ven se posílá jen ticker, ISIN, rok nebo datum.
 | Sektor akcie | onvista – `api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN | jednou |
 | Ceny ETF (EUR) | justETF – `api/etfs/{ISIN}/performance-chart` | ISIN + období | od posledního uloženého dne − 7 dní |
 | Ceny akcií | Yahoo Finance – `v8/finance/chart/{symbol}` | symbol + období | od posledního uloženého dne − 7 dní |
+
+## Živé ceny v otevřeném reportu (`out/stockera.html`)
+Prohlížeč po odemknutí stáhne aktuální ceny a kurzy (CSP povoluje jen tyto dva hosty). Odchází jen ISIN nebo kódy měn.
+
+| Data | Zdroj | Požadavek |
+|---|---|---|
+| Kurzy (ECB) | Frankfurter – `api.frankfurter.dev/v1/latest?base=EUR&symbols=CZK,USD,…` | kódy měn |
+| Cena ETF | onvista – `api.onvista.de/api/v1/funds/ISIN:{ISIN}/snapshot` | ISIN |
+| Cena akcie | onvista – `api.onvista.de/api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN |
+
+Bez připojení report ukáže hodnoty z poslední aktualizace. Ostatní zdroje (justETF, Yahoo, burzy) prohlížeči přístup nepovolují (CORS).
 
 ## Pravidla a omezení
 - **Ocenění:** použije se stažená cena, pokud je novější než stav ve výpisu XTB; jinak hodnota z výpisu.

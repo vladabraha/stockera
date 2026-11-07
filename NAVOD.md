@@ -23,6 +23,8 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
 ## 3. Prohlížení
 - Počítač: `out/stockera.html` → dvojklik → heslo.
 - Mobil: soubor zkopíruj (AirDrop, kabel, cloud) a otevři ho v prohlížeči. Funguje i offline.
+- Po odemknutí si report sám stáhne **aktuální ceny** (nahoře „Živé ceny k …“, znovu tlačítkem *Aktualizovat ceny*).
+  Odchází jen kód instrumentu (ISIN), nikdy tvoje počty kusů ani částky. Bez internetu uvidíš hodnoty z poslední aktualizace.
 
 ## Když něco nejde
 Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastější situace:

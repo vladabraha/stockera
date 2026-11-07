@@ -6,8 +6,8 @@ Související: `docs/ZADANI.md` (zadání), `docs/architektura.md` (architektura
 
 ## 0. Nepřekročitelná pravidla od uživatele
 
-1. **Osobní data nesmí opustit počítač.** Ven smí jen ticker / ISIN / datum k veřejným API. Nikdy množství, ceny,
-   hodnoty, čísla účtů, jméno.
+1. **Osobní data nesmí opustit počítač.** Ven smí jen ticker / ISIN / datum (report v prohlížeči navíc kódy měn)
+   k veřejným API. Nikdy množství, ceny, hodnoty, čísla účtů, jméno.
 2. **Zpracování bez AI** – deterministický kód, opakovatelný příkazem `pnpm update-data`.
 3. **Vše uvnitř složky projektu.** Nic neinstalovat globálně, neměnit nastavení systému, nemazat nic mimo projekt.
    Když něco nejde, říct to uživateli (ne obcházet).
@@ -104,7 +104,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   throttle 400 ms/host, **limit odpovědi 20 MB**, audit každého požadavku (i zablokovaného) do `data/logs/network.log`.
 - **Allowlist** (`ALLOWED_HOSTS`): `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`,
   `query1/query2.finance.yahoo.com`, `api.onvista.de`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
-- Síť používá **jen `pnpm market`**. Import, výpočty i report jsou offline.
+- Síť používá **jen `pnpm market`** a volitelně otevřený report (živé ceny, viz §6). Import a výpočty jsou offline.
 - Zdroje (podrobně `docs/zdroje-dat.md`):
   - kurzy: ČNB roční txt (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
   - ticker → ISIN: CSV všech instrumentů Xetra (jen pro `.DE`),
@@ -144,7 +144,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Heslo: interaktivně (skryté, 2×, raw mode – funguje i ve Windows Terminal/PowerShell/cmd), nebo
   `STOCKERA_PASSWORD` (varování o historii příkazů, proměnná se po přečtení smaže). Bez minimální délky (přání uživatele – volba je na něm), jen neprázdné; při psaní se zobrazují `*`.
 - **CSP** v `<meta>`: `default-src 'none'`, `script-src`/`style-src` jen **sha256 hash** vložených bloků,
-  `img-src`/`connect-src`/`form-action`/`base-uri` `'none'` → stránka nemůže nic odeslat.
+  `img-src`/`form-action`/`base-uri` `'none'`, **`connect-src https://api.onvista.de https://api.frankfurter.dev`**
+  (jen živé ceny, viz níže) → stránka nemůže nic načíst ani odeslat nikam jinam (formuláře, obrázky, odkazy jsou blokované).
   Důsledky pro kód frontendu:
   - **žádné `style="…"` atributy v markupu** (CSP je blokuje) – barvy/šířky jen přes CSSOM (`el.style.setProperty`, helper `paint()`),
   - SVG barvy přes `var()` nastavovat přes `style`, ne prezentační atributy,
@@ -152,10 +153,31 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - data vkládat jen přes `textContent`/`append`/`setAttribute` (nikdy `innerHTML` s daty), nevytvářet odkazy.
 - Frontend je psaný v TS (`app.ts` + sdílený `crypto.ts`), `build.ts` ho převede `stripTypeScriptTypes`, odstraní
   **jednořádkové** `import … from '…'` a prefixy `export`, zabalí do IIFE. Víceřádkové importy → build selže (záměrně).
-  Ve frontendu tedy jen typové importy + `crypto.ts`; nic dalšího importovat nejde.
+  Ve frontendu tedy jen typové importy + soubory, které `frontendScript()` přibalí (`crypto.ts`,
+  `analysis/breakdown.ts`, `live.ts`); jiné runtime importy nefungují.
 - Payload je v `<script type="application/json" id="payload">` (jen base64 + JSON).
+- **Živé ceny v reportu** (`src/report/live.ts`, zadání uživatele): po odemknutí se hned vykreslí uložený snímek a
+  pak se stáhnou aktuální ceny (tlačítko *Aktualizovat ceny* to zopakuje). Ven jde **jen GET s ISINem nebo kódy měn**
+  (`credentials: 'omit'`, `referrerPolicy: 'no-referrer'`, `cache: 'no-store'`, `redirect: 'error'`, timeout 10 s,
+  4 souběžné požadavky). Testy to hlídají (`tests/live.test.ts`).
+  - Kurzy: Frankfurter (ECB) `v1/latest?base=EUR&symbols=…`; `czkPer(EUR) = rates.CZK`, ostatní `rates.CZK / rates[X]`.
+    Když kurzy selžou → stav „bez připojení“ a zobrazí se snímek beze změny.
+  - Ceny: onvista `funds/ISIN:{isin}/snapshot` (ETF, `quote`) a `stocks/ISIN:{isin}/snapshot` (akcie: nejnovější
+    kotace v měně instrumentu, jinak nejnovější z `_XET/_GAT/_FRA/_STU/_TRO/_AMS` v EUR; `_LST` a `_PNK` se
+    ignorují – zastaralé/nelikvidní). Instrument bez ISINu nebo s chybou zůstane z výpisu.
+  - **Proč jen tyto dva zdroje:** jediné ověřené s CORS `*` i pro `Origin: null` (soubor z disku). justETF, Yahoo,
+    Börse Frankfurt ani L&S CORS nemají. onvista je rychlá (~0,1 s, jeden dotaz vrátí všechny burzy) – další zdroje
+    by nezrychlily nic. (onvista vrací 429 jen na ne-prohlížečový User-Agent, např. curl.)
+  - Přepočet v paměti na kopii snímku (`applyLive`, idempotentní): u lotů s cenou stejného nebo novějšího dne než
+    `valueDate` se přepočte `currentPrice`, `value`, `profit`, `profitPct`; pak součty instrumentů, `summary`,
+    země a sektory (sdílený `src/analysis/breakdown.ts`, bundlovaný i do reportu), poslední bod `history` a cenová
+    řada instrumentu. Cena odlišná o > 50 % od uložené se zahodí (špatný trh/jednotka). **Nákupní náklady, prodeje
+    a daně se nemění** (zafixované kurzem ČNB ke dni obchodu); živé hodnoty používají dnešní kurz ECB – proto může
+    nerealizovaný zisk nepatrně odbočit od `pnpm report`. Pořadí instrumentů a barvy zůstávají podle snímku.
+  - Hlavička hodnoty ukazuje stav: „aktualizuji ceny…“, „Živé ceny k …“ (příp. kolik instrumentů z kolika),
+    „novější ceny zatím nejsou“, „bez připojení – ceny z výpisu“. *Zamknout* zahodí i živá data.
 - Testy (`tests/report.test.ts`) hlídají: round-trip šifrování, nepřítomnost plaintextu (tickery, účty), shodu CSP
-  hashů, jediné URL v HTML je SVG namespace, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
+  hashů, přesný `connect-src`, jediné URL v HTML jsou SVG namespace a dvě API živých cen, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
 - Nešifrovaný `out/analysis.json` vzniká **jen** s `pnpm analyze --json` (práva 600); bez přepínače se starý smaže.
   `update-data` = `ingest → market → report` (bez analyze).
 

@@ -1,10 +1,11 @@
 // Browser app of the HTML report. Inlined into the report after type stripping:
-// only type imports and the crypto helpers (concatenated by the build) may be used.
+// only type imports and the crypto/breakdown/live helpers (concatenated by the build) may be used.
 // All DOM is built with createElement/textContent – never innerHTML – so data cannot inject markup.
 import type { Analysis, Holding, HoldingLot, RealizedInstrument, RealizedLot, TaxYear, DividendSummary } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
+import { applyLive, fetchLive } from './live.ts';
 
 type Cur = 'czk' | 'eur';
 type Child = Node | string | null | undefined | false;
@@ -17,8 +18,14 @@ const RANGES: [label: string, days: number | null][] = [
 const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
 const TAX_LIMIT_CZK = 100_000;
 
+type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number };
+
 const state = {
   data: null as Analysis | null,
+  /** Decrypted snapshot; live prices are always applied to a fresh copy of it. */
+  base: null as Analysis | null,
+  live: { status: 'idle', date: null, updated: 0, total: 0 } as Live,
+  liveRun: 0,
   cur: 'czk' as Cur,
   tab: 'portfolio' as 'portfolio' | 'sold',
   range: 'Vše',
@@ -252,9 +259,10 @@ async function unlock(form: HTMLFormElement): Promise<void> {
   try {
     const json = await decryptPayload(payload, input.value);
     input.value = '';
-    state.data = JSON.parse(json) as Analysis;
+    state.base = state.data = JSON.parse(json) as Analysis;
     assignColors(state.data);
     render();
+    void refreshLive();
   } catch (e) {
     msg.textContent = e instanceof DOMException && e.name === 'OperationError'
       ? 'Nesprávné heslo. Pozor na velká písmena a českou/anglickou klávesnici.'
@@ -283,6 +291,44 @@ function renderLogin(): void {
   });
   document.getElementById('app')!.replaceChildren(h('div', { class: 'login-wrap' }, form));
   form.querySelector('input')!.focus();
+}
+
+// ---------------------------------------------------------------- live prices
+
+/** Fetches current quotes (only ISINs and currency codes leave the browser); the snapshot stays on any failure. */
+async function refreshLive(): Promise<void> {
+  const base = state.base;
+  if (!base) return;
+  const run = ++state.liveRun;
+  const total = base.holdings.filter((x) => x.isin).length;
+  state.live = { status: 'loading', date: null, updated: 0, total };
+  render();
+  let next: Live;
+  try {
+    const { czkPer, quotes } = await fetchLive(base);
+    if (run !== state.liveRun || state.base !== base) return;
+    const r = applyLive(base, czkPer, quotes);
+    state.data = r.analysis;
+    next = { status: r.updated.length ? 'live' : 'stale', date: r.date, updated: r.updated.length, total };
+  } catch {
+    if (run !== state.liveRun || state.base !== base) return;
+    state.data = base;
+    next = { status: 'offline', date: null, updated: 0, total };
+  }
+  state.live = next;
+  render();
+}
+
+function liveStatus(valueDate: string | null): string {
+  const snap = valueDate ? ` k ${czDate(valueDate)}` : '';
+  const l = state.live;
+  switch (l.status) {
+    case 'loading': return `Hodnota portfolia${snap}, aktualizuji ceny…`;
+    case 'live': return `Živé ceny k ${czDate(l.date!)}${l.updated < l.total ? ` (${l.updated} z ${l.total} instrumentů, zbytek z výpisu)` : ''}`;
+    case 'stale': return `Hodnota portfolia${snap}, novější ceny zatím nejsou`;
+    case 'offline': return `Hodnota portfolia${snap}, bez připojení – ceny z výpisu`;
+    default: return `Hodnota portfolia${snap}`;
+  }
 }
 
 // ---------------------------------------------------------------- layout
@@ -316,14 +362,26 @@ function header(a: Analysis): HTMLElement {
     })),
     h('div', { class: 'tools' },
       segmented([['czk', 'Kč'], ['eur', '€']], state.cur, (c) => { state.cur = c; render(); }, 'cur'),
+      refreshButton(),
       button('Zamknout', () => {
-        state.data = null;
+        state.data = state.base = null;
+        state.liveRun++;
+        state.live = { status: 'idle', date: null, updated: 0, total: 0 };
         state.open.clear();
         state.chart = { kind: 'portfolio' };
         state.intro = true;
         renderLogin();
       }, 'ghost', 'Zahodit dešifrovaná data a zamknout')),
   );
+}
+
+function refreshButton(): HTMLButtonElement {
+  const loading = state.live.status === 'loading';
+  const label = (wide: string, narrow: string) => h('span', {}, h('span', { class: 'wide' }, wide), h('span', { class: 'narrow' }, narrow));
+  const b = button(loading ? label('Aktualizuji…', 'Ceny…') : label('Aktualizovat ceny', 'Ceny'), () => void refreshLive(), 'ghost refresh',
+    'Stáhne aktuální ceny a kurzy. Odesílají se jen ISINy a kódy měn, nikdy tvoje počty kusů ani hodnoty.');
+  b.disabled = loading;
+  return b;
 }
 
 function panel(title: string | null, ...children: Child[]): HTMLElement {
@@ -526,7 +584,7 @@ function heroPanel(a: Analysis): HTMLElement {
   hero.append(
     h('div', { class: 'hero-head' },
       h('div', {},
-        h('div', { class: 'eyebrow' }, `Hodnota portfolia${s.valueDate ? ` k ${czDate(s.valueDate)}` : ''}`),
+        h('div', { class: `eyebrow live-${state.live.status}`, role: 'status' }, liveStatus(s.valueDate)),
         h('div', { class: 'big' }, totals(s.value)),
         h('div', { class: 'delta' }, chip(pct(s.unrealizedPct), pctValue(s.unrealizedPct)),
           signed(signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit)), totalsValue(s.unrealizedProfit)), h('span', { class: 'muted' }, 'nerealizovaný zisk')),
