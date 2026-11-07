@@ -81,6 +81,52 @@ export function parseXetraInstruments(csv: string): Map<string, XetraInstrument>
   return map;
 }
 
+// ------------------------------------------------- Prague Stock Exchange ------
+
+/** Share lists of all PSE market segments (name, ISIN, last price in CZK). */
+export const PSE_SHARE_LIST_URLS = ['prime-market', 'standard-market', 'free-market', 'start-market']
+  .map((m) => `https://www.pse.cz/en/market-data/shares/${m}`);
+export const pseDetailUrl = (isin: string) => `https://www.pse.cz/en/detail/${encodeURIComponent(isin)}`;
+
+export interface PseShare {
+  isin: string;
+  name: string;
+  /** Last price in CZK. */
+  price: number | null;
+}
+
+const decodeEntities = (s: string) =>
+  s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim();
+
+/** PSE share list page → shares. */
+export function parsePseShareList(html: string): PseShare[] {
+  const out: PseShare[] = [];
+  const row = /data-title="([^"]*)"[\s\S]*?<div class="isin">\s*([A-Z]{2}[A-Z0-9]{9}\d)\s*<\/div>\s*<\/td>\s*<td sort-by="([\d.]+)"/g;
+  for (const m of html.matchAll(row)) {
+    const price = Number(m[3]);
+    out.push({ isin: m[2]!, name: decodeEntities(m[1]!), price: Number.isFinite(price) && price > 0 ? price : null });
+  }
+  return out;
+}
+
+export interface PseCodes {
+  /** Prague trading code (shown by PSE as "Ticker Xetra®"), e.g. KOMB, ERBAG – also the Yahoo symbol without `.PR`. */
+  tradingCode: string | null;
+  /** All codes the share is known by (trading code, Bloomberg, Reuters), upper case without exchange suffixes. */
+  codes: string[];
+}
+
+/** PSE share detail page → trading code and Bloomberg/Reuters tickers (XTB uses one of them). */
+export function parsePseDetail(html: string): PseCodes {
+  const field = (label: string) =>
+    new RegExp(`<td>\\s*${label}[^<]*<\\/td>\\s*<td>([^<]*)<\\/td>`).exec(html)?.[1]?.trim().toUpperCase() || null;
+  const tradingCode = field('Ticker Xetra');
+  const bloomberg = field('Ticker Bloomberg')?.split(/\s+/)[0] ?? null;
+  const reuters = field('Ticker Reuters')?.split('.')[0] ?? null;
+  const codes = [...new Set([tradingCode, bloomberg, reuters].filter((c): c is string => Boolean(c)))];
+  return { tradingCode: tradingCode && /^[A-Z0-9]{1,12}$/.test(tradingCode) ? tradingCode : null, codes };
+}
+
 // ------------------------------------------------------------ justETF ------
 
 export const justEtfProfileUrl = (isin: string) => `https://www.justetf.com/en/etf-profile.html?isin=${encodeURIComponent(isin)}`;

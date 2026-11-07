@@ -13,6 +13,7 @@ export const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
   'query1.finance.yahoo.com', // stock prices
   'query2.finance.yahoo.com',
   'api.onvista.de', // ETF country breakdown fallback (when justETF has none)
+  'www.pse.cz', // Prague Stock Exchange share list (ticker → ISIN, Yahoo symbol)
 ]);
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -22,6 +23,7 @@ const SOURCE_NAMES: Record<string, string> = {
   'query1.finance.yahoo.com': 'Yahoo',
   'query2.finance.yahoo.com': 'Yahoo',
   'api.onvista.de': 'onvista',
+  'www.pse.cz': 'BCPP',
 };
 const sourceName = (url: string) => SOURCE_NAMES[new URL(url).hostname] ?? new URL(url).hostname;
 

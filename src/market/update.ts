@@ -3,10 +3,10 @@ import { transaction, type Db } from '../db/database.ts';
 import type { Http } from '../net/http.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
-  XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
+  PSE_SHARE_LIST_URLS, XETRA_INSTRUMENTS_URL, countryCode, parsePseDetail, parsePseShareList, pseDetailUrl, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
   companySearchQueries, holdingNameKey, justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, pickOnvistaCompany, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
   parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, pickOnvistaEtf, onvistaStockCandidates, onvistaHomePrice, sectorKey, SECTORS, yahooSymbol,
-  type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type Sector, type XetraInstrument,
+  type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type PseCodes, type PseShare, type Sector, type XetraInstrument,
 } from './sources.ts';
 
 /** Manual overrides per XTB ticker (data/instruments.json, see config/instruments.example.json). */
@@ -142,10 +142,58 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     return xetra?.get(mnemonic) ?? null;
   };
 
+  // Prague: XTB tickers are PSE trading, Bloomberg or Reuters codes (KOMB, MONET, RBAG = Erste Group…)
+  let pseShares: PseShare[] | null | undefined;
+  const pseCodes = new Map<string, PseCodes | null>();
+  const pseDetail = async (isin: string): Promise<PseCodes | null> => {
+    if (!pseCodes.has(isin)) {
+      try {
+        const url = pseDetailUrl(isin);
+        pseCodes.set(isin, http.checkExtracted(url, parsePseDetail(await http.getText(url, 'text/html'))));
+      } catch {
+        pseCodes.set(isin, null);
+      }
+    }
+    return pseCodes.get(isin)!;
+  };
+  /** Finds the PSE share for an XTB ticker by its codes; a unique price match is the last resort. */
+  const pseLookup = async (ticker: string, knownIsin: string | null, ref: number | null): Promise<{ isin: string; tradingCode: string | null; byPrice: boolean } | null> => {
+    if (pseShares === undefined) {
+      log('Seznam akcií BCPP (ticker → ISIN)…');
+      const all: PseShare[] = [];
+      for (const url of PSE_SHARE_LIST_URLS) {
+        try {
+          all.push(...http.checkExtracted(url, parsePseShareList(await http.getText(url, 'text/html'))));
+        } catch (e) {
+          warnings.push(`Seznam akcií BCPP se nepodařilo stáhnout celý: ${(e as Error).message}`);
+        }
+      }
+      pseShares = all.length ? [...new Map(all.map((x) => [x.isin, x])).values()] : null;
+    }
+    if (!pseShares) return null;
+    if (knownIsin) {
+      const found = pseShares.some((x) => x.isin === knownIsin);
+      return found ? { isin: knownIsin, tradingCode: (await pseDetail(knownIsin))?.tradingCode ?? null, byPrice: false } : null;
+    }
+    const symbol = ticker.slice(0, ticker.lastIndexOf('.')).toUpperCase();
+    const priceMatch = (x: PseShare) => ref != null && x.price != null && Math.abs(x.price / ref - 1) <= PRICE_MATCH_TOLERANCE;
+    const firstWord = (x: PseShare) => x.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().split(/\s+/)[0];
+    // Likely candidates first, so the usual case needs one or two detail pages
+    const ordered = [...pseShares].sort((a, b) =>
+      Number(firstWord(b) === symbol) - Number(firstWord(a) === symbol) || Number(priceMatch(b)) - Number(priceMatch(a)));
+    log(`${ticker}: ISIN (BCPP)…`);
+    for (const x of ordered) {
+      const d = await pseDetail(x.isin);
+      if (d?.codes.includes(symbol)) return { isin: x.isin, tradingCode: d.tradingCode, byPrice: false };
+    }
+    const byPrice = pseShares.filter(priceMatch);
+    return byPrice.length === 1 ? { isin: byPrice[0]!.isin, tradingCode: pseCodes.get(byPrice[0]!.isin)?.tradingCode ?? null, byPrice: true } : null;
+  };
+
   for (const { ticker } of tickers) {
     const o = config[ticker] ?? {};
     const prev = metaStmt.get(ticker) as
-      | { isin: string | null; name: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string; holdings_updated: string | null }
+      | { isin: string | null; name: string | null; price_source: string | null; price_symbol: string | null; price_currency: string | null; country_source: string | null; sector_source: string | null; updated_at: string; holdings_updated: string | null }
       | undefined;
     const isEtf = (categoryStmt.get(ticker) as { category: string | null } | undefined)?.category === 'ETF';
     // Countries, sectors and positions only matter for what is held now; sold instruments need just prices (history)
@@ -154,6 +202,17 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     let isin = o.isin ?? prev?.isin ?? null;
     let name = prev?.name ?? null;
     if (!isin && ticker.endsWith('.DE')) isin = (await xetraLookup(ticker.slice(0, -3)))?.isin ?? null;
+    // Yahoo symbol from the Prague trading code (RBAG.CZ → ERBAG.PR); looked up until prices come in
+    let pseSymbol: string | null = null;
+    if (ticker.endsWith('.CZ') && !o.yahooSymbol && (!isin || !(lastPriceStmt.get(ticker, 'yahoo') as { d: string | null }).d)) {
+      const ref = (refPriceStmt.get(ticker) as { p: number | null } | undefined)?.p ?? null;
+      const found = await pseLookup(ticker, isin, ref);
+      if (found) {
+        isin ??= found.isin;
+        if (found.tradingCode) pseSymbol = `${found.tradingCode}.PR`;
+        if (found.byPrice) warnings.push(`${ticker}: ISIN ${found.isin} přiřazen jen podle ceny – ověř, případně oprav "isin" v data/instruments.json.`);
+      }
+    }
     if (!isin && ticker.includes('.') && (isEtf || held)) {
       const symbol = ticker.slice(0, ticker.lastIndexOf('.'));
       const country = exchangeCountry(ticker);
@@ -316,7 +375,8 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     let currency = prev?.price_currency ?? null;
     let newPrices = 0;
     if (source !== 'none') {
-      symbol = source === 'justetf' ? isin : (o.yahooSymbol ?? yahooSymbol(ticker));
+      const known = prev?.price_source === 'yahoo' && source === 'yahoo' ? prev.price_symbol : null;
+      symbol = source === 'justetf' ? isin : (o.yahooSymbol ?? pseSymbol ?? known ?? yahooSymbol(ticker));
       const last = (lastPriceStmt.get(ticker, source) as { d: string | null }).d;
       const from = last ? addDays(last, -PRICE_OVERLAP_DAYS) : priceStart;
       if (!symbol) warnings.push(`${ticker}: neznámý symbol pro ${source} – doplň do data/instruments.json.`);

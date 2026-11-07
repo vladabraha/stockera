@@ -12,6 +12,7 @@ Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a 
 | Sektory ETF | onvista `…/funds/ISIN:{ISIN}/breakdowns` (`branchBreakdown`), záložně justETF profil | ISIN | jednou za 30 dní |
 | Největší pozice ETF (top 10) | justETF profil, záložně onvista `…/breakdowns` (`fundsHoldingList`); pozice bez ISIN → onvista `…/search/facet` podle názvu firmy | ISIN ETF, veřejný název firmy z pozic | jednou za 30 dní (bez známých pozic při každém běhu) |
 | ISIN akcie / ETF mimo Xetra | onvista – `api/v1/instruments/search/facet?searchValue={symbol}`; u akcií bez přesné shody ověření ceny přes `stocks/ISIN:{ISIN}/snapshot` | symbol bez burzy, ISIN kandidátů | jednou, když chybí ISIN |
+| Ticker → ISIN a Yahoo symbol (`.CZ`) | BCPP – seznamy akcií `www.pse.cz/en/market-data/shares/…-market` a detail `/en/detail/{ISIN}` | nic / ISIN | jen když `.CZ` akcii chybí ISIN nebo ceny |
 | Sektor akcie | onvista – `api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN | jednou |
 | Ceny ETF (EUR) | justETF – `api/etfs/{ISIN}/performance-chart` | ISIN + období | od posledního uloženého dne − 7 dní |
 | Ceny akcií | Yahoo Finance – `v8/finance/chart/{symbol}` | symbol + období | od posledního uloženého dne − 7 dní |

@@ -109,7 +109,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   přihlašovacích údajů, `credentials: 'omit'`, ruční přesměrování s kontrolou každého skoku (max 5), timeout 60 s,
   throttle 400 ms/host, **limit odpovědi 20 MB**, audit každého požadavku (i zablokovaného) do `data/logs/network.log`.
 - **Allowlist** (`ALLOWED_HOSTS`): `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`,
-  `query1/query2.finance.yahoo.com`, `api.onvista.de`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
+  `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
 - Síť používá **jen `pnpm market`** a volitelně otevřený report (živé ceny, viz §6). Import a výpočty jsou offline.
 - Zdroje (podrobně `docs/zdroje-dat.md`):
   - kurzy: ČNB roční txt (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
@@ -127,6 +127,12 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     Když přesná shoda není (onvista vede „KBC Group“ se symbolem KDB, ne „KBC“), vezmou se akcie stejné země, jejichž
     název začíná tickerem (`onvistaStockCandidates`), a ISIN se přijme jen u **jediné**, jejíž cena na domácí burze
     (`onvistaHomePrice`) je do ±10 % od aktuální ceny z výpisu XTB (KBC Group 117 € vs. KBC Ancora 94 €). Jinak nic.
+  - Pražské akcie (`.CZ`): XTB ticker je pražský obchodní kód, Bloomberg nebo Reuters kód (RBAG = **Erste Group**, ne
+    Raiffeisen). Stáhnou se veřejné seznamy akcií BCPP (`www.pse.cz/en/market-data/shares/{prime,standard,free,start}-market`:
+    název, ISIN, cena) a detaily (`/en/detail/{ISIN}`: „Ticker Xetra®“ = obchodní kód, Bloomberg, Reuters). ISIN se
+    vezme při shodě kódu; když žádný kód nesedí, jen při **jediné** akcii s cenou do ±10 % od ceny z výpisu (+ varování).
+    Yahoo symbol = obchodní kód + `.PR` (RBAG.CZ → `ERBAG.PR`, KOMB.CZ → `KOMB.PR`) a ukládá se. Posílá se jen ISIN.
+    Spouští se jen pro `.CZ` bez ISIN nebo bez cen.
   - **Složení (země, sektory, pozice) jen pro držené instrumenty** (`open_lots`) – u prodaných se nepoužívá, takže se
     ani nestahuje a nedělá zbytečná varování. Prodaným se stahují jen ceny (historie) a ETF i ISIN (ceny justETF).
   - **Zrušený/sloučený fond**: justETF ho označí textem „This fund has been liquidated or merged“ (`EtfProfile.closed`)

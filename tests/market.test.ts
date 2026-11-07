@@ -185,6 +185,41 @@ test('ISIN fallbacks: ETF missing from Xetra by onvista symbol, stock without ex
   assert.ok(!r.warnings.some((w) => w.includes('ISIN')), r.warnings.join('\n'));
 });
 
+test('Prague stocks: ISIN and Yahoo symbol from the PSE lists by trading/Bloomberg code, else by a unique price match', async () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 'a.xlsx', fakeXtbExport({
+    account: ACCOUNT,
+    cash: [{ id: '1', type: 'Deposit', time: '2024-12-01T08:00:00Z', amount: 5000 }],
+    openAsOf: '2025-01-10T10:00:00Z',
+    open: [
+      { ticker: 'RBAG.CZ', name: 'Erste', positionId: '1', volume: 1, openPrice: 900, openTime: '2025-01-06T09:00:00Z', currentPrice: 1000 },
+      { ticker: 'KOMB.CZ', name: 'Komercni', positionId: '2', volume: 1, openPrice: 900, openTime: '2025-01-06T09:00:00Z', currentPrice: 990 },
+      { ticker: 'ZZZ.CZ', name: 'Mystery', positionId: '3', volume: 1, openPrice: 100, openTime: '2025-01-06T09:00:00Z', currentPrice: 52 },
+    ],
+  }));
+  db.prepare(`UPDATE instruments SET category = 'STOCK'`).run();
+  const row = (name: string, isin: string, price: number) =>
+    `<tr><td class="item-title js-item-title" data-title="${name}"><a href="/en/detail/${isin}">${name}</a><div class="isin">\n ${isin}\n</div>\n</td>\n<td sort-by="${price}">CZK ${price}</td></tr>`;
+  const detail = (xetra: string, bloomberg: string) =>
+    `<tr><td>Ticker Bloomberg</td>\n<td>${bloomberg} CP Equity</td></tr><tr><td>Ticker Reuters</td><td>X.PR</td></tr><tr><td>Ticker Xetra®</td>\n<td>${xetra}</td></tr>`;
+  const yahooUrls: string[] = [];
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => {
+    if (u.includes('shares/prime-market')) return new Response(row('ERSTE GROUP BANK', 'AT0000652011', 1010) + row('KOMERČNÍ BANKA', 'CZ0008019106', 995));
+    if (u.includes('shares/')) return new Response(row('SOME &amp; CO', 'CZ0000000009', 50));
+    if (u.includes('detail/AT0000652011')) return new Response(detail('ERBAG', 'RBAG'));
+    if (u.includes('detail/CZ0008019106')) return new Response(detail('KOMB', 'KOMB'));
+    if (u.includes('detail/CZ0000000009')) return new Response(detail('SOME', 'SOME'));
+    if (u.includes('finance.yahoo.com')) yahooUrls.push(u);
+    return routes(u);
+  }) });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.instruments.map((i) => [i.ticker, i.isin]),
+    [['KOMB.CZ', 'CZ0008019106'], ['RBAG.CZ', 'AT0000652011'], ['ZZZ.CZ', 'CZ0000000009']]);
+  assert.deepEqual(yahooUrls.map((u) => /chart\/([^?]+)/.exec(u)![1]).sort(), ['ERBAG.PR', 'KOMB.PR', 'SOME.PR']);
+  assert.ok(r.warnings.some((w) => w.startsWith('ZZZ.CZ') && w.includes('jen podle ceny')), r.warnings.join('\n'));
+  assert.ok(!r.warnings.some((w) => /^(RBAG|KOMB)\.CZ: (ISIN|ceny)/.test(w)), r.warnings.join('\n'));
+});
+
 test('liquidated ETF is reported; compositionIsin takes countries and positions from another ETF, prices stay its own', async () => {
   const seedOne = () => {
     const db = openDatabase(':memory:');
