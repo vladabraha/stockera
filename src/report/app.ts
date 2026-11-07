@@ -6,7 +6,7 @@ import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
 import { applyLive, fetchLive, type LiveSources } from './live.ts';
-import { SALES_LIMIT_CZK, saleTaxEstimate } from '../analysis/tax.ts';
+import { SALES_LIMIT_CZK, lossOffsetPlan } from '../analysis/tax.ts';
 
 type Cur = 'czk' | 'eur';
 type Child = Node | string | null | undefined | false;
@@ -614,7 +614,6 @@ function upcomingPanel(a: Analysis): HTMLElement | null {
   if (!pending.length) return null;
   const items = pending.slice(0, 5);
   return panel('Brzy bez daně',
-    saleTaxNote(a, pending.map(({ l }) => l)),
     h('ul', { class: 'upcoming' }, ...items.map(({ x, l }) => h('li', {},
       avatar(x.ticker),
       h('div', { class: 'grow' },
@@ -624,27 +623,6 @@ function upcomingPanel(a: Analysis): HTMLElement | null {
         h('b', {}, czDate(l.taxFreeFrom)),
         h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))),
     ))));
-}
-
-/** "What if I sold everything without the time test today": gains minus losses, this year's sales and the 100k limit included. */
-function saleTaxNote(a: Analysis, lots: HoldingLot[]): HTMLElement {
-  const year = new Date().getFullYear();
-  const y = a.taxYears.find((t) => t.year === year);
-  const est = saleTaxEstimate(
-    lots.map((l) => ({ valueCzk: l.value?.czk ?? null, profitCzk: l.profit?.czk ?? null })),
-    y && { proceedsCzk: y.proceeds.czk, shortTermProfitCzk: y.shortTermProfitCzk },
-  );
-  const text = !est
-    ? 'Daň při prodeji teď nejde spočítat, chybí kurz ČNB.'
-    : !est.limitExceeded
-      ? `Kdybys teď prodal všech ${est.count} nákupů bez splněného testu, vejdeš se s letošními prodeji do limitu 100 000 Kč a daň nebude.`
-      : `Kdybys teď prodal všech ${est.count} nákupů bez splněného testu za ${fmtMoney(est.proceedsCzk, 'CZK')}: zisky ${fmtMoney(est.gainsCzk, 'CZK')}, ztráty ${fmtMoney(est.lossesCzk, 'CZK')}${y?.salesCount ? ' (započtené i s letošními prodeji)' : ''}.`;
-  return h('div', { class: 'tax-now' },
-    est?.limitExceeded
-      ? h('div', {}, h('span', { class: 'muted' }, est.taxCzk < 0 ? 'Prodej sníží letošní daň o ' : 'Daň při prodeji teď '), h('b', { class: 'num' }, fmtMoney(Math.abs(est.taxCzk), 'CZK')))
-      : null,
-    h('p', { class: 'muted small' }, text),
-  );
 }
 
 function checksPanel(a: Analysis): HTMLElement | null {
@@ -1222,7 +1200,7 @@ function soldTab(a: Analysis): HTMLElement {
       stat('Počet prodejů', String(sales), `${a.realized.length} instrumentů`),
       stat('Dividendy čistě', totals(a.summary.dividendsNet)),
     ),
-    taxYearsPanel(a.taxYears),
+    taxYearsPanel(a.taxYears, a.holdings),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
       h('div', { class: 'acc-list' }, ...a.realized.map(realizedRow))),
@@ -1230,7 +1208,7 @@ function soldTab(a: Analysis): HTMLElement {
   );
 }
 
-function taxYearsPanel(years: TaxYear[]): HTMLElement {
+function taxYearsPanel(years: TaxYear[], holdings: Holding[]): HTMLElement {
   const yearCard = (y: TaxYear) => {
     const used = y.proceeds.czk;
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
@@ -1245,11 +1223,30 @@ function taxYearsPanel(years: TaxYear[]): HTMLElement {
         h('dt', {}, 'Zdanitelné prodeje'), h('dd', {}, y.taxable.count ? `${y.taxable.count}× za ${totals(y.taxable.proceeds)}` : 'žádné'),
         h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
         h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
+      y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0 ? lossOffsetNote(y.taxable.baseCzk!, holdings) : null,
     );
   };
   return panel('Daně podle let',
     h('div', { class: 'years' }, ...[...years].sort((p, q) => q.year - p.year).map(yearCard)),
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
+  );
+}
+
+/** This year's tax can still be lowered by selling held positions at a loss before 31 December. */
+function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
+  const plan = lossOffsetPlan(baseCzk, holdings.flatMap((x) => x.lots.map((l) => ({
+    ticker: x.ticker, account: l.accountNumber, openTime: l.openTime, quantity: l.quantity, profitCzk: l.profit?.czk ?? null, taxFree: l.taxFree,
+  }))));
+  const lead = !plan.sales.length
+    ? 'Daň by šlo snížit prodejem pozic ve ztrátě, ale teď žádná ztrátová pozice bez časového testu není.'
+    : plan.remainingTaxCzk > 0
+      ? `Ztrátové pozice pokryjí ${fmtMoney(-plan.lossCzk, 'CZK')} z ${fmtMoney(baseCzk, 'CZK')}. Po jejich prodeji klesne daň na ${fmtMoney(plan.remainingTaxCzk, 'CZK')}.`
+      : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')}. Stačí prodat:`;
+  return h('div', { class: 'offset' },
+    h('p', {}, lead),
+    plan.sales.length ? h('ul', {}, ...plan.sales.map((s) => h('li', {},
+      h('b', {}, s.ticker), ` ${fmtNum(s.quantity, 4)} ks`, h('span', { class: 'muted' }, ', ztráta '), h('span', { class: 'neg' }, fmtMoney(s.lossCzk, 'CZK'))))) : null,
+    h('p', { class: 'muted small' }, 'Prodává se od nejstaršího nákupu. Ztráta z nákupů, které už splnily časový test, se nezapočítá. Podle aktuálních cen.'),
   );
 }
 

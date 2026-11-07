@@ -5,7 +5,7 @@ import { importBuffer } from '../src/importer.ts';
 import { pragueDate, taxFreeFrom } from '../src/analysis/calendar.ts';
 import { Converter, DbFxRates, type FxRates, type Money } from '../src/analysis/fx.ts';
 import { analyze, classifyCashOperation, computeTaxYears, type RealizedLot } from '../src/analysis/portfolio.ts';
-import { saleTaxEstimate } from '../src/analysis/tax.ts';
+import { lossOffsetPlan, type OffsetLot } from '../src/analysis/tax.ts';
 import { fakeXtbExport, type FakeExport } from './helpers/fakeXtb.ts';
 
 const EUR_CZK = 25;
@@ -160,14 +160,23 @@ test('analyze: warns when cash history starts after the first purchase; amounts 
   assert.equal(a.taxYears[0]!.limitStatus, 'unknown');
 });
 
-test('sale tax estimate: losses offset gains, earlier sales of the year and the 100k limit count', () => {
-  const lots = [{ valueCzk: 80_000, profitCzk: 30_000 }, { valueCzk: 40_000, profitCzk: -10_000 }];
-  assert.deepEqual(saleTaxEstimate(lots), { count: 2, proceedsCzk: 120_000, gainsCzk: 30_000, lossesCzk: -10_000, limitExceeded: true, taxCzk: 3_000 });
-  // Within the limit → no tax at all.
-  assert.equal(saleTaxEstimate([{ valueCzk: 90_000, profitCzk: 30_000 }])!.taxCzk, 0);
-  // Small sale pushes the year over the limit: earlier short-term gains become taxable too.
-  assert.equal(saleTaxEstimate([{ valueCzk: 20_000, profitCzk: 0 }], { proceedsCzk: 90_000, shortTermProfitCzk: 10_000 })!.taxCzk, 1_500);
-  // Selling at a loss lowers tax on this year's earlier gains.
-  assert.equal(saleTaxEstimate([{ valueCzk: 50_000, profitCzk: -20_000 }], { proceedsCzk: 200_000, shortTermProfitCzk: 50_000 })!.taxCzk, -3_000);
-  assert.equal(saleTaxEstimate([{ valueCzk: null, profitCzk: 1 }]), null);
+test('loss offset: FIFO prefix per account, time-tested lots ignored, biggest loss first, partial last lot', () => {
+  const lot = (ticker: string, openTime: string, quantity: number, profitCzk: number | null, taxFree = false, account = '1'): OffsetLot =>
+    ({ ticker, account, openTime, quantity, profitCzk, taxFree });
+  const lots = [
+    // AAA: oldest lot is tax-free with a loss (doesn't count), then a gain, then a bigger loss → sell all 3 for −4 000.
+    lot('AAA', '2020-01-01', 1, -9_000, true), lot('AAA', '2025-01-01', 2, 1_000), lot('AAA', '2025-06-01', 4, -5_000),
+    // BBB: only the first lot is worth selling (the second one is a gain).
+    lot('BBB', '2025-02-01', 10, -2_000), lot('BBB', '2025-03-01', 5, 3_000),
+    lot('CCC', '2025-01-01', 1, null),
+  ];
+  assert.deepEqual(lossOffsetPlan(5_000, lots), {
+    sales: [{ ticker: 'AAA', quantity: 7, lossCzk: -4_000 }, { ticker: 'BBB', quantity: 5, lossCzk: -1_000 }],
+    lossCzk: -5_000, remainingTaxCzk: 0,
+  });
+  // Partial lot after a gain: need 2 000 → AAA lots 1+2 (+1 000) and 3/5 of the losing lot.
+  assert.deepEqual(lossOffsetPlan(2_000, lots).sales, [{ ticker: 'AAA', quantity: 5.4, lossCzk: -2_000 }]);
+  // Not enough losses → the rest stays taxed at 15 %.
+  assert.equal(lossOffsetPlan(16_000, lots).remainingTaxCzk, 1_500);
+  assert.deepEqual(lossOffsetPlan(1_000, [lot('X', '2025-01-01', 1, 500)]).sales, []);
 });

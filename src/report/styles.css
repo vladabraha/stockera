@@ -241,8 +241,9 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 
 /* upcoming */
 .upcoming { list-style: none; margin: 0; padding: 0; }
-.tax-now { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--line); }
-.tax-now p { margin: 4px 0 0; }
+.offset { font-size: .86rem; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.offset p { margin: 0 0 6px; }
+.offset ul { margin: 0 0 6px; padding-left: 18px; }
 .upcoming li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .upcoming li:first-child { border-top: 0; padding-top: 0; }
 .upcoming .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }

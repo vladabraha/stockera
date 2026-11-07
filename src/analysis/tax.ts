@@ -9,35 +9,70 @@ export function incomeTax(baseCzk: number | null): number | null {
   return baseCzk == null ? null : Math.round(Math.max(0, baseCzk) * TAX_RATE);
 }
 
-export interface SaleTaxEstimate {
-  count: number;
-  proceedsCzk: number;
-  gainsCzk: number;
-  lossesCzk: number;
-  /** All sales of the year incl. this one exceed the limit → the short-term result is taxed. */
-  limitExceeded: boolean;
-  /** Extra tax caused by the sale (negative = the losses lower tax on this year's earlier sales). */
-  taxCzk: number;
+export interface OffsetLot {
+  ticker: string;
+  account: string;
+  openTime: string;
+  quantity: number;
+  profitCzk: number | null;
+  taxFree: boolean;
 }
 
+export interface OffsetSale {
+  ticker: string;
+  quantity: number;
+  /** Taxable loss realized by this sale (negative). */
+  lossCzk: number;
+}
+
+export interface LossOffset {
+  sales: OffsetSale[];
+  /** Total taxable loss of the suggested sales (negative). */
+  lossCzk: number;
+  /** Tax left after the suggested sales (0 = fully offset). */
+  remainingTaxCzk: number;
+}
+
+const ceilQty = (q: number) => Math.ceil(q * 1e4 - 1e-6) / 1e4;
+
 /**
- * Tax if all given lots (not time-tested) were sold now. Gains and losses of these lots are netted together with
- * this year's earlier short-term sales; the 100 000 Kč limit counts all of the year's sales. Null when a CZK value is missing.
+ * Which held positions to sell at a loss this year so the loss offsets the tax base of earlier sales.
+ * Sales are paired FIFO per account and ticker, so only a prefix of the oldest lots can be sold; time-tested lots
+ * are exempt (their gains and losses don't count). Positions with the biggest loss go first.
  */
-export function saleTaxEstimate(
-  lots: { valueCzk: number | null; profitCzk: number | null }[],
-  year: { proceedsCzk: number | null; shortTermProfitCzk: number | null } = { proceedsCzk: 0, shortTermProfitCzk: 0 },
-): SaleTaxEstimate | null {
-  if (year.proceedsCzk == null || year.shortTermProfitCzk == null) return null;
-  let proceedsCzk = 0, gainsCzk = 0, lossesCzk = 0;
-  for (const l of lots) {
-    if (l.valueCzk == null || l.profitCzk == null) return null;
-    proceedsCzk += l.valueCzk;
-    if (l.profitCzk >= 0) gainsCzk += l.profitCzk; else lossesCzk += l.profitCzk;
+export function lossOffsetPlan(baseCzk: number, lots: OffsetLot[]): LossOffset {
+  const groups = new Map<string, OffsetLot[]>();
+  for (const l of lots) groups.set(`${l.account}|${l.ticker}`, [...(groups.get(`${l.account}|${l.ticker}`) ?? []), l]);
+  const candidates: { lots: OffsetLot[]; loss: number }[] = [];
+  for (const g of groups.values()) {
+    g.sort((a, b) => a.openTime.localeCompare(b.openTime));
+    let cum = 0, best = 0, bestLen = 0;
+    for (const [i, l] of g.entries()) {
+      if (!l.taxFree && l.profitCzk == null) break;
+      cum += l.taxFree ? 0 : l.profitCzk!;
+      if (cum < best) { best = cum; bestLen = i + 1; }
+    }
+    if (best < 0) candidates.push({ lots: g.slice(0, bestLen), loss: best });
   }
-  const taxFor = (proceeds: number, profit: number) => (proceeds <= SALES_LIMIT_CZK ? 0 : incomeTax(profit)!);
-  const before = taxFor(year.proceedsCzk, year.shortTermProfitCzk);
-  const allProceeds = year.proceedsCzk + proceedsCzk;
-  const after = taxFor(allProceeds, year.shortTermProfitCzk + gainsCzk + lossesCzk);
-  return { count: lots.length, proceedsCzk, gainsCzk, lossesCzk, limitExceeded: allProceeds > SALES_LIMIT_CZK, taxCzk: after - before };
+  candidates.sort((a, b) => a.loss - b.loss);
+  let need = Math.max(0, baseCzk);
+  const sales: OffsetSale[] = [];
+  for (const c of candidates) {
+    if (need <= 0) break;
+    if (-c.loss <= need) {
+      sales.push({ ticker: c.lots[0]!.ticker, quantity: c.lots.reduce((a, l) => a + l.quantity, 0), lossCzk: c.loss });
+      need += c.loss;
+      continue;
+    }
+    let cum = 0, qty = 0;
+    for (const l of c.lots) {
+      const p = l.taxFree ? 0 : l.profitCzk!;
+      if (p < 0 && cum + p <= -need) { qty += (l.quantity * (-need - cum)) / p; break; }
+      cum += p;
+      qty += l.quantity;
+    }
+    sales.push({ ticker: c.lots[0]!.ticker, quantity: ceilQty(qty), lossCzk: -need });
+    need = 0;
+  }
+  return { sales, lossCzk: sales.reduce((a, s) => a + s.lossCzk, 0), remainingTaxCzk: incomeTax(need)! };
 }
