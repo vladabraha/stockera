@@ -568,7 +568,9 @@ function holdingRow(x: Holding): HTMLElement {
       sparkline(x.ticker),
       h('div', { class: 'ival' },
         h('b', { class: 'num' }, totals(x.value)),
-        chip(pct(x.profitPct), pctValue(x.profitPct), signedMoney(totals(x.profit), totalsValue(x.profit)))),
+        h('div', { class: 'ipl' },
+          signed(signedMoney(totals(x.profit), totalsValue(x.profit)), totalsValue(x.profit)),
+          chip(pct(x.profitPct), pctValue(x.profitPct)))),
       h('div', { class: 'itax' }, progress(freeShare, freeShare >= 1 - 1e-9 ? 'done' : ''), taxText),
     ),
   ], () => {

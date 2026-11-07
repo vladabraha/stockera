@@ -269,6 +269,7 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .ival { align-items: flex-end; gap: 4px; }
 .ival > b { font: 600 1.12rem/1.2 var(--fig); }
 .ival .chip { font-size: .82rem; padding: 2px 8px; }
+.ipl { display: flex; align-items: center; gap: 6px; font-size: .86rem; white-space: nowrap; }
 .itax { display: flex; flex-direction: column; gap: 6px; font-size: .82rem; color: var(--muted); }
 .acc-body { padding: 6px 10px 18px; }
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 22px; font-size: .84rem; color: var(--muted); padding: 6px 0 12px; }
