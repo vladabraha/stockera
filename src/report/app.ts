@@ -391,7 +391,7 @@ function header(a: Analysis): HTMLElement {
       segmented([['czk', 'Kč'], ['eur', '€']], state.cur, (c) => { state.cur = c; render(); }, 'cur'),
       refreshButton(),
       themeButton(),
-      button('Zamknout', () => {
+      lockButton(() => {
         state.data = state.base = null;
         state.liveRun++;
         state.live = { status: 'idle', date: null, updated: 0, total: 0 };
@@ -399,14 +399,31 @@ function header(a: Analysis): HTMLElement {
         state.chart = { kind: 'portfolio' };
         state.intro = true;
         renderLogin();
-      }, 'ghost', 'Zahodit dešifrovaná data a zamknout')),
+      })),
   );
+}
+
+/** Header button with text on wide screens and only an icon on phones (the label stays for screen readers). */
+function toolButton(text: string, icon: SVGElement, onClick: () => void, cls: string, title: string): HTMLButtonElement {
+  const b = button(h('span', {}, icon, h('span', { class: 'wide' }, text)), onClick, `ghost tool ${cls}`, title);
+  b.setAttribute('aria-label', text);
+  return b;
+}
+
+function toolIcon(...d: string[]): SVGElement {
+  const svg = s('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true', class: 'tool-icon' });
+  for (const p of d) svg.append(s('path', { d: p }));
+  return svg;
+}
+
+function lockButton(onClick: () => void): HTMLButtonElement {
+  return toolButton('Zamknout', toolIcon('M6 11h12v9H6z', 'M8.5 11V8a3.5 3.5 0 0 1 7 0v3'), onClick, 'lock', 'Zahodit dešifrovaná data a zamknout');
 }
 
 function refreshButton(): HTMLButtonElement {
   const loading = state.live.status === 'loading';
-  const label = (wide: string, narrow: string) => h('span', {}, h('span', { class: 'wide' }, wide), h('span', { class: 'narrow' }, narrow));
-  const b = button(loading ? label('Aktualizuji…', 'Ceny…') : label('Aktualizovat ceny', 'Ceny'), () => void refreshLive(), 'ghost refresh',
+  const b = toolButton(loading ? 'Aktualizuji ceny…' : 'Aktualizovat ceny', toolIcon('M19 12a7 7 0 1 1-2.05-4.95', 'M19 4.5V8h-3.5'),
+    () => void refreshLive(), loading ? 'refresh loading' : 'refresh',
     'Stáhne aktuální ceny a kurzy. Odesílají se jen ISINy a kódy měn, nikdy tvoje počty kusů ani hodnoty.');
   b.disabled = loading;
   return b;
@@ -655,9 +672,7 @@ function rangeButtons(firstIso: string | undefined, lastIso: string | undefined)
     });
     return h('label', { class: 'date-field' }, h('span', {}, label), input);
   };
-  return h('div', { class: 'range-tools' }, seg,
-    h('div', { class: 'range-custom' }, field('Od', 'from', firstIso), field('Do', 'to', lastIso),
-      state.custom.from || state.custom.to ? button('Celé období', () => { state.custom = { from: null, to: null }; render(); }, 'ghost small') : null));
+  return h('div', { class: 'range-tools' }, seg, h('div', { class: 'range-custom' }, field('Od', 'from', firstIso), field('Do', 'to', lastIso)));
 }
 
 /** Start of the visible range in ms (null = from the beginning). */

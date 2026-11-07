@@ -230,6 +230,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   Rozsah je jeden společný pro graf portfolia i instrumentů (`state.range` + `state.custom`), prohozené Od > Do se
   srovná, prázdné pole = od začátku / do konce. Text „Od … do …: zisk“ porovnává první a poslední bod v rozsahu.
   Žádné tažení myší po grafu – nativní pole data fungují stejně na mobilu i bez nové knihovny.
+- Na telefonu jsou *Aktualizovat ceny* a *Zamknout* jen ikony (text zůstává v `aria-label` a `title`), aby se
+  hlavička vešla na jeden řádek; zkratky typu „Ceny“ nepoužívat – nebyly srozumitelné.
 - Řádky instrumentů ukazují **plný název** (justETF/Yahoo z `instrument_meta`, jinak krátký z XTB) a pod ním ticker + ks.
   Jednotkové ceny (nákup/prodej) jsou vždy v **měně instrumentu** s jejím symbolem; součty se řídí přepínačem Kč / €.
 - Rozbalený řádek instrumentu (`.acc[open] > summary`) je **sticky** pod hlavičkou stránky; výšku hlavičky (mění se
