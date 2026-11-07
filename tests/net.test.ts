@@ -8,7 +8,7 @@ import { fakeFetch } from './helpers/fakeFetch.ts';
 import { findThreat, parseSafeJson, UnsafeDataError } from '../src/net/inspect.ts';
 import {
   countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, pickOnvistaStock, sectorKey,
-  yahooSymbol,
+  yahooSymbol, companySearchQueries, holdingNameKey, pickOnvistaCompany,
 } from '../src/market/sources.ts';
 
 test('Http blocks hosts outside the allowlist, non-HTTPS and redirects to foreign hosts', async () => {
@@ -205,4 +205,14 @@ test('Http discards suspicious JSON and extracted values and audits them as unsa
     e instanceof UnsafeDataError && /Yahoo poslal podezřelá data \(HTML\/skript\)/.test(e.message));
   assert.throws(() => http.checkExtracted('https://www.justetf.com/p', { name: 'ETF\u001b]0;pwned\u0007' }), UnsafeDataError);
   assert.deepEqual(http.log.map((e) => [e.status, e.error ?? '']), [[200, ''], ['unsafe', 'HTML/skript'], ['unsafe', 'řídicí znaky']]);
+});
+
+test('pickOnvistaCompany: ETF position by company name, ADR/CDR ignored, ambiguous names give null', () => {
+  const res = (...r: [string, string][]) => ({ facets: [{ type: 'STOCK', results: r.map(([name, isin]) => ({ name, isin })) }] });
+  assert.deepEqual(companySearchQueries('PayPal Holdings Inc'), ['PayPal Holdings', 'PAYPAL']);
+  assert.deepEqual(companySearchQueries('ALLEGRO.EU SA'), ['ALLEGRO.EU', 'ALLEGRO']);
+  assert.equal(pickOnvistaCompany(res(['Paypal', 'US70450Y1038'], ['PayPal (CDR)', 'CA70452C1095']), 'PayPal Holdings Inc'), 'US70450Y1038');
+  assert.equal(pickOnvistaCompany(res(['Allegro.eu', 'LU2237380790'], ['Allegro Microsystems', 'US01749D1054']), 'ALLEGRO.EU SA'), 'LU2237380790');
+  assert.equal(pickOnvistaCompany(res(['EQT AB', 'SE0012853455'], ['EQT CORP', 'US26884L1098']), 'EQT Corp'), null);
+  assert.equal(holdingNameKey('Hartford Insurance Group Inc/The'), 'name:HARTFORD INSURANCE GROUP');
 });

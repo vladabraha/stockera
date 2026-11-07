@@ -138,12 +138,54 @@ export interface OnvistaBreakdowns {
   fundsHoldingList?: { list?: { instrument?: { name?: string; isin?: string }; investmentPct?: number }[] };
 }
 
+/** `isin` is the ISIN, or `name:…` (see holdingNameKey) for a position whose ISIN could not be found. */
 export type FundHolding = { isin: string; name: string; weight: number };
 
-/** Largest positions of a fund (onvista lists the top 10) – ISIN lets the same stock be summed across ETFs. */
+const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+
+/**
+ * Largest positions of a fund (onvista lists the top 10) – ISIN lets the same stock be summed across ETFs.
+ * For some funds (Dimensional, Amundi) onvista gives only the name; those get isin '' and the caller looks it up.
+ */
 export const parseOnvistaHoldings = (data: OnvistaBreakdowns): FundHolding[] => (data.fundsHoldingList?.list ?? [])
-  .filter((h) => /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(h.instrument?.isin ?? '') && h.instrument?.name?.trim() && Number.isFinite(h.investmentPct) && h.investmentPct! > 0)
-  .map((h) => ({ isin: h.instrument!.isin!, name: h.instrument!.name!.trim(), weight: h.investmentPct! }));
+  .filter((h) => h.instrument?.name?.trim() && Number.isFinite(h.investmentPct) && h.investmentPct! > 0)
+  .map((h) => ({ isin: ISIN_RE.test(h.instrument?.isin ?? '') ? h.instrument!.isin! : '', name: h.instrument!.name!.trim(), weight: h.investmentPct! }));
+
+const LEGAL_FORMS = /\b(inc|corp|corporation|ltd|limited|plc|sa|s\.a|as|a\.s|ag|nv|n\.v|se|spa|ab|asa|oyj|nyrt|co|company|the)\b\.?/gi;
+
+/** Company name without legal form, for searching ("Devon Energy Corp" → "Devon Energy", "Hartford … Inc/The" → "Hartford …"). */
+export function companySearchName(name: string): string {
+  return name.replace(/\/the$/i, '').replace(/\(.*?\)/g, ' ').replace(LEGAL_FORMS, ' ').replace(/[^\p{L}\p{N}.&' -]+/gu, ' ').replace(/\s+/g, ' ').trim();
+}
+
+const GENERIC = /\b(holdings?|group)\b/gi;
+const nameWords = (s: string) => companySearchName(s).replace(GENERIC, ' ').toUpperCase().split(/[\s.-]+/).filter(Boolean);
+
+/** Search queries for a company: full name, then without "Holdings"/"Group" or just the first word ("Allegro.eu SA" → "ALLEGRO"). */
+export function companySearchQueries(name: string): string[] {
+  const full = companySearchName(name);
+  const words = nameWords(name);
+  const alt = words.length < full.split(' ').length ? words.join(' ') : words[0] ?? '';
+  return [...new Set([full, alt].filter(Boolean))];
+}
+
+/** Stable key for a position without ISIN, so the same name from two ETFs is still summed. */
+export const holdingNameKey = (name: string) => `name:${companySearchName(name).toUpperCase()}`;
+
+/**
+ * ISIN of an ETF position found only by name: the only stock (ADRs/CDRs excluded) whose name starts with the same
+ * first two words (ignoring legal form, "Holdings", "Group"). "EQT" matches both EQT AB and EQT Corp → null (no guessing).
+ */
+export function pickOnvistaCompany(data: OnvistaSearch, name: string): string | null {
+  const words = nameWords;
+  const q = words(name).slice(0, 2);
+  if (!q.length) return null;
+  const isins = new Set((data.facets ?? []).filter((f) => f.type === 'STOCK').flatMap((f) => f.results ?? [])
+    .filter((r) => r.isin && ISIN_RE.test(r.isin) && !/\b(ADR|ADS|GDR|CDR)\b|ADR\//i.test(r.name ?? ''))
+    .filter((r) => { const w = words(r.name ?? ''); return q.every((x, i) => w[i] === x); })
+    .map((r) => r.isin!));
+  return isins.size === 1 ? [...isins][0]! : null;
+}
 
 const onvistaList = (l: OnvistaList | undefined) => (l?.list ?? [])
   .filter((c) => c.nameBreakdown && Number.isFinite(c.investmentPct))

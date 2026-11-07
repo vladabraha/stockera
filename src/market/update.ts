@@ -4,7 +4,7 @@ import type { Http } from '../net/http.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
   XETRA_INSTRUMENTS_URL, countryCode, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
-  justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
+  companySearchQueries, holdingNameKey, justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, pickOnvistaCompany, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
   parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, pickOnvistaEtf, onvistaStockCandidates, onvistaHomePrice, sectorKey, SECTORS, yahooSymbol,
   type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type Sector, type XetraInstrument,
 } from './sources.ts';
@@ -71,6 +71,7 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
   const log = opts.log ?? (() => {});
   const config = opts.config ?? {};
   const warnings: string[] = [];
+  const companyIsins = new Map<string, string | null>();
   const report: UpdateReport = { fxYears: [], fxRows: 0, instruments: [], warnings };
 
   const tickers = db
@@ -343,7 +344,9 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     upsertMeta.run(ticker, isin, name, source, symbol, currency, countrySource, sectorSource, refreshed ? opts.today : (prev?.updated_at ?? opts.today));
 
     // largest positions of an ETF (look-through to single stocks); reuses the justETF/onvista responses from above
-    const holdingsAge = prev?.holdings_updated ? (Date.parse(opts.today) - Date.parse(prev.holdings_updated)) / 86_400_000 : Infinity;
+    // An ETF without known positions is re-checked on every run (a source may add them), others after 30 days
+    const knownHoldings = (db.prepare('SELECT COUNT(*) AS n FROM fund_holdings WHERE ticker = ?').get(ticker) as { n: number }).n > 0;
+    const holdingsAge = knownHoldings && prev?.holdings_updated ? (Date.parse(opts.today) - Date.parse(prev.holdings_updated)) / 86_400_000 : Infinity;
     if (held && isEtf && compIsin && (o.compositionIsin || holdingsAge > (opts.countryMaxAgeDays ?? COUNTRY_MAX_AGE_DAYS))) {
       log(`${ticker}: největší pozice ETF…`);
       const problems: string[] = [];
@@ -362,8 +365,25 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
         } catch (e) {
           [failed] = [true, problems.push(`onvista: ${(e as Error).message}`)];
         }
+        // onvista lists some funds' positions by name only → find the ISIN by company name (public data only)
+        for (const t of top.filter((x) => !x.isin)) {
+          let found = companyIsins.get(t.name);
+          if (found === undefined) {
+            found = null;
+            for (const q of companySearchQueries(t.name)) {
+              try {
+                found = pickOnvistaCompany(await http.getJson<OnvistaSearch>(onvistaSearchUrl(q)), t.name);
+              } catch {
+                // not found → the position is kept under its name
+              }
+              if (found) break;
+            }
+            companyIsins.set(t.name, found);
+          }
+          t.isin = found ?? holdingNameKey(t.name);
+        }
       }
-      // An ETF whose positions no source lists is re-checked after 30 days, not on every run
+      // "No source lists them" is remembered, so the warning is shown only once
       if (top.length || !failed) {
         transaction(db, () => {
           db.prepare('DELETE FROM fund_holdings WHERE ticker = ?').run(ticker);

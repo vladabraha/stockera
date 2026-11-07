@@ -120,8 +120,14 @@ test('ETF without a justETF country breakdown or positions falls back to onvista
   const db = seed();
   const onvista = JSON.stringify({
     countryBreakdown: { list: [{ nameBreakdown: 'Polen', investmentPct: 73 }, { nameBreakdown: 'Ungarn', investmentPct: 20.17 }, { nameBreakdown: 'Tschechien', investmentPct: 6.83 }] },
-    fundsHoldingList: { list: [{ instrument: { name: 'Orlen', isin: 'PLPKN0000018' }, investmentPct: 12.5 }, { instrument: { name: 'Bez ISIN' }, investmentPct: 3 }] },
+    fundsHoldingList: { list: [{ instrument: { name: 'Orlen', isin: 'PLPKN0000018' }, investmentPct: 12.5 }, { instrument: { name: 'OTP BANK PLC', isin: '' }, investmentPct: 3 },
+      { instrument: { name: 'Carnival Corp Ltd' }, investmentPct: 2 }] },
   });
+  // Positions without ISIN are looked up by company name; ADRs are ignored and two Carnival listings are ambiguous.
+  const search = JSON.stringify({ facets: [{ type: 'STOCK', results: [
+    { name: 'OTP Bank', isin: 'HU0000061726' }, { name: 'OTP BANK ADR', isin: 'US67106E1010' },
+    { name: 'Carnival Corp. (AIDA)', isin: 'BMG2004J1036' }, { name: 'Carnival PLC', isin: 'GB0031215220' },
+  ] }] });
   const named = yahoo.replace('"currency":"USD"', '"currency":"USD","longName":"Stock Inc."');
   const http = new Http({
     minIntervalMs: 0,
@@ -129,6 +135,7 @@ test('ETF without a justETF country breakdown or positions falls back to onvista
       u.includes('etf-profile') ? new Response('<meta property="og:title" content="Swap ETF | X | IE0000000001" />' +
         '<td data-testid="tl_etf-holdings_sectors_value_name">Financials</td><span data-testid="tl_etf-holdings_sectors_value_percentage">55.00%</span>')
         : u.includes('api.onvista.de/api/v1/funds/') ? new Response(onvista)
+          : /instruments\/search.*searchValue=(OTP|Carnival|CARNIVAL)/.test(u) ? new Response(search)
           : u.includes('finance.yahoo.com') ? new Response(named)
             : routes(u)),
   });
@@ -142,7 +149,11 @@ test('ETF without a justETF country breakdown or positions falls back to onvista
   ]);
   const weights = db.prepare(`SELECT country, weight FROM country_weights WHERE ticker = 'ETFA.DE' ORDER BY weight DESC`).all().map((x) => ({ ...x }));
   assert.deepEqual(weights, [{ country: 'PL', weight: 73 }, { country: 'HU', weight: 20.17 }, { country: 'CZ', weight: 6.83 }]);
-  assert.deepEqual(db.prepare('SELECT isin, name, weight FROM fund_holdings').all().map((x) => ({ ...x })), [{ isin: 'PLPKN0000018', name: 'Orlen', weight: 12.5 }]);
+  assert.deepEqual(db.prepare('SELECT isin, name, weight FROM fund_holdings ORDER BY weight DESC').all().map((x) => ({ ...x })), [
+    { isin: 'PLPKN0000018', name: 'Orlen', weight: 12.5 },
+    { isin: 'HU0000061726', name: 'OTP BANK PLC', weight: 3 },
+    { isin: 'name:CARNIVAL', name: 'Carnival Corp Ltd', weight: 2 },
+  ]);
   assert.deepEqual(db.prepare('SELECT ticker, name FROM instrument_meta ORDER BY ticker').all().map((x) => ({ ...x })), [
     { ticker: 'ETFA.DE', name: 'Swap ETF' },
     { ticker: 'STK.US', name: 'Stock Inc.' },

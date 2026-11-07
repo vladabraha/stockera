@@ -141,7 +141,12 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     a `other`. CSG.NL onvista vede jako „Sonstige Technologie“ (ve skutečnosti obrana) → ruční `"sector": "industrials"`.
   - **Největší pozice ETF** (`fund_holdings`, `instrument_meta.holdings_updated`): justETF profil (top 10, ISIN
     z odkazu `/stock-profiles/{ISIN}`, anglické názvy), záložně onvista `breakdowns` (`fundsHoldingList`, top 10).
-    Obnova po 30 dnech; když je nemá žádný zdroj, zkusí se to znovu až za 30 dní (varování jen poprvé).
+    U některých fondů (Dimensional, Amundi – DEGT, LEER) dává onvista jen **název firmy bez ISIN** → ISIN se dohledá
+    onvista vyhledáváním podle názvu bez právní formy (`companySearchQueries`: celý název, pak bez „Holdings/Group“ nebo
+    první slovo). Přijme se jen **jediná** akcie se shodnými prvními dvěma slovy, ADR/GDR/CDR se ignorují
+    (`pickOnvistaCompany`; „EQT“ = EQT AB i EQT Corp → nic). Nenalezené se uloží pod klíčem `name:NÁZEV`
+    (`holdingNameKey`), takže se v přehledu ukážou a stejný název z více ETF se sečte. Posílají se jen veřejné názvy firem.
+    Obnova po 30 dnech; ETF bez známých pozic se zkouší při každém běhu (varování „nezveřejňuje žádný zdroj“ jen poprvé).
     Zamítnuto: extraETF (také jen top 10, nový server), stahování úplného složení od správců fondů (viz §6).
 - **Zamítnuto:** Stooq (vyžaduje JS), OpenFIGI (nevrací ISIN), vyhledávání Börse Frankfurt/Euronext (prázdné),
   automatické „proxy ETF“ přes podobné ETF z justETF (nespolehlivé) → místo toho ruční `compositionIsin` nebo `countries`.
@@ -281,7 +286,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   od 11. řádku se seznam posouvá uvnitř panelu (`max-height`). Řádek se rozbalí na rozpad „z kterého ETF kolik %“.
   **Jen 10 největších pozic každého ETF** – úplné složení zveřejňuje každý správce jinak (iShares, Amundi, SPDR…,
   části přes POST/XLSX), uživatel zvolil top 10 bez nových serverů. Panel proto poctivě ukazuje, kolik % portfolia
-  známé pozice tvoří, a vyjmenuje ETF bez známých pozic (LEER, DEGT – nemá je justETF ani onvista).
+  známé pozice tvoří, a vyjmenuje ETF bez známých pozic.
 - Responzivita: < 960 px řádek pozice na 2 řádky, < 860 px jeden sloupec, < 640 px statistiky 2×, bez sparkline, taby na celou šířku, **tabulky → karty**
   (`td[data-label]` + `td::before`). Každá buňka tabulky musí mít `data-label`.
 - Vlastní SVG grafy bez knihoven. Výkon: decimace na ~2 body/px, hover přes `requestAnimationFrame`, binární
