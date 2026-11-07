@@ -1,7 +1,30 @@
 node_modules/
+
 # Osobní data – nikdy necommitovat
 data/
 out/
+tmp/
+logs/
+
+# Pojistka, kdyby se výpisy, databáze nebo logy ocitly mimo data/ a out/
 *.db
 *.db-*
+*.sqlite
+*.sqlite3
+*.xlsx
+*.xls
+*.csv
+*.pdf
+*.log
+*.jsonl
+stockera.html
+stockera.json
+.env
+.env.*
+
+# Lokální poznámky a nastavení editoru/systému
+docs/architektura.md
+.idea/
+.vscode/
 .DS_Store
+Thumbs.db
