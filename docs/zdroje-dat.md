@@ -16,15 +16,17 @@ Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a 
 | Ceny akcií | Yahoo Finance – `v8/finance/chart/{symbol}` | symbol + období | od posledního uloženého dne − 7 dní |
 
 ## Živé ceny v otevřeném reportu (`out/stockera.html`)
-Prohlížeč po odemknutí stáhne aktuální ceny a kurzy (CSP povoluje jen tyto dva hosty). Odchází jen ISIN nebo kódy měn.
+Prohlížeč po odemknutí stáhne aktuální ceny a kurzy (CSP povoluje jen tyto čtyři hosty). Odchází jen ISIN nebo kódy měn.
 
 | Data | Zdroj | Požadavek |
 |---|---|---|
 | Kurzy (ECB) | Frankfurter – `api.frankfurter.dev/v1/latest?base=EUR&symbols=CZK,USD,…` | kódy měn |
 | Cena ETF | onvista – `api.onvista.de/api/v1/funds/ISIN:{ISIN}/snapshot` | ISIN |
 | Cena akcie | onvista – `api.onvista.de/api/v1/stocks/ISIN:{ISIN}/snapshot` | ISIN |
+| Cena – záloha | Tradegate – `www.tradegatebsx.com/refresh.php?isin={ISIN}` (EUR, poslední obchodní den) | ISIN |
+| Kurzy – záloha | ECB – `data-api.ecb.europa.eu/service/data/EXR/D.CZK+USD….EUR.SP00.A` | kódy měn |
 
-Bez připojení report ukáže hodnoty z poslední aktualizace. Ostatní zdroje (justETF, Yahoo, burzy) prohlížeči přístup nepovolují (CORS).
+Když hlavní zdroj selže, použije se záložní a report na to upozorní. Bez připojení report ukáže hodnoty z poslední aktualizace. Ostatní zdroje (justETF, Yahoo, burzy) prohlížeči přístup nepovolují (CORS).
 
 ## Pravidla a omezení
 - **Ocenění:** použije se stažená cena, pokud je novější než stav ve výpisu XTB; jinak hodnota z výpisu.

@@ -62,14 +62,14 @@ test('buildReport: CSP allows only the live-price APIs and the inline blocks by 
   const html = await buildReport(sampleAnalysis(), PASSWORD, { iterations: ITER });
   const { csp, style, script } = parts(html);
   assert.match(csp, /default-src 'none'/);
-  assert.match(csp, /(^|; )connect-src https:\/\/api\.onvista\.de https:\/\/api\.frankfurter\.dev(;|$)/);
+  assert.match(csp, /(^|; )connect-src https:\/\/api\.onvista\.de https:\/\/api\.frankfurter\.dev https:\/\/www\.tradegatebsx\.com https:\/\/data-api\.ecb\.europa\.eu(;|$)/);
   for (const d of ["img-src 'none'", "form-action 'none'", "base-uri 'none'"]) assert.ok(csp.includes(d), d);
   assert.ok(csp.includes(`script-src ${hash(script)}`));
   assert.ok(csp.includes(`style-src ${hash(style)}`));
   assert.ok(!/unsafe-inline|unsafe-eval/.test(csp));
-  // No external resources or links except the two price APIs (the SVG namespace is an identifier, not a request).
+  // No external resources or links except the live-price APIs (the SVG namespace is an identifier, not a request).
   const urls = html.match(/https?:\/\/[^\s"'<>`]+/g) ?? [];
-  const allowed = /^https:\/\/api\.(onvista\.de|frankfurter\.dev)([/;]|$)/;
+  const allowed = /^https:\/\/(api\.onvista\.de|api\.frankfurter\.dev|www\.tradegatebsx\.com|data-api\.ecb\.europa\.eu)([/;?]|$)/;
   assert.deepEqual(urls.filter((u) => u !== 'http://www.w3.org/2000/svg' && !allowed.test(u)), []);
   assert.ok(!/\sstyle=|\son[a-z]+=|<link|<iframe|<img/i.test(html));
   assert.equal((html.match(/<script/g) ?? []).length, 2);

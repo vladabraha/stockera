@@ -4,13 +4,23 @@ import type { Analysis, Holding, HoldingLot } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import { breakdown } from '../analysis/breakdown.ts';
 
-export const LIVE_HOSTS = ['https://api.onvista.de', 'https://api.frankfurter.dev'] as const;
+/** Primary sources first, then their fallbacks (Tradegate for quotes, ECB for rates). */
+export const LIVE_HOSTS = ['https://api.onvista.de', 'https://api.frankfurter.dev', 'https://www.tradegatebsx.com', 'https://data-api.ecb.europa.eu'] as const;
 
 export interface LiveQuote {
   price: number;
   currency: string;
   /** YYYY-MM-DD (UTC day of the last trade). */
   date: string;
+}
+
+export interface LiveSources {
+  /** Rates came from the ECB fallback because Frankfurter failed. */
+  fxFallback: boolean;
+  /** Tickers priced by the Tradegate fallback because onvista failed. */
+  quoteFallback: string[];
+  /** Short technical reasons of failed primary requests (no personal data). */
+  errors: string[];
 }
 
 export interface LiveResult {
@@ -30,7 +40,11 @@ const CONCURRENCY = 4;
 const TIMEOUT_MS = 10_000;
 
 export const liveFxUrl = (currencies: string[]) =>
-  `https://api.frankfurter.dev/v1/latest?base=EUR&symbols=${currencies.filter((c) => /^[A-Z]{3}$/.test(c) && c !== 'EUR').sort().join(',')}`;
+  `https://api.frankfurter.dev/v1/latest?base=EUR&symbols=${currencyList(currencies).join(',')}`;
+const currencyList = (currencies: string[]) => currencies.filter((c) => /^[A-Z]{3}$/.test(c) && c !== 'EUR').sort();
+export const ecbFxUrl = (currencies: string[]) =>
+  `https://data-api.ecb.europa.eu/service/data/EXR/D.${currencyList(currencies).join('+')}.EUR.SP00.A?lastNObservations=1&format=jsondata`;
+export const tradegateUrl = (isin: string) => `https://www.tradegatebsx.com/refresh.php?isin=${encodeURIComponent(isin)}`;
 export const liveQuoteUrl = (isin: string, etf: boolean) =>
   `https://api.onvista.de/api/v1/${etf ? 'funds' : 'stocks'}/ISIN:${encodeURIComponent(isin)}/snapshot`;
 
@@ -42,6 +56,43 @@ export function parseLiveFx(data: unknown): Record<string, number> {
   const out: Record<string, number> = { CZK: 1, EUR: czk };
   for (const [c, r] of Object.entries(rates)) if (c !== 'CZK' && Number(r) > 0) out[c] = czk / Number(r);
   return out;
+}
+
+/** ECB SDMX-JSON (`EXR/D.X+Y.EUR.SP00.A`, last observation) → same shape as `parseLiveFx`. */
+export function parseEcbFx(data: unknown): Record<string, number> {
+  const d = data as { dataSets?: { series?: Record<string, { observations?: Record<string, unknown[]> }> }[]; structure?: { dimensions?: { series?: { id: string; values: { id: string }[] }[] } } } | null;
+  const dims = d?.structure?.dimensions?.series ?? [];
+  const at = dims.findIndex((x) => x.id === 'CURRENCY');
+  const rates: Record<string, number> = {};
+  for (const [key, series] of Object.entries(d?.dataSets?.[0]?.series ?? {})) {
+    const code = dims[at]?.values[Number(key.split(':')[at])]?.id;
+    const obs = Object.values(series.observations ?? {}).at(-1);
+    if (code && obs) rates[code] = Number(obs[0]);
+  }
+  return parseLiveFx({ rates });
+}
+
+/** Numbers come as JSON numbers or German strings ("1.234,50"). */
+function germanNumber(v: unknown): number {
+  if (typeof v === 'number') return v;
+  if (typeof v !== 'string') return NaN;
+  return Number(v.includes(',') ? v.replace(/\./g, '').replace(',', '.') : v);
+}
+
+/** Last Tradegate trading day (Mon–Fri from 8:00 Berlin time; holidays are not known). */
+export function tradegateDay(now: Date): string {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'Europe/Berlin', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23', weekday: 'short' })
+    .formatToParts(now).map((p) => [p.type, p.value]));
+  const day = new Date(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)));
+  if (Number(parts.hour) < 8) day.setUTCDate(day.getUTCDate() - 1);
+  while (day.getUTCDay() === 0 || day.getUTCDay() === 6) day.setUTCDate(day.getUTCDate() - 1);
+  return day.toISOString().slice(0, 10);
+}
+
+/** Tradegate `refresh.php`: last trade in EUR; the response has no date, so the last trading day is assumed. */
+export function parseTradegate(data: unknown, now: Date): LiveQuote | null {
+  const price = germanNumber((data as { last?: unknown } | null)?.last);
+  return price > 0 ? { price, currency: 'EUR', date: tradegateDay(now) } : null;
 }
 
 interface OnvistaQuote { last?: unknown; isoCurrency?: unknown; datetimeLast?: unknown; market?: { codeMarket?: unknown } }
@@ -70,7 +121,7 @@ function instrumentCurrency(a: Analysis, x: Holding): string | null {
 }
 
 /** Downloads rates and quotes; any failure just leaves that instrument (or everything) at the stored snapshot. */
-export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch): Promise<{ czkPer: Record<string, number>; quotes: Record<string, LiveQuote> }> {
+export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch, now = new Date()): Promise<{ czkPer: Record<string, number>; quotes: Record<string, LiveQuote>; sources: LiveSources }> {
   const get = async (url: string): Promise<unknown> => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -87,18 +138,43 @@ export async function fetchLive(a: Analysis, fetchFn: typeof fetch = fetch): Pro
   for (const x of a.holdings) for (const l of x.lots) currencies.add(l.cost.currency);
   for (const t of targets) if (t.currency) currencies.add(t.currency);
 
+  const sources: LiveSources = { fxFallback: false, quoteFallback: [], errors: [] };
+  const fail = (source: string, e: unknown) => {
+    const msg = `${source}: ${e instanceof Error ? (e.name === 'AbortError' ? 'neodpověděl včas' : e.message) : String(e)}`;
+    if (!sources.errors.includes(msg)) sources.errors.push(msg);
+  };
   const quotes: Record<string, LiveQuote> = {};
   const queue = [...targets];
   const worker = async () => {
     for (let t = queue.shift(); t; t = queue.shift()) {
       try {
         const q = pickLiveQuote(await get(liveQuoteUrl(t.isin, t.etf)), t.etf, t.currency);
-        if (q) quotes[t.ticker] = q;
+        if (!q) throw new Error('bez použitelné ceny');
+        quotes[t.ticker] = q;
+        continue;
+      } catch (e) {
+        fail('onvista', e);
+      }
+      try {
+        const q = parseTradegate(await get(tradegateUrl(t.isin)), now);
+        if (q) {
+          quotes[t.ticker] = q;
+          sources.quoteFallback.push(t.ticker);
+        }
       } catch { /* keep the stored value */ }
     }
   };
-  const [fx] = await Promise.all([get(liveFxUrl([...currencies])), ...Array.from({ length: CONCURRENCY }, worker)]);
-  return { czkPer: parseLiveFx(fx), quotes };
+  const loadFx = async () => {
+    try {
+      return parseLiveFx(await get(liveFxUrl([...currencies])));
+    } catch (e) {
+      fail('Frankfurter', e);
+      sources.fxFallback = true;
+      return parseEcbFx(await get(ecbFxUrl([...currencies])));
+    }
+  };
+  const [czkPer] = await Promise.all([loadFx(), ...Array.from({ length: CONCURRENCY }, worker)]);
+  return { czkPer, quotes, sources };
 }
 
 const sumT = (items: Totals[]): Totals => {

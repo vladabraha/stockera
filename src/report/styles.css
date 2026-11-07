@@ -100,6 +100,8 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .hero-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .eyebrow { color: var(--muted); font-size: .88rem; margin-bottom: 4px; }
 .eyebrow.live-live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--pos); vertical-align: 1px; }
+/* Hero sits on the dark band in both themes, hence fixed light text. */
+.live-notice { max-width: 60ch; margin: -2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: rgba(242, 184, 75, .12); color: #f6d48f; font-size: .84rem; line-height: 1.4; }
 .big { font: 600 clamp(2.4rem, 7vw, 3.8rem)/1.05 var(--fig); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .delta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; font-weight: 600; }
 .delta .muted { font-weight: 400; }

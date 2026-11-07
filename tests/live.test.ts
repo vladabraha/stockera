@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Analysis } from '../src/analysis/portfolio.ts';
-import { applyLive, fetchLive, liveFxUrl, parseLiveFx, pickLiveQuote } from '../src/report/live.ts';
+import { applyLive, ecbFxUrl, fetchLive, liveFxUrl, parseEcbFx, parseLiveFx, parseTradegate, pickLiveQuote, tradegateDay } from '../src/report/live.ts';
 
 const q = (market: string, last: number, isoCurrency: string, datetimeLast: string) => ({ last, isoCurrency, datetimeLast, market: { codeMarket: market } });
 
@@ -103,9 +103,11 @@ test('fetchLive sends only ISIN / currency GETs without credentials and survives
   const r = await fetchLive(base(), fake);
   assert.deepEqual(r.quotes, {});
   assert.equal(r.czkPer.USD, 20);
+  assert.deepEqual(r.sources, { fxFallback: false, quoteFallback: [], errors: ['onvista: HTTP 429'] });
   assert.deepEqual(calls.map((c) => c.url).sort(), [
     'https://api.frankfurter.dev/v1/latest?base=EUR&symbols=CHF,CZK,GBP,USD',
     'https://api.onvista.de/api/v1/stocks/ISIN:US0000000001/snapshot',
+    'https://www.tradegatebsx.com/refresh.php?isin=US0000000001',
   ]);
   for (const { init } of calls) {
     assert.equal(init.method, 'GET');
@@ -113,4 +115,42 @@ test('fetchLive sends only ISIN / currency GETs without credentials and survives
     assert.equal(init.referrerPolicy, 'no-referrer');
     assert.equal(init.body, undefined);
   }
+});
+
+test('Tradegate and ECB fallbacks: German numbers, assumed trading day, SDMX rates', () => {
+  const fri = new Date('2026-11-06T15:00:00Z');
+  assert.deepEqual(parseTradegate({ last: '1.307,30', close: 300 }, fri), { price: 1307.3, currency: 'EUR', date: '2026-11-06' });
+  assert.deepEqual(parseTradegate({ last: 13.11 }, fri)?.price, 13.11);
+  assert.equal(parseTradegate({ bid: 1 }, fri), null);
+  assert.equal(tradegateDay(new Date('2026-11-07T10:00:00Z')), '2026-11-06'); // Saturday
+  assert.equal(tradegateDay(new Date('2026-11-09T06:00:00Z')), '2026-11-06'); // Monday 7:00 Berlin, before opening
+  assert.equal(tradegateDay(new Date('2026-11-09T08:00:00Z')), '2026-11-09');
+  assert.equal(ecbFxUrl(['USD', 'CZK', 'EUR']), 'https://data-api.ecb.europa.eu/service/data/EXR/D.CZK+USD.EUR.SP00.A?lastNObservations=1&format=jsondata');
+  const sdmx = {
+    dataSets: [{ series: { '0:0:0:0:0': { observations: { 0: [1.25, 0] } }, '0:1:0:0:0': { observations: { 0: [25, 0] } } } }],
+    structure: { dimensions: { series: [{ id: 'FREQ', values: [{ id: 'D' }] }, { id: 'CURRENCY', values: [{ id: 'USD' }, { id: 'CZK' }] }] } },
+  };
+  assert.deepEqual(parseEcbFx(sdmx), { CZK: 1, EUR: 25, USD: 20 });
+});
+
+test('fetchLive falls back to Tradegate and ECB when the primary sources fail and reports it', async () => {
+  const urls: string[] = [];
+  const fake = (async (url: string) => {
+    urls.push(url);
+    if (url.includes('tradegatebsx')) return Response.json({ last: '61,50' });
+    if (url.includes('data-api.ecb')) {
+      return Response.json({
+        dataSets: [{ series: { '0:0:0:0:0': { observations: { 0: [25] } }, '0:1:0:0:0': { observations: { 0: [1.25] } } } }],
+        structure: { dimensions: { series: [{ id: 'FREQ', values: [{ id: 'D' }] }, { id: 'CURRENCY', values: [{ id: 'CZK' }, { id: 'USD' }] }] } },
+      });
+    }
+    return new Response('down', { status: 503 });
+  }) as unknown as typeof fetch;
+  const r = await fetchLive(base(), fake, new Date('2026-11-06T15:00:00Z'));
+  assert.deepEqual(r.quotes, { 'AAA.US': { price: 61.5, currency: 'EUR', date: '2026-11-06' } });
+  assert.deepEqual(r.czkPer, { CZK: 1, EUR: 25, USD: 20 });
+  assert.equal(r.sources.fxFallback, true);
+  assert.deepEqual(r.sources.quoteFallback, ['AAA.US']);
+  assert.deepEqual([...r.sources.errors].sort(), ['Frankfurter: HTTP 503', 'onvista: HTTP 503']);
+  assert.ok(urls.every((u) => !/quantity|value|cost/i.test(u)));
 });

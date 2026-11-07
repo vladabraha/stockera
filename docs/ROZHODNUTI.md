@@ -144,7 +144,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Heslo: interaktivně (skryté, 2×, raw mode – funguje i ve Windows Terminal/PowerShell/cmd), nebo
   `STOCKERA_PASSWORD` (varování o historii příkazů, proměnná se po přečtení smaže). Bez minimální délky (přání uživatele – volba je na něm), jen neprázdné; při psaní se zobrazují `*`.
 - **CSP** v `<meta>`: `default-src 'none'`, `script-src`/`style-src` jen **sha256 hash** vložených bloků,
-  `img-src`/`form-action`/`base-uri` `'none'`, **`connect-src https://api.onvista.de https://api.frankfurter.dev`**
+  `img-src`/`form-action`/`base-uri` `'none'`, **`connect-src https://api.onvista.de https://api.frankfurter.dev https://www.tradegatebsx.com https://data-api.ecb.europa.eu`**
   (jen živé ceny, viz níže) → stránka nemůže nic načíst ani odeslat nikam jinam (formuláře, obrázky, odkazy jsou blokované).
   Důsledky pro kód frontendu:
   - **žádné `style="…"` atributy v markupu** (CSP je blokuje) – barvy/šířky jen přes CSSOM (`el.style.setProperty`, helper `paint()`),
@@ -165,9 +165,17 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - Ceny: onvista `funds/ISIN:{isin}/snapshot` (ETF, `quote`) a `stocks/ISIN:{isin}/snapshot` (akcie: nejnovější
     kotace v měně instrumentu, jinak nejnovější z `_XET/_GAT/_FRA/_STU/_TRO/_AMS` v EUR; `_LST` a `_PNK` se
     ignorují – zastaralé/nelikvidní). Instrument bez ISINu nebo s chybou zůstane z výpisu.
-  - **Proč jen tyto dva zdroje:** jediné ověřené s CORS `*` i pro `Origin: null` (soubor z disku). justETF, Yahoo,
-    Börse Frankfurt ani L&S CORS nemají. onvista je rychlá (~0,1 s, jeden dotaz vrátí všechny burzy) – další zdroje
-    by nezrychlily nic. (onvista vrací 429 jen na ne-prohlížečový User-Agent, např. curl.)
+  - **Záložní zdroje** (přání uživatele – aby výpadek jednoho API nevadil a uživatel o něm věděl):
+    - ceny: když onvista u instrumentu selže nebo nevrátí použitelnou kotaci → Tradegate
+      `www.tradegatebsx.com/refresh.php?isin=` (`last`, vždy EUR; čísla někdy jako text s desetinnou čárkou). Odpověď
+      nemá datum → bere se poslední obchodní den Tradegate (Po–Pá od 8:00 Berlín, svátky neznáme). Volá se přímo
+      `tradegatebsx.com`, protože `tradegate.de` přesměrovává (a `redirect: 'error'`).
+    - kurzy: když selže Frankfurter → oficiální API ECB `data-api.ecb.europa.eu/service/data/EXR/D.CZK+USD….EUR.SP00.A?lastNObservations=1&format=jsondata` (SDMX-JSON, stejná data ECB).
+    - V reportu se pak pod stavem ukáže upozornění „Hlavní zdroj (…) teď nefunguje. N z M cen je ze záložního zdroje
+      Tradegate. Kurzy jsou ze záložního zdroje ECB.“ a technická příčina jde do konzole prohlížeče.
+  - **Proč tyto zdroje:** jediné ověřené s CORS `*` i pro `Origin: null` (soubor z disku). justETF, Yahoo, Börse
+    Frankfurt, Consorsbank, finanzen.net ani L&S CORS nemají; Euronext má CORS, ale data šifruje. onvista je rychlá
+    (~0,1 s, jeden dotaz vrátí všechny burzy) – primární zůstává. (onvista vrací 429 jen na ne-prohlížečový User-Agent.)
   - Přepočet v paměti na kopii snímku (`applyLive`, idempotentní): u lotů s cenou stejného nebo novějšího dne než
     `valueDate` se přepočte `currentPrice`, `value`, `profit`, `profitPct`; pak součty instrumentů, `summary`,
     země a sektory (sdílený `src/analysis/breakdown.ts`, bundlovaný i do reportu), poslední bod `history` a cenová
@@ -177,7 +185,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - Hlavička hodnoty ukazuje stav: „aktualizuji ceny…“, „Živé ceny k …“ (příp. kolik instrumentů z kolika),
     „novější ceny zatím nejsou“, „bez připojení – ceny z výpisu“. *Zamknout* zahodí i živá data.
 - Testy (`tests/report.test.ts`) hlídají: round-trip šifrování, nepřítomnost plaintextu (tickery, účty), shodu CSP
-  hashů, přesný `connect-src`, jediné URL v HTML jsou SVG namespace a dvě API živých cen, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
+  hashů, přesný `connect-src`, jediné URL v HTML jsou SVG namespace a čtyři API živých cen, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
 - Nešifrovaný `out/analysis.json` vzniká **jen** s `pnpm analyze --json` (práva 600); bez přepínače se starý smaže.
   `update-data` = `ingest → market → report` (bez analyze).
 

@@ -25,7 +25,7 @@ akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i v 
 
 - Data v souboru jsou zašifrovaná (gzip → AES-256-GCM, klíč z hesla přes PBKDF2-SHA256, 600 000 iterací);
   dešifrují se až v prohlížeči po zadání hesla. Heslo se nikam neukládá, tlačítko *Zamknout* data zahodí z paměti.
-- Content-Security-Policy povoluje jen vlastní vložený skript a styl a síť jen na `api.onvista.de` a `api.frankfurter.dev`:
+- Content-Security-Policy povoluje jen vlastní vložený skript a styl a síť jen na `api.onvista.de` a `api.frankfurter.dev` (zálohy `www.tradegatebsx.com`, `data-api.ecb.europa.eu`):
   po odemknutí si report stáhne **aktuální ceny a kurzy** (odchází jen ISIN a kódy měn, nikdy počty kusů ani hodnoty)
   a hodnotu přepočítá v paměti. Bez internetu ukáže hodnoty z poslední aktualizace.
 - Heslo: interaktivně (skryté zadání, 2×), nebo proměnnou `STOCKERA_PASSWORD`
