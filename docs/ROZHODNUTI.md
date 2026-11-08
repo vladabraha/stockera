@@ -339,6 +339,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   V režimu „Hodnota pozice“ leží body na křivce hodnoty.
 - Panel **Podle sektorů** (Portfolio, pod zeměmi): skládaný pruh + seznam sektorů s hodnotou v Kč/€ a podílem;
   ETF jsou rozpočítané podle sektorů firem uvnitř. Řádek instrumentu ukazuje v detailu top 3 sektory.
+  Seznam sektorů se plní **po sloupcích** (v levém největší, `grid-auto-flow: column` s počtem řádků přes `--rows`),
+  na mobilu jeden sloupec. Najetí/klepnutí na úsek pruhu nebo řádek ukáže tooltip: název, co sektor zahrnuje
+  (`SECTOR_INFO`), podíl a hodnotu v Kč/€. Na dotyk zůstane do klepnutí jinam (drží ho fokus, `pointerleave` se ignoruje).
 - **Design = moderní trading aplikace** (přání uživatele; zamítnuté směry „úřední razítko“ a „vkladní knížka“).
   Jediný výrazný prvek: **tmavě modrý pás s hodnotou portfolia a grafem** (`.hero`, `--band #0f1d3a`, přepisuje
   barevné proměnné uvnitř). Okolí klidné: pozadí #eef1f6, bílé panely bez stínů, text #14213d, akcent #2f5bff,

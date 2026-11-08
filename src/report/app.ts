@@ -219,6 +219,20 @@ const SECTOR_COLORS: Record<string, string> = {
   energy: '#f07a3c', materials: '#9aa63a', utilities: '#1aa3c8', real_estate: '#c2559e', other: '#9aa3b2', '??': '#cfd5de',
 };
 const sectorName = (k: string) => SECTOR_NAMES[k] ?? k;
+/** What a coarse sector contains (tooltip in "Podle sektorů"). */
+const SECTOR_INFO: Record<string, string> = {
+  technology: 'Software, polovodiče, hardware, internet, telekomunikace a média',
+  financials: 'Banky, pojišťovny, správci majetku, burzy a platební firmy',
+  health: 'Farmacie, biotechnologie, zdravotnická technika a služby',
+  industrials: 'Strojírenství, letectví a obrana, doprava, stavebnictví a služby firmám',
+  consumer: 'Auta, obchody, oblečení, restaurace a cestování i potraviny, nápoje a drogerie',
+  energy: 'Těžba, zpracování a doprava ropy, plynu a uhlí',
+  materials: 'Chemie, kovy a těžba, stavební materiály a obaly',
+  utilities: 'Výroba a rozvod elektřiny, plynu a vody',
+  real_estate: 'Realitní firmy a nemovitostní fondy (REIT)',
+  other: 'Hotovost ve fondech, deriváty a firmy, u kterých zdroj sektor neuvádí',
+  '??': 'Instrumenty, u kterých se sektory nepodařilo zjistit',
+};
 
 function progress(fraction: number, cls = ''): HTMLElement {
   const f = Math.max(0, Math.min(1, fraction));
@@ -1248,14 +1262,40 @@ function sectorsPanel(a: Analysis): HTMLElement | null {
   const sorted = [...items].sort((p, q) => (p.sector === 'other' || p.sector === '??' ? 1 : 0) - (q.sector === 'other' || q.sector === '??' ? 1 : 0) || q.share - p.share);
   const colour = (k: string) => SECTOR_COLORS[k] ?? '#9aa3b2';
   const value = (x: (typeof items)[number]) => { const v = x[state.cur]; return v == null ? null : fmtMoney(v, curCode()); };
-  return panel('Podle sektorů',
+  const tip = h('div', { class: 'tip sector-tip', role: 'tooltip' });
+  const wrap = h('div', { class: 'sector-wrap' });
+  const showTip = (x: (typeof items)[number], target: HTMLElement, clientX: number | null) => {
+    const v = value(x);
+    tip.replaceChildren(
+      h('div', {}, paint(h('span', { class: 'dot' }), { background: colour(x.sector) }), ' ', h('b', {}, sectorName(x.sector))),
+      h('div', { class: 'muted' }, SECTOR_INFO[x.sector] ?? ''),
+      h('div', {}, h('b', {}, `${fmtNum(x.share, 1)} %`), v ? ` portfolia · ${v}` : ' portfolia'));
+    const box = wrap.getBoundingClientRect(), t = target.getBoundingClientRect();
+    tip.classList.add('show');
+    const left = (clientX ?? t.left + t.width / 2) - box.left - tip.offsetWidth / 2;
+    paint(tip, { left: `${Math.max(0, Math.min(left, box.width - tip.offsetWidth))}px`, top: `${t.bottom - box.top + 6}px` });
+  };
+  const hover = <T extends HTMLElement>(el: T, x: (typeof items)[number]): T => {
+    el.addEventListener('pointerenter', (e) => showTip(x, el, e.clientX));
+    el.addEventListener('pointermove', (e) => showTip(x, el, e.clientX));
+    // On touch, pointerleave comes right after the tap: keep the tip until focus moves elsewhere
+    el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') tip.classList.remove('show'); });
+    el.addEventListener('focus', () => showTip(x, el, null));
+    el.addEventListener('blur', () => tip.classList.remove('show'));
+    return el;
+  };
+  wrap.append(
     h('div', { class: 'stackbar', role: 'img', 'aria-label': sorted.map((x) => `${sectorName(x.sector)} ${fmtNum(x.share, 1)} %`).join(', ') },
-      ...sorted.map((x) => paint(h('span', { title: `${sectorName(x.sector)}: ${fmtNum(x.share, 1)} %` }), { width: `${x.share}%`, background: colour(x.sector) }))),
-    h('ul', { class: 'sector-list' }, ...sorted.map((x) => h('li', {},
+      ...sorted.map((x) => hover(paint(h('span', { tabindex: '-1' }), { width: `${x.share}%`, background: colour(x.sector) }), x))),
+    // Filled column by column: the biggest sectors in the first column
+    paint(h('ul', { class: 'sector-list' }, ...sorted.map((x) => hover(h('li', { tabindex: '0' },
       paint(h('i', {}), { background: colour(x.sector) }),
       h('span', { class: 'lname' }, sectorName(x.sector)),
       h('span', { class: 'num muted' }, value(x) ?? ''),
-      h('b', { class: 'num' }, `${fmtNum(x.share, 1)} %`)))),
+      h('b', { class: 'num' }, `${fmtNum(x.share, 1)} %`)), x))), { '--rows': String(Math.ceil(sorted.length / 2)) }),
+    tip);
+  return panel('Podle sektorů',
+    wrap,
     h('p', { class: 'hint' }, 'ETF jsou rozpočítané podle sektorů firem, do kterých investují (onvista, případně justETF).'),
   );
 }
