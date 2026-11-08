@@ -28,3 +28,6 @@ docs/architektura.md
 .vscode/
 .DS_Store
 Thumbs.db
+
+# SSH klíč jen pro tento repozitář (push na GitHub)
+.ssh/
