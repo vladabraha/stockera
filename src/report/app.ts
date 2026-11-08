@@ -21,6 +21,9 @@ const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8
 
 type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; notice?: string; alert?: string };
 
+/** Rows of a long accordion list (Pozice, Prodané instrumenty) loaded at once. */
+const ACC_STEP = 10;
+
 const state = {
   data: null as Analysis | null,
   /** Decrypted snapshot; live prices are always applied to a fresh copy of it. */
@@ -44,6 +47,10 @@ const state = {
   taxFreeDate: null as string | null,
   /** Year whose tax-return guide is open in "Daně podle let". */
   taxGuideYear: null as number | null,
+  /** Rows loaded in the long accordion lists (grows by ACC_STEP while scrolling). */
+  shown: { holdings: ACC_STEP, realized: ACC_STEP },
+  /** Inner scroll positions kept across re-renders (lists, tax years). */
+  scroll: {} as Record<string, number>,
 };
 
 // ---------------------------------------------------------------- DOM helpers
@@ -403,6 +410,8 @@ function header(a: Analysis): HTMLElement {
         state.liveRun++;
         state.live = { status: 'idle', date: null, updated: 0, total: 0 };
         state.open.clear();
+        state.shown = { holdings: ACC_STEP, realized: ACC_STEP };
+        state.scroll = {};
         state.chart = { kind: 'portfolio' };
         state.intro = true;
         renderLogin();
@@ -551,7 +560,7 @@ function portfolioTab(a: Analysis): HTMLElement {
     lookThroughPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
-      h('div', { class: 'acc-list' }, ...a.holdings.map(holdingRow))),
+      ...lazyAccList('holdings', a.holdings, holdingRow)),
     upcomingPanel(a),
     checksPanel(a),
     validationPanel(a),
@@ -565,6 +574,46 @@ function instrumentName(ticker: string, name: string | null, quantity: number): 
 const platformOf = (account: string) => (account.startsWith('T212-') ? 'Trading 212' : 'XTB');
 const platformsOf = (accounts: string[]) => [...new Set(accounts.map(platformOf))].sort().reverse();
 const brokers = (a: Analysis) => platformsOf(a.cashFlows.map((c) => c.accountNumber)).join(' / ') || 'XTB';
+
+/** Keeps the inner scroll position of `el` across re-renders (restored once the element is in the page). */
+function keepScroll<T extends HTMLElement>(el: T, key: string, axis: 'x' | 'y', onScroll?: () => void): T {
+  el.addEventListener('scroll', () => {
+    state.scroll[key] = axis === 'x' ? el.scrollLeft : el.scrollTop;
+    onScroll?.();
+  }, { passive: true });
+  const pos = state.scroll[key];
+  if (pos) requestAnimationFrame(() => { if (axis === 'x') el.scrollLeft = pos; else el.scrollTop = pos; });
+  return el;
+}
+
+/**
+ * Long accordion list in its own scroll box: the first ACC_STEP rows, more load when scrolling near the end of the
+ * box (the button is a fallback), so the page itself stays short.
+ */
+function lazyAccList<T>(key: keyof typeof state.shown, items: T[], row: (x: T) => HTMLElement): HTMLElement[] {
+  const long = items.length > ACC_STEP;
+  const list = h('div', { class: long ? 'acc-list long' : 'acc-list' });
+  const more = h('div', { class: 'lt-more' });
+  const loadMore = () => {
+    const was = state.shown[key];
+    if (was >= items.length) return;
+    state.shown[key] = Math.min(was + ACC_STEP, items.length);
+    fill(was);
+  };
+  const fill = (from: number) => {
+    const n = Math.min(state.shown[key], items.length);
+    list.append(...items.slice(from, n).map(row));
+    const left = items.length - n;
+    more.replaceChildren(...[
+      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${items.length}`),
+      left > 0 ? button(`Zobrazit dalších ${Math.min(ACC_STEP, left)}`, loadMore, 'ghost') : null,
+    ].filter((c) => c != null));
+  };
+  fill(0);
+  if (!long) return [list];
+  keepScroll(list, key, 'y', () => { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 240) loadMore(); });
+  return [list, more];
+}
 
 function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
@@ -1302,7 +1351,7 @@ function soldTab(a: Analysis): HTMLElement {
     taxYearsPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
-      h('div', { class: 'acc-list' }, ...a.realized.map(realizedRow))),
+      ...lazyAccList('realized', a.realized, realizedRow)),
     dividendsPanel(a.dividends),
   );
 }
@@ -1333,7 +1382,7 @@ function taxYearsPanel(a: Analysis): HTMLElement {
   };
   const guideYear = years.find((y) => y.year === state.taxGuideYear);
   return panel('Daně podle let',
-    h('div', { class: 'years' }, ...[...years].sort((p, q) => q.year - p.year).map(yearCard)),
+    keepScroll(h('div', { class: years.length > 1 ? 'years many' : 'years' }, ...[...years].sort((p, q) => q.year - p.year).map(yearCard)), 'years', 'x'),
     guideYear ? taxGuidePanel(a, guideYear) : null,
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok z prodejů bez časového testu, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
   );

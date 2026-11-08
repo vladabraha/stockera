@@ -254,6 +254,8 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 
 /* position rows (accordion) */
 .acc-list { display: flex; flex-direction: column; margin: 0 -10px; }
+.acc-list.long { max-height: min(72vh, 46rem); overflow-y: auto; scrollbar-gutter: stable; border-block: 1px solid var(--line); }
+.acc-list.long .acc[open] > summary { top: 0; }
 .acc { border-top: 1px solid var(--line); }
 .acc:first-child { border-top: 0; }
 .acc > summary { list-style: none; cursor: pointer; padding: 12px 10px; border-radius: var(--radius-sm); }
@@ -297,6 +299,10 @@ tbody tr:hover td { background: var(--sunk); }
 
 /* tax years */
 .years { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+/* more years: one row scrolled sideways, the next card peeks out so it is clear there is more */
+.years.many { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: minmax(260px, 31%); overflow-x: auto; scroll-snap-type: x proximity; overscroll-behavior-x: contain; padding-bottom: 8px; }
+.years.many > .year { scroll-snap-align: start; }
+@media (max-width: 640px) { .years.many { grid-auto-columns: 86%; } }
 .year { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .year-head { display: flex; justify-content: space-between; align-items: center; }
 .year-head b { font: 600 1.35rem/1 var(--fig); }
