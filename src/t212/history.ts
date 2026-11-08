@@ -115,6 +115,8 @@ export function parseT212Export(csv: string): T212Export {
     if (!action) continue;
     const time = t212Time(l[c.time] ?? '');
     const currency = fixedCurrency ?? str(l[c.totalCurrency])?.toUpperCase();
+    // T212 also lists zero-amount conversions without a currency; conversions don't enter the ledger anyway.
+    if (!currency && t212Kind(action) === 'conversion' && !num(l[totalCol])) continue;
     if (!currency) throw new T212FormatError(`Řádek „${action}“ ${time}: chybí měna.`);
     const r: Omit<T212Row, 'key'> = {
       action,

@@ -96,7 +96,8 @@ SQL řetězce v jednoduchých uvozovkách.
   Prodeje před splitem se přepočtou na kusy a ceny po splitu (částky a daně beze změny), aby seděly s cenami
   od Yahoo, které jsou o splity očištěné (graf instrumentu, historie hodnoty).
 - Prodej bez nákupu v nahraných exportech → varování v kontrole dat („nahraj exporty za celé období“); takový prodej
-  v daních chybí. Úroky (`Interest on cash`, `Lending interest`) = úrok, převody měn se přeskakují.
+  v daních chybí. Úroky (`Interest on cash`, `Lending interest`) = úrok, převody měn se přeskakují
+  (nulové převody bez měny, které T212 ve výpisu také uvádí, se vynechají už při čtení).
 
 ## 3. Databáze a import
 

@@ -27,6 +27,14 @@ test('CSV parser: quotes, embedded commas and newlines, BOM', () => {
   assert.deepEqual(parseCsv('\uFEFFa,"b,1","c ""x""\nd"\r\n1,,3\n'), [['a', 'b,1', 'c "x"\nd'], ['1', '', '3']]);
 });
 
+test('zero-amount currency conversion without a currency is skipped, other rows without one still fail', () => {
+  const head = 'Action,Time (UTC),ID,Total,Currency (Total)';
+  const r = parseT212Export(`${head}\nDeposit,2023-12-14 09:00:00,D1,100,EUR\nCurrency conversion,2023-12-15 10:00:00,,0.00,\n`);
+  assert.deepEqual(r.rows.map((x) => x.action), ['Deposit']);
+  assert.throws(() => parseT212Export(`${head}\nCurrency conversion,2023-12-15 10:00:00,,5,\n`), /chybí měna/);
+  assert.throws(() => parseT212Export(`${head}\nDeposit,2023-12-15 10:00:00,D2,0,\n`), /chybí měna/);
+});
+
 test('parses current and older T212 export headers', () => {
   const now = parseT212Export(csv([buy('EOF1', '2024-01-02 10:00:00', 2, 2002), { action: 'Deposit', time: '2024-01-01 09:00:00', id: 'D1', total: 5000 }]));
   assert.equal(now.rows.length, 2);
