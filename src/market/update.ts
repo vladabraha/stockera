@@ -7,7 +7,7 @@ import {
   PSE_SHARE_LIST_URLS, XETRA_INSTRUMENTS_URL, countryCode, parsePseDetail, parsePseShareList, pseDetailUrl, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
   companySearchQueries, holdingNameKey, justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, pickOnvistaCompany, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
   parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, pickOnvistaEtf, onvistaStockCandidates, onvistaHomePrice, sectorKey, SECTORS, yahooSymbol,
-  nameKey, pickYahooSymbol, symbolVariants, yahooSearchUrl, type YahooSearch,
+  nameKey, parseYahooSector, pickYahooSymbol, symbolVariants, yahooSearchUrl, type YahooSearch,
   type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type PseCodes, type PseShare, type Sector, type XetraInstrument,
 } from './sources.ts';
 
@@ -381,6 +381,15 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
           else problems.push('onvista sektor firmy neuvádí');
         } catch (e) {
           problems.push(`onvista: ${(e as Error).message}`);
+        }
+        if (!sectors) {
+          try {
+            const raw = parseYahooSector(await http.getJson<YahooSearch>(yahooSearchUrl(compIsin)));
+            if (raw) [sectors, sectorSource] = [addSectors([{ name: raw, weight: 100 }]), 'yahoo'];
+            else problems.push('Yahoo sektor firmy neuvádí');
+          } catch (e) {
+            problems.push(`Yahoo: ${(e as Error).message}`);
+          }
         }
       }
       if (!sectors) warnings.push(`${ticker}: sektory se nepodařilo zjistit (${problems.join('; ')})${sectorSource ? ' – zůstávají poslední známé' : ' – doplň "sector" nebo "sectors" do data/instruments.json'}.`);

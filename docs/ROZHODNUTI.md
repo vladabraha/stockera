@@ -198,7 +198,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     z něj; ceny zůstávají vlastní. S `compositionIsin` se složení obnovuje při každém běhu, aby se změna hned projevila.
   - **Sektory** (`sector_weights`, `instrument_meta.sector_source`): ETF → onvista `breakdowns` (`branchBreakdown`, úplný
     rozpad), záložně justETF profil (jen top 4 + „Other“); akcie → onvista `stocks/ISIN:{isin}/snapshot`
-    (`company.branch.sector`). Názvy (EN/DE) mapuje `sectorKey()` regexy na **hrubou taxonomii** 10 sektorů
+    (`company.branch.sector`), když ho onvista neuvádí (např. TEM.US), záložně Yahoo hledání podle ISIN (`quotes[].sector`,
+    jen jednoznačný sektor akcie). Názvy (EN/DE) mapuje `sectorKey()` regexy na **hrubou taxonomii** 10 sektorů
     (`SECTORS`): technologie + komunikace a cyklické + necyklické spotřební zboží jsou **sloučené**, protože onvista
     u části ETF vrací jen „IT/Telekommunikation“ a jediné „Konsumgüter“ – jemnější dělení by ETF nešlo porovnat.
     Zbytek do 100 % = `other`. ETF se obnovují po 30 dnech, sektor akcie se stáhne jednou. Neznámý název → varování

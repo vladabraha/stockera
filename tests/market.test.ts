@@ -117,6 +117,23 @@ test('updateMarketData stores rates, ISINs, countries, sectors and prices; reque
   assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('dateFrom=2025-01-06')));
 });
 
+test('stock sector falls back to Yahoo when onvista does not list it', async () => {
+  const db = seed();
+  const http = new Http({
+    minIntervalMs: 0,
+    fetch: fakeFetch((u) =>
+      u.includes('/snapshot') ? new Response('{"company":{}}')
+        : u.includes('/v1/finance/search?q=US0000000002') ? new Response('{"quotes":[{"symbol":"STK","quoteType":"EQUITY","sector":"Healthcare"}]}')
+          : routes(u)),
+  });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.warnings, []);
+  assert.equal(r.instruments.find((i) => i.ticker === 'STK.US')!.sectorSource, 'yahoo');
+  assert.deepEqual(db.prepare(`SELECT sector, weight FROM sector_weights WHERE ticker = 'STK.US'`).all().map((x) => ({ ...x })), [
+    { sector: 'health', weight: 100 },
+  ]);
+});
+
 test('a record on 1 January also downloads the previous year (last fixing before the holiday)', async () => {
   const db = openDatabase(':memory:');
   importBuffer(db, 'a.xlsx', fakeXtbExport({
@@ -223,7 +240,7 @@ test('Prague stocks: ISIN and Yahoo symbol from the PSE lists by trading/Bloombe
     if (u.includes('detail/AT0000652011')) return new Response(detail('ERBAG', 'RBAG'));
     if (u.includes('detail/CZ0008019106')) return new Response(detail('KOMB', 'KOMB'));
     if (u.includes('detail/CZ0000000009')) return new Response(detail('SOME', 'SOME'));
-    if (u.includes('finance.yahoo.com')) yahooUrls.push(u);
+    if (u.includes('finance.yahoo.com/v8/finance/chart/')) yahooUrls.push(u);
     return routes(u);
   }) });
   const r = await updateMarketData(db, http, { today: '2025-01-13' });

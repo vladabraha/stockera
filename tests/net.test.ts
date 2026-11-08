@@ -7,7 +7,7 @@ import { BlockedRequestError, Http, HttpError, MAX_BODY_BYTES } from '../src/net
 import { fakeFetch } from './helpers/fakeFetch.ts';
 import { findThreat, parseSafeJson, UnsafeDataError } from '../src/net/inspect.ts';
 import {
-  countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, pickOnvistaStock, sectorKey,
+  countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, parseYahooSector, pickOnvistaStock, sectorKey,
   yahooSymbol, companySearchQueries, holdingNameKey, pickOnvistaCompany, nameKey, pickYahooSymbol, symbolVariants,
 } from '../src/market/sources.ts';
 
@@ -170,6 +170,21 @@ test('sectorKey maps English and German sector names to the coarse taxonomy', ()
     ['Business Services', 'industrials'], ['Finanzdienstleister', 'financials'], ['Xyz', null],
   ];
   assert.deepEqual(cases.map(([n]) => [n, sectorKey(n)]), cases);
+});
+
+test('Yahoo sectors all map to the taxonomy; parseYahooSector needs one unambiguous stock sector', () => {
+  const yahoo: [string, string][] = [
+    ['Technology', 'technology'], ['Communication Services', 'technology'], ['Healthcare', 'health'],
+    ['Financial Services', 'financials'], ['Industrials', 'industrials'], ['Consumer Cyclical', 'consumer'],
+    ['Consumer Defensive', 'consumer'], ['Utilities', 'utilities'], ['Energy', 'energy'],
+    ['Basic Materials', 'materials'], ['Real Estate', 'real_estate'],
+  ];
+  assert.deepEqual(yahoo.map(([n]) => [n, sectorKey(n)]), yahoo);
+  const q = (sector?: string, quoteType = 'EQUITY') => ({ symbol: 'X', quoteType, sector });
+  assert.equal(parseYahooSector({ quotes: [q('Healthcare'), q('Healthcare'), q(undefined, 'ETF')] }), 'Healthcare');
+  assert.equal(parseYahooSector({ quotes: [q('Healthcare'), q('Technology')] }), null);
+  assert.equal(parseYahooSector({ quotes: [q(' ')] }), null);
+  assert.equal(parseYahooSector({}), null);
 });
 
 test('pickOnvistaStock returns an ISIN only for an unambiguous match', () => {

@@ -356,12 +356,19 @@ export const plainName = (s: string) => s.normalize('NFD').replace(/[\u0300-\u03
 /** First word of a company name ("ČEZ, a.s." → "CEZ"). */
 export const nameKey = (s: string) => plainName(s).split(/[^A-Z0-9&]+/).filter(Boolean)[0] ?? '';
 
-/** Yahoo search – used only with an ISIN to find the symbol on the right exchange. */
+/** Yahoo search – used only with an ISIN (symbol on the right exchange, sector of a stock). */
 export const yahooSearchUrl = (isin: string) =>
   `https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=10&newsCount=0`;
 
 export interface YahooSearch {
-  quotes?: { symbol?: string; quoteType?: string }[];
+  quotes?: { symbol?: string; quoteType?: string; sector?: string }[];
+}
+
+/** Sector of a stock from a Yahoo ISIN search (English, e.g. "Healthcare"); null if missing or ambiguous. */
+export function parseYahooSector(data: YahooSearch): string | null {
+  const found = new Set((data.quotes ?? []).filter((q) => q.quoteType === 'EQUITY' && typeof q.sector === 'string' && q.sector.trim())
+    .map((q) => q.sector!.trim()));
+  return found.size === 1 ? [...found][0]! : null;
 }
 
 /** Yahoo symbol of the security on the XTB exchange (by Yahoo suffix), e.g. CZ0005112300 + `.CZ` → CEZ.PR. */
