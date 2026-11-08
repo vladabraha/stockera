@@ -181,22 +181,25 @@ export function valueHistory(lots: HistoryLot[], market: MarketData, fx: FxRates
     const eur = fx.czkPer('EUR', d);
     if (eur == null) continue;
     let value = 0;
+    let valueEur = 0;
     let invested = 0;
     let investedEur = 0;
     let ok = true;
     for (const l of lots) {
       if (l.openDate > d || (l.closeDate != null && l.closeDate <= d)) continue;
       const p = market.price(l.ticker, d);
-      const v = p ? crossConvert(fx, l.quantity * p.close, p.currency, 'CZK', d) : crossConvert(fx, l.costNative, l.currency, 'CZK', d);
+      // without a price the lot counts at its cost in CZK/EUR of the purchase day, exactly like the headline value
+      const v = p ? crossConvert(fx, l.quantity * p.close, p.currency, 'CZK', d) : l.costCzk;
       if (v == null || l.costCzk == null || l.costEur == null) {
         ok = false;
         break;
       }
       value += v;
+      valueEur += p ? v / eur : l.costEur;
       invested += l.costCzk;
       investedEur += l.costEur;
     }
-    if (ok) points.push({ date: d, valueCzk: value, valueEur: value / eur, investedCzk: invested, investedEur });
+    if (ok) points.push({ date: d, valueCzk: value, valueEur, investedCzk: invested, investedEur });
   }
   return points;
 }

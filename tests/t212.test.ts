@@ -137,6 +137,7 @@ test('a position without any price is valued at cost (like the chart), not as a 
   const lot = a.holdings[0]!.lots[0]!;
   assert.deepEqual([lot.valueSource, lot.value?.czk, lot.profit], ['cost', 1000, null]);
   assert.deepEqual([a.summary.value.czk, a.summary.unrealizedProfit.czk], [1000, 0]);
+  assert.deepEqual([a.holdings[0]!.profit.czk, a.holdings[0]!.profitPct.czk], [null, null], 'no priced lot → profit unknown, not 0 %');
   assert.equal(a.history.at(-1)!.valueCzk, a.summary.value.czk, 'chart and headline agree');
   assert.ok(a.checks.warnings.some((w) => w.includes(a.holdings[0]!.ticker) && /nákupní cenou/.test(w)), a.checks.warnings.join('\n'));
 });

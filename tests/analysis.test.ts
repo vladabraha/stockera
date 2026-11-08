@@ -249,3 +249,12 @@ test('tax return guide: Příloha č. 2 rows 207–209, foreign dividends in Př
   assert.deepEqual([erste.annex2!.rows.map((r) => r.code), erste.annex4?.r411], [['z'], 1_000]);
   assert.deepEqual([loss.r207, loss.r208, loss.r209], [120_000, 120_000, 0]);
 });
+
+test('valueHistory: a lot without a price counts at its purchase CZK/EUR cost on every day (no FX gain)', async () => {
+  const { valueHistory } = await import('../src/analysis/market.ts');
+  const lot = { ticker: 'NOPRICE', quantity: 10, openDate: '2026-01-01', closeDate: null, costNative: 100, costCzk: 2_500, costEur: 100, currency: 'EUR' };
+  const market = { price: () => null, series: () => [], info: () => { throw new Error('unused'); } };
+  const fx = { czkPer: (c: string, d?: string) => (c === 'EUR' ? (d! < '2026-01-03' ? 25 : 24) : null) };
+  const pts = valueHistory([lot], market as never, fx, '2026-01-04');
+  assert.deepEqual(pts.map((p) => [p.valueCzk, p.valueEur]), [[2_500, 100], [2_500, 100], [2_500, 100], [2_500, 100]]);
+});

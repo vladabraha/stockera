@@ -262,7 +262,8 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const holdings: Holding[] = [...holdingLots.entries()].map(([ticker, lots]) => {
     const cost = sumMoney(lots.map((l) => l.cost));
     const value = sumMoney(lots.flatMap((l) => (l.value ? [l.value] : [])));
-    const profit = subTotals(value, cost);
+    // no lot has a price → the profit is unknown, not 0 %
+    const profit = lots.every((l) => l.valueSource === 'cost') ? { czk: null, eur: null, native: {} } : subTotals(value, cost);
     const pending = lots.filter((l) => !l.taxFree).map((l) => l.taxFreeFrom).sort();
     const m = market.info(ticker);
     return {
