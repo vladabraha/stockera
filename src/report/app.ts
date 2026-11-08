@@ -21,8 +21,9 @@ const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8
 
 type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; notice?: string; alert?: string };
 
-/** Rows of a long accordion list (Pozice, Prodané instrumenty) loaded at once. */
-const ACC_STEP = 10;
+/** Rows a long list loads at once while scrolling (and shows before "Zobrazit zbývajících"). */
+const LIST_STEP = 10;
+type ListKey = 'holdings' | 'realized' | 'upcoming' | 'lookThrough';
 
 const state = {
   data: null as Analysis | null,
@@ -39,16 +40,12 @@ const state = {
   open: new Set<string>(),
   intro: true,
   colors: new Map<string, string>(),
-  /** Rows shown in the "stocks inside ETFs" list (grows by LT_STEP up to LT_MAX). */
-  ltShown: 10,
-  /** Rows shown in "Brzy bez daně" (grows by UPCOMING_STEP). */
-  upcomingShown: 5,
   /** "Bez daně k datu" (ISO date); null = list of upcoming dates. */
   taxFreeDate: null as string | null,
   /** Year whose tax-return guide is open in "Daně podle let". */
   taxGuideYear: null as number | null,
-  /** Rows loaded in the long accordion lists (grows by ACC_STEP while scrolling). */
-  shown: { holdings: ACC_STEP, realized: ACC_STEP },
+  /** Long lists: expanded into a scroll box (`open`) and how many rows are loaded there (`n`). */
+  lists: {} as Partial<Record<ListKey, { open: boolean; n: number }>>,
   /** Inner scroll positions kept across re-renders (lists, tax years). */
   scroll: {} as Record<string, number>,
 };
@@ -410,7 +407,7 @@ function header(a: Analysis): HTMLElement {
         state.liveRun++;
         state.live = { status: 'idle', date: null, updated: 0, total: 0 };
         state.open.clear();
-        state.shown = { holdings: ACC_STEP, realized: ACC_STEP };
+        state.lists = {};
         state.scroll = {};
         state.chart = { kind: 'portfolio' };
         state.intro = true;
@@ -560,7 +557,7 @@ function portfolioTab(a: Analysis): HTMLElement {
     lookThroughPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
-      ...lazyAccList('holdings', a.holdings, holdingRow)),
+      ...lazyList('holdings', h('div', { class: 'acc-list' }), a.holdings, holdingRow)),
     upcomingPanel(a),
     checksPanel(a),
     validationPanel(a),
@@ -587,32 +584,51 @@ function keepScroll<T extends HTMLElement>(el: T, key: string, axis: 'x' | 'y', 
 }
 
 /**
- * Long accordion list in its own scroll box: the first ACC_STEP rows, more load when scrolling near the end of the
- * box (the button is a fallback), so the page itself stays short.
+ * One behaviour for every long list: the first `first` rows and "Zobrazit zbývajících N". After that click the list
+ * moves into its own scroll box and loads LIST_STEP more rows whenever scrolling nears its end (until all are there);
+ * "Zobrazit méně" folds it back. Short lists are shown whole.
  */
-function lazyAccList<T>(key: keyof typeof state.shown, items: T[], row: (x: T) => HTMLElement): HTMLElement[] {
-  const long = items.length > ACC_STEP;
-  const list = h('div', { class: long ? 'acc-list long' : 'acc-list' });
-  const more = h('div', { class: 'lt-more' });
-  const loadMore = () => {
-    const was = state.shown[key];
-    if (was >= items.length) return;
-    state.shown[key] = Math.min(was + ACC_STEP, items.length);
-    fill(was);
-  };
-  const fill = (from: number) => {
-    const n = Math.min(state.shown[key], items.length);
-    list.append(...items.slice(from, n).map(row));
+function lazyList<T>(key: ListKey, box: HTMLElement, items: T[], row: (x: T, i: number) => HTMLElement, first = LIST_STEP): HTMLElement[] {
+  if (items.length <= first) {
+    box.append(...items.map(row));
+    return [box];
+  }
+  const st = (state.lists[key] ??= { open: false, n: first });
+  const bar = h('div', { class: 'lt-more' });
+  const fill = () => {
+    const from = box.children.length;
+    const n = st.open ? Math.min(st.n, items.length) : first;
+    box.append(...items.slice(from, n).map((x, k) => row(x, from + k)));
+    box.classList.toggle('scroll-box', st.open);
     const left = items.length - n;
-    more.replaceChildren(...[
-      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${items.length}`),
-      left > 0 ? button(`Zobrazit dalších ${Math.min(ACC_STEP, left)}`, loadMore, 'ghost') : null,
-    ].filter((c) => c != null));
+    bar.replaceChildren(
+      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${items.length}${st.open && left > 0 ? ', další se načtou při posunu' : ''}`),
+      st.open ? button('Zobrazit méně', collapse, 'ghost') : button(`Zobrazit zbývajících ${left}`, expand, 'ghost'));
   };
-  fill(0);
-  if (!long) return [list];
-  keepScroll(list, key, 'y', () => { if (list.scrollTop + list.clientHeight >= list.scrollHeight - 240) loadMore(); });
-  return [list, more];
+  const more = () => {
+    if (!st.open || st.n >= items.length || box.scrollTop + box.clientHeight < box.scrollHeight - 240) return;
+    st.n = Math.min(st.n + LIST_STEP, items.length);
+    fill();
+    requestAnimationFrame(more); // the box is not full yet → keep loading
+  };
+  const expand = () => {
+    st.open = true;
+    st.n = first + LIST_STEP;
+    fill();
+    requestAnimationFrame(more);
+  };
+  const collapse = () => {
+    Object.assign(st, { open: false, n: first });
+    state.scroll[key] = 0;
+    box.replaceChildren();
+    fill();
+    box.scrollTop = 0;
+    bar.scrollIntoView({ block: 'nearest' });
+  };
+  fill();
+  keepScroll(box, key, 'y', more);
+  if (st.open) requestAnimationFrame(more);
+  return [box, bar];
 }
 
 function holdingRow(x: Holding): HTMLElement {
@@ -672,8 +688,6 @@ function showInstrument(ticker: string): void {
   document.getElementById('hero')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-const UPCOMING_STEP = 10;
-
 function upcomingPanel(a: Analysis): HTMLElement | null {
   const pending = a.holdings
     .flatMap((x) => x.lots.filter((l) => !l.taxFree).map((l) => ({ x, l })))
@@ -697,24 +711,7 @@ function upcomingPanel(a: Analysis): HTMLElement | null {
     h('div', { class: 'right' },
       h('b', {}, czDate(l.taxFreeFrom)),
       h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))));
-  const list = h('ul', { class: 'upcoming' });
-  const more = h('div', { class: 'lt-more' });
-  const fill = (from: number) => {
-    const n = Math.min(state.upcomingShown, pending.length);
-    list.append(...pending.slice(from, n).map(item));
-    const left = pending.length - n;
-    more.replaceChildren(...[
-      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${pending.length}`),
-      left > 0 ? button(`Zobrazit dalších ${Math.min(UPCOMING_STEP, left)}`, () => {
-        const was = state.upcomingShown;
-        state.upcomingShown = Math.min(was + UPCOMING_STEP, pending.length);
-        fill(was);
-      }, 'ghost') : null,
-      n > 5 ? button('Zobrazit méně', () => { state.upcomingShown = 5; list.replaceChildren(); fill(0); }, 'ghost') : null,
-    ].filter((c) => c != null));
-  };
-  fill(0);
-  return h('section', { class: 'panel' }, head, list, pending.length > 5 ? more : null);
+  return h('section', { class: 'panel' }, head, ...lazyList('upcoming', h('ul', { class: 'upcoming' }), pending, item, 5));
 }
 
 /** Last known close on or before `date` (ISO), else null. */
@@ -1263,7 +1260,6 @@ function sectorsPanel(a: Analysis): HTMLElement | null {
   );
 }
 
-const LT_STEP = 10;
 const LT_MAX = 100;
 
 function lookThroughPanel(a: Analysis): HTMLElement | null {
@@ -1272,7 +1268,6 @@ function lookThroughPanel(a: Analysis): HTMLElement | null {
   const items = lt.items.slice(0, LT_MAX);
   const etf = new Set(a.holdings.filter((x) => x.category === 'ETF').map((x) => x.ticker));
   const max = Math.max(...items.map((c) => c.share), 0.0001);
-  const list = h('ol', { class: 'lt-list' });
   const row = (c: (typeof items)[number], i: number) => {
     const v = c[state.cur];
     const funds = c.via.filter((x) => etf.has(x.ticker));
@@ -1293,34 +1288,10 @@ function lookThroughPanel(a: Analysis): HTMLElement | null {
     );
     return h('li', {}, d);
   };
-  const more = h('div', { class: 'lt-more' });
-  const fill = (from: number) => {
-    const n = Math.min(state.ltShown, items.length);
-    list.append(...items.slice(from, n).map((c, k) => row(c, from + k)));
-    list.classList.toggle('long', n > LT_STEP);
-    const left = items.length - n;
-    more.replaceChildren(...[
-      h('span', { class: 'muted small' }, `Zobrazeno ${n} z ${items.length}`),
-      left > 0 ? button(`Zobrazit dalších ${Math.min(LT_STEP, left)}`, () => {
-        const was = state.ltShown;
-        state.ltShown = Math.min(state.ltShown + LT_STEP, items.length);
-        fill(was);
-        list.children[was]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }, 'ghost') : null,
-      n > LT_STEP ? button('Zobrazit jen prvních 10', () => {
-        state.ltShown = LT_STEP;
-        list.replaceChildren();
-        list.scrollTop = 0;
-        fill(0);
-      }, 'ghost') : null,
-    ].filter((x) => x != null));
-  };
-  fill(0);
   const missing = lt.missing.length ? ` U ${lt.missing.join(', ')} pozice nejsou známé.` : '';
   return panel(null,
     h('div', { class: 'panel-head' }, h('h2', {}, 'Akcie uvnitř ETF'), h('span', { class: 'muted' }, `Známé pozice tvoří ${fmtNum(lt.coveredShare, 0)} % portfolia`)),
-    list,
-    more,
+    ...lazyList('lookThrough', h('ol', { class: 'lt-list' }), items, row),
     h('p', { class: 'hint' }, `Stejná akcie z více ETF i z přímého nákupu je sečtená. Procenta jsou z hodnoty celého portfolia. U každého ETF je známých jen 10 největších pozic (justETF, případně onvista), zbytek tvoří menší pozice.${missing}`),
   );
 }
@@ -1351,7 +1322,7 @@ function soldTab(a: Analysis): HTMLElement {
     taxYearsPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
-      ...lazyAccList('realized', a.realized, realizedRow)),
+      ...lazyList('realized', h('div', { class: 'acc-list' }), a.realized, realizedRow)),
     dividendsPanel(a.dividends),
   );
 }

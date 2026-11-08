@@ -309,12 +309,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 
 ### UI / design
 - Dva taby: **Portfolio** (hodnota + graf vývoje s rozsahy 1M–Vše, souhrnné statistiky, **pruhy podle instrumentů**
-  (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), akordeon instrumentů → nákupy s časovým testem, pod ním „Brzy bez daně“ (po 5 lotech, „Zobrazit dalších 10“; volba **„Bez daně k datu“** vypíše po instrumentech kusy se splněným testem k zvolenému dni, závěrečnou cenu k tomu dni a hodnotu/zisk v dnešním kurzu – pro budoucí datum poslední známou cenu); „Zobrazit graf“ přepne hlavní
+  (klik → graf instrumentu), **donut podle zemí** (top 8 + Ostatní + Neznámé), akordeon instrumentů → nákupy s časovým testem, pod ním „Brzy bez daně“ (5 lotů, pak dlouhý seznam viz níže; volba **„Bez daně k datu“** vypíše po instrumentech kusy se splněným testem k zvolenému dni, závěrečnou cenu k tomu dni a hodnotu/zisk v dnešním kurzu – pro budoucí datum poslední známou cenu); „Zobrazit graf“ přepne hlavní
   graf na cenu/hodnotu instrumentu s body nákupů/prodejů) a **Prodané** (realizovaný zisk, daně podle let s limitem
   100 tis., akordeon prodaných instrumentů → jednotlivé prodeje se ziskem v měně i %). Přepínač Kč / €.
-- **Dlouhé seznamy** (přání uživatele, aby se nemuselo jezdit stránkou dolů): akordeony Pozice a Prodané instrumenty
-  nad 10 řádků jsou ve vlastním posuvném okně (max. ~72 % výšky obrazovky), načte se 10 řádků a další po 10 při
-  doscrollování k jeho konci (záložně tlačítko „Zobrazit dalších 10“); otevřený řádek se v okně drží nahoře.
+- **Dlouhé seznamy** (přání uživatele: nejezdit stránkou dolů a stejné chování všude) – Pozice, Prodané instrumenty,
+  Brzy bez daně a Akcie uvnitř ETF mají jeden helper `lazyList`: prvních 10 (Brzy bez daně 5) řádků a tlačítko
+  „Zobrazit zbývajících N“; po něm se seznam přesune do vlastního posuvného okna (max. ~72 % výšky obrazovky) a další
+  řádky se dočítají po 10 při posunu k jeho konci (dokud okno není plné, dočtou se hned), „Zobrazit méně“ ho sbalí.
+  Dřív kombinace „Zobrazit dalších 10“ + automatického dočítání působila nekonzistentně (tlačítko zmizelo samo).
+  Otevřený akordeon se v okně drží nahoře.
   **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
   okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
 - Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se

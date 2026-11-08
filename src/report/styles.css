@@ -211,7 +211,9 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 
 /* stocks inside ETFs: ranked list, grows by 10 and scrolls inside the panel once longer */
 .lt-list { list-style: none; margin: 0; padding: 0; }
-.lt-list.long { max-height: 34rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding-right: 6px; border-block: 1px solid var(--line); }
+/* expanded long list (Pozice, Prodané, Brzy bez daně, Akcie uvnitř ETF): its own scroll box, rows load while scrolling */
+.scroll-box { max-height: min(72vh, 46rem); overflow-y: auto; scrollbar-gutter: stable; border-block: 1px solid var(--line); }
+.lt-list.scroll-box, .upcoming.scroll-box { padding: 8px 6px 8px 0; }
 .lt-row > summary { list-style: none; display: grid; grid-template-columns: 2.2em minmax(0, 240px) 1fr 6.5em; align-items: center; gap: 10px; padding: 8px 6px; border-radius: var(--radius-sm); cursor: pointer; font-size: .88rem; }
 .lt-row > summary::-webkit-details-marker { display: none; }
 .lt-row > summary:hover, .lt-row > summary:focus-visible { background: var(--sunk); }
@@ -254,8 +256,7 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 
 /* position rows (accordion) */
 .acc-list { display: flex; flex-direction: column; margin: 0 -10px; }
-.acc-list.long { max-height: min(72vh, 46rem); overflow-y: auto; scrollbar-gutter: stable; border-block: 1px solid var(--line); }
-.acc-list.long .acc[open] > summary { top: 0; }
+.scroll-box.acc-list .acc[open] > summary { top: 0; }
 .acc { border-top: 1px solid var(--line); }
 .acc:first-child { border-top: 0; }
 .acc > summary { list-style: none; cursor: pointer; padding: 12px 10px; border-radius: var(--radius-sm); }
