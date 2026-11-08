@@ -163,7 +163,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
 - Síť používá **jen `pnpm market`** a volitelně otevřený report (živé ceny, viz §6). Import a výpočty jsou offline.
 - Zdroje (podrobně `docs/zdroje-dat.md`):
-  - kurzy: ČNB roční txt (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
+  - kurzy: ČNB roční txt od roku nejstaršího záznamu **jakéhokoli druhu** (i vklad/úrok před prvním obchodem) minus 7 dní
+    – úrok z 1. 1. tak má poslední kurz předchozího roku (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
   - ticker → ISIN: CSV všech instrumentů Xetra (jen pro `.DE`); ETF, které tam není (např. LCUW), → onvista
     vyhledávání, ISIN jen při **jednoznačné shodě symbolu** ve skupině ETF (`pickOnvistaEtf`),
   - ETF: justETF profil (země: top země + „Ostatní“ = `XX`; obnova po 30 dnech) a justETF chart API (denní ceny EUR),

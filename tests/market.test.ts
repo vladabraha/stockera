@@ -75,7 +75,8 @@ test('updateMarketData stores rates, ISINs, countries, sectors and prices; reque
   const r = await updateMarketData(db, http, { today: '2025-01-13' });
 
   assert.deepEqual(r.warnings, []);
-  assert.deepEqual(r.fxYears, [2025]);
+  // The deposit (2024-12-01) predates the first trade: its year's rates are needed too
+  assert.deepEqual(r.fxYears, [2024, 2025]);
   assert.deepEqual(
     r.instruments.map((i) => [i.ticker, i.isin, i.priceSource, i.newPrices, i.countrySource]),
     [
@@ -114,6 +115,19 @@ test('updateMarketData stores rates, ISINs, countries, sectors and prices; reque
   await updateMarketData(db, http, { today: '2025-01-14' });
   assert.ok(!calls.some((u) => u.includes('allTradableInstruments') || u.includes('etf-profile')));
   assert.ok(calls.some((u) => u.includes('performance-chart') && u.includes('dateFrom=2025-01-06')));
+});
+
+test('a record on 1 January also downloads the previous year (last fixing before the holiday)', async () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 'a.xlsx', fakeXtbExport({
+    account: ACCOUNT,
+    cash: [{ id: '1', type: 'Free-funds Interest', time: '2025-01-01T22:00:00Z', amount: 1 }],
+    openAsOf: '2025-01-10T10:00:00Z',
+    open: [{ ticker: 'ETFA.DE', name: 'World', positionId: '1', volume: 1, openPrice: 100, openTime: '2025-01-06T09:00:00Z', currentPrice: 110 }],
+  }));
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch(routes) });
+  const r = await updateMarketData(db, http, { today: '2025-01-13' });
+  assert.deepEqual(r.fxYears, [2024, 2025]);
 });
 
 test('ETF without a justETF country breakdown or positions falls back to onvista, sectors fall back to justETF; Yahoo provides stock names', async () => {

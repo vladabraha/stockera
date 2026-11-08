@@ -88,14 +88,21 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
   const priceStart = firstDate ? `${Number(firstDate.slice(0, 4)) - 1}-12-01` : '';
 
   // --- ČNB rates ------------------------------------------------------------
-  if (firstDate) {
+  // From the oldest record of any kind (deposits and interest may predate the first trade), minus a week so that
+  // e.g. 1 January has the last fixing of the previous year (same window as MAX_RATE_AGE_DAYS in fx.ts).
+  const firstRecord = (db.prepare(
+    `SELECT MIN(d) AS d FROM (SELECT MIN(open_time) AS d FROM closed_lots UNION ALL SELECT MIN(open_time) FROM open_lots
+       UNION ALL SELECT MIN(time_utc) FROM cash_operations)`,
+  ).get() as { d: string | null }).d;
+  const fxStart = firstRecord ? addDays(firstRecord.slice(0, 10), -7) : null;
+  if (fxStart) {
     const hasYearEnd = db.prepare(`SELECT 1 FROM fx_rates WHERE currency = 'EUR' AND date >= ? AND date <= ? LIMIT 1`);
     const insert = db.prepare(
       `INSERT INTO fx_rates (currency, date, czk_per_unit, source) VALUES (?, ?, ?, 'cnb')
        ON CONFLICT (currency, date) DO UPDATE SET czk_per_unit = excluded.czk_per_unit, source = excluded.source`,
     );
     const thisYear = Number(opts.today.slice(0, 4));
-    for (let year = Number(firstDate.slice(0, 4)); year <= thisYear; year++) {
+    for (let year = Number(fxStart.slice(0, 4)); year <= thisYear; year++) {
       if (year < thisYear && hasYearEnd.get(`${year}-12-20`, `${year}-12-31`)) continue;
       log(`Kurzy ČNB ${year}…`);
       try {
