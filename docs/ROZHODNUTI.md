@@ -288,8 +288,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     nechybí), „novější ceny zatím nejsou“, „aktuální ceny se nepodařilo načíst“. Když u některých instrumentů aktuální
     cena chybí (oranžová tečka, „u N z M instrumentů chybí, mají cenu z posledního vytvoření reportu“), ikona ⓘ
     ukáže (najetí, klepnutí, fokus – čisté CSS) seznam instrumentů s důvodem z `applyLive().missing`: bez ISIN,
-    onvista ani Tradegate cenu nemají, chybí kurz, cena zahozená kontrolou skoku > 50 %, a datum použité ceny.
-    Instrument, jehož uložená cena je novější než živá, se za chybějící nepočítá. Počet M = všechny držené
+    onvista ani Tradegate cenu nemají, chybí kurz, cena zahozená kontrolou skoku > 50 %, zdroj má jen starší cenu
+    než report (obě data), a datum použité ceny. Uveden je tak každý neaktualizovaný instrument. Počet M = všechny držené
     instrumenty (i bez ISIN). *Zamknout* zahodí i živá data.
 - Testy (`tests/report.test.ts`) hlídají: round-trip šifrování, nepřítomnost plaintextu (tickery, účty), shodu CSP
   hashů, přesný `connect-src`, jediné URL v HTML jsou SVG namespace a čtyři API živých cen, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.

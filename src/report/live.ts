@@ -221,6 +221,8 @@ const pctT = (profit: Totals, cost: Totals): Percent => {
   return { czk: p(profit.czk, cost.czk), eur: p(profit.eur, cost.eur), native: cs.length === 1 ? p(profit.native[cs[0]!], cost.native[cs[0]!]) : null };
 };
 
+const czDay = (iso: string) => { const [y, m, d] = iso.split('-'); return `${Number(d)}. ${Number(m)}. ${y}`; };
+
 /**
  * Revalues held lots with live quotes (in memory, on a copy). Costs, realized sales and taxes stay untouched –
  * they are fixed by the ČNB rate of the trade day. Live values use today's ECB rates.
@@ -249,9 +251,10 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
     }
     let changed = false;
     let lotFx: string | undefined;
+    let newerStored: string | undefined;
     for (const l of x.lots) {
-      // the stored price is already newer than the live one – nothing is missing
-      if (l.valueDate && q.date < l.valueDate) continue;
+      // the source only has an older price than the stored one – keep the stored price
+      if (l.valueDate && q.date < l.valueDate) { newerStored = l.valueDate; continue; }
       const ac = l.cost.currency;
       if (rate(ac) == null) { lotFx = ac; continue; }
       const czk = l.quantity * price * rate(ic)!;
@@ -270,6 +273,7 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
       changed = true;
     }
     if (lotFx) skip(`chybí aktuální kurz ${lotFx}`);
+    else if (!changed && newerStored) skip(`zdroj má jen starší cenu (k ${czDay(q.date)}) než report (k ${czDay(newerStored)})`);
     if (!changed) continue;
     updated.push(x.ticker);
     if (!date || q.date > date) date = q.date;

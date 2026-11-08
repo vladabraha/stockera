@@ -91,7 +91,8 @@ test('applyLive converts a quote in another currency and ignores stale or implau
   const eur = applyLive(base(), fx, { 'AAA.US': { price: 48, currency: 'EUR', date: '2026-11-06' } });
   assert.equal(eur.analysis.holdings[0]!.lots[0]!.currentPrice!.close, 60);
   const older = applyLive(base(), fx, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-04' } });
-  assert.deepEqual([older.updated, older.missing.map((m) => m.ticker)], [[], ['NOISIN']], 'stored price is newer → AAA is not missing');
+  assert.deepEqual([older.updated, older.missing.map((m) => m.ticker)], [[], ['AAA.US', 'NOISIN']], 'an older live quote is not used and is listed');
+  assert.equal(older.missing[0]!.reason, 'zdroj má jen starší cenu (k 4. 11. 2026) než report (k 5. 11. 2026)');
   const jump = applyLive(base(), fx, { 'AAA.US': { price: 600, currency: 'USD', date: '2026-11-06' } });
   assert.equal(jump.updated.length, 0);
   assert.match(jump.missing[0]!.reason, /bezpečnostní kontrola/);
