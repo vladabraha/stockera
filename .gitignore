@@ -1,7 +1,10 @@
 node_modules/
 
-# Osobní data – nikdy necommitovat
-data/
+# Osobní data – nikdy necommitovat (v gitu je jen prázdná složka data/input)
+data/*
+!data/input/
+data/input/*
+!data/input/.gitkeep
 out/
 tmp/
 logs/

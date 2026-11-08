@@ -50,6 +50,7 @@ SQL řetězce v jednoduchých uvozovkách.
   skript průběžně: `.command` má vše ve funkci `main` (zparsuje se celá předem), `.cmd` se spustí z kopie v `%TEMP%`.
 - `.gitignore` je záměrně široký (i `*.xlsx`, `*.csv`, `*.pdf`, `*.db`, `*.log`, `.env`, `.idea/` mimo `data/`) –
   repozitář je určený ke zveřejnění na GitHubu.
+  Výjimka: `data/input/.gitkeep`, aby klon rovnou obsahoval složku pro výpisy (import skryté soubory přeskakuje).
 - Všechny `.cmd` odmítnou běh ze ZIPu / `%TEMP%` (Průzkumník spouští soubory ze ZIPu z dočasné složky) – detekce přes
   `findstr /l` na cestu s `/` místo `\` (findstr bere `\` jako escape).
 - `.cmd` soubory jen ASCII + CRLF (kódová stránka cmd), `.ps1` UTF-8 **s BOM** + CRLF (jinak PowerShell 5.1 rozbije
