@@ -122,6 +122,9 @@ test('import: overlapping exports are deduplicated and merged with XTB holdings 
   const sold = a.realized.find((r) => r.ticker === 'TETF.NL')!;
   assert.deepEqual([sold.lots[0]!.cost.czk, sold.lots[0]!.proceeds.czk], [400, 600]);
   assert.ok(!a.checks.warnings.some((w) => /Nezpracované typy/.test(w)), a.checks.warnings.join('\n'));
+  // T212 lots don't switch off the XTB check, and only the XTB lot is compared (1 × 44 € → 1 × 50 €).
+  const move = a.checks.validation.find((c) => c.title === 'Změna hodnoty od výpisu');
+  assert.match(move?.detail ?? '', /výpisu 1\s100 Kč, podle stažených cen 1\s250 Kč/);
 });
 
 test('a position without any price is valued at cost (like the chart), not as a −100 % loss', () => {

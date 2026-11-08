@@ -460,18 +460,21 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     `SELECT s.account_number, a.currency, s.as_of, s.value, s.profit FROM open_snapshots s JOIN accounts a USING (account_number)`,
   ).all() as { account_number: string; currency: string | null; as_of: string; value: number | null; profit: number | null }[])
     .map((s) => ({ accountNumber: s.account_number, currency: s.currency ?? '???', asOf: s.as_of, value: s.value, profit: s.profit }));
-  const xtbValues = loaded.open.map((l) => {
-    const snap = snapshots.find((s) => s.accountNumber === l.accountNumber);
-    return l.value == null || !snap ? null : conv.money(l.value, l.currency, pragueDate(snap.asOf)).czk;
-  });
+  // Only accounts with an export snapshot (XTB) can be compared; Trading 212 positions have no export value.
+  const snapAsOf = new Map(snapshots.map((s) => [s.accountNumber, s.asOf]));
+  const xtbValues = loaded.open.filter((l) => snapAsOf.has(l.accountNumber))
+    .map((l) => (l.value == null ? null : conv.money(l.value, l.currency, pragueDate(snapAsOf.get(l.accountNumber)!)).czk));
+  const xtbLots = holdings.flatMap((x) => x.lots).filter((l) => snapAsOf.has(l.accountNumber));
+  const xtbCurrent = xtbLots.map((l) => l.value?.czk ?? null);
+  const xtbCurrentDate = xtbLots.flatMap((l) => (l.valueDate ? [l.valueDate] : [])).sort().at(-1) ?? null;
   const validation = validatePortfolio({
     today,
     snapshots,
     open: loaded.open,
     priceAt: (ticker, date) => market.price(ticker, date),
     xtbValueCzk: xtbValues.some((x) => x == null) ? null : xtbValues.reduce((a: number, x) => a + x!, 0),
-    currentValueCzk: summary.value.czk,
-    currentValueDate: summary.valueDate,
+    currentValueCzk: xtbCurrent.some((x) => x == null) ? null : xtbCurrent.reduce((a: number, x) => a + x!, 0),
+    currentValueDate: xtbCurrentDate,
     missingRates: conv.missing.size,
     fifoMismatches: fifoMismatches.length,
     incompleteAccounts: cashFlows.filter((c) => !c.historyComplete).map((c) => c.accountNumber),

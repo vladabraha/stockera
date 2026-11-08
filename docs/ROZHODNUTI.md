@@ -402,7 +402,8 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
   Kontroly: součet hodnot nákupů = souhrn „Open position value“ z výpisu (tolerance 0,1 %); nákupní cena = hodnota −
   zisk podle XTB (0,5 %); stažená cena ke dni výpisu vs cena XTB (**5 %** – 3 % dávalo falešné poplachy u akcií
   s cenou z předchozího dne; chyby symbolu/měny/pencí jsou řádově větší); stáří výpisu (> 31 dní ⚠); změna hodnoty
-  od výpisu (> 15 % ⚠); kurzy ČNB; FIFO; úplnost historie. Stav `info` = jen kontext, ne chyba.
+  od výpisu (> 15 % ⚠; jen pozice účtů se snapshotem XTB – snapshot vs. tytéž pozice se staženými cenami, T212
+  ji nevypíná ani nezkresluje); kurzy ČNB; FIFO; úplnost historie. Stav `info` = jen kontext, ne chyba.
   Párování kusů přes peněžní operace se nedělá – export nemusí mít peněžní operace za celé období.
 
 - `pnpm check` (typecheck + testy) a `pnpm audit` musí projít před každým commitem.
