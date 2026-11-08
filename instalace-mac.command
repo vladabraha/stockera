@@ -1,7 +1,6 @@
 #!/bin/sh
 # Stockera – příprava na macOS: Node.js 24+, pnpm, závislosti projektu. Stačí spustit dvojklikem.
 cd "$(dirname "$0")" || exit 1
-PNPM_VERSION=10.18.1
 for p in /opt/homebrew/bin /usr/local/bin; do [ -d "$p" ] && PATH="$p:$PATH"; done
 export PATH
 
@@ -33,8 +32,10 @@ if [ "$(node_major)" -lt 24 ]; then
 fi
 echo "[1/3] Node.js $(node --version) ✓"
 
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "[2/3] Instaluji pnpm $PNPM_VERSION…"
+PNPM_VERSION=$(node -p "require('./package.json').packageManager.split('@')[1]")
+# Bez přepínání verzí: jinak by pnpm sám stahoval jinou verzi mimo složku projektu.
+if [ "$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null)" != "$PNPM_VERSION" ]; then
+  echo "[2/3] Instaluji pnpm ${PNPM_VERSION}…"
   npm install -g "pnpm@$PNPM_VERSION" || fail "pnpm se nepodařilo nainstalovat." \
     "Zkontroluj připojení k internetu a spusť instalaci znovu." \
     "Když to hlásí oprávnění (EACCES), otevři Terminál a zadej: sudo npm install -g pnpm@$PNPM_VERSION"

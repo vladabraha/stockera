@@ -29,7 +29,7 @@ Související: `docs/ZADANI.md` (zadání), `docs/architektura.md` (architektura
 | `node:sqlite` (vestavěné) místo better-sqlite3 apod. | bez nativních modulů → funguje i na Windows bez kompilace |
 | `node:test` místo Jest/Vitest | vestavěné |
 | Vlastní ZIP/XLSX čtečka (`src/xlsx`) | knihovny pro XLSX mají historii zranitelností a jsou velké |
-| pnpm 10.18.1 (`packageManager`) | pnpm 12 se přes `packageManager` nepodařilo stáhnout (ENOEXEC); uživatel zakázal zásahy mimo projekt (corepack apod.) |
+| pnpm 10.34.9 (`packageManager`, poslední řada 10) | pnpm 12 (ověřeno i 12.18.0 v 11/2026) se přes `packageManager` nepodaří spustit (ENOEXEC při samopřepnutí) a sám by stahoval binárky mimo projekt; uživatel zakázal zásahy mimo projekt (corepack apod.) |
 | `pnpm-workspace.yaml`: `ignoreScripts: true`, `minimumReleaseAge: 4320`, `saveExact: true` | ochrana dodavatelského řetězce: žádné install skripty, jen verze starší 3 dnů, přesné verze |
 | Skript se jmenuje `ingest`, ne `import` | `pnpm import` je vestavěný příkaz pnpm |
 | `--disable-warning=ExperimentalWarning` ve skriptech | `node:sqlite` hlásí experimentální warning |
@@ -40,7 +40,9 @@ SQL řetězce v jednoduchých uvozovkách.
 ### Instalační a spouštěcí skripty
 - `instalace-windows.cmd` (→ `scripts/instalace.ps1`) a `instalace-mac.command` jsou výjimka z pravidla „nic mimo
   složku“: na výslovné přání uživatele doinstalují Node.js (winget `OpenJS.NodeJS.LTS` / Homebrew) a pnpm
-  (`npm install -g pnpm@10.18.1` – přesná verze kvůli `packageManager`). Bez winget/brew jen odkážou na nodejs.org.
+  (`npm install -g pnpm@<verze>` – přesná verze čtená z `packageManager`; při jiné verzi povýší). Verzi zjišťují s
+  `npm_config_manage_package_manager_versions=false`, aby pnpm nezačal sám stahovat jinou verzi do domovské složky.
+  `aktualizovat-aplikaci-*` po `git pull` dělá totéž, takže změna verze v `package.json` se rozšíří sama. Bez winget/brew jen odkážou na nodejs.org.
 - `aktualizovat-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
   odpadá i problém s execution policy u `pnpm.ps1`). Předem ověří Node; po úspěchu otevřou `out/stockera.html`.
   `instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).

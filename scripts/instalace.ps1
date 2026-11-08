@@ -1,6 +1,5 @@
 ﻿# Stockera – příprava na Windows: Node.js 24+, pnpm, závislosti projektu. Spouští se přes instalace-windows.cmd.
 $ErrorActionPreference = 'Stop'
-$PnpmVersion = '10.18.1'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
 function Update-PathFromSystem {
@@ -11,7 +10,10 @@ function Get-NodeMajor {
   return 0
 }
 function Test-Pnpm {
-  try { $v = & pnpm --version 2>$null; return [bool]$v } catch { return $false }
+  # Bez přepínání verzí: jinak by pnpm sám stahoval jinou verzi mimo složku projektu.
+  $env:npm_config_manage_package_manager_versions = 'false'
+  try { $v = & pnpm --version 2>$null; return ($v -eq $PnpmVersion) } catch { return $false }
+  finally { Remove-Item Env:npm_config_manage_package_manager_versions -ErrorAction SilentlyContinue }
 }
 function Stop-Setup([string]$Message, [string[]]$Steps) {
   Write-Host ''
@@ -50,6 +52,7 @@ try {
   }
   Write-Host "[1/3] Node.js $(& node --version) ✓" -ForegroundColor Green
 
+  $PnpmVersion = (Get-Content 'package.json' -Raw | ConvertFrom-Json).packageManager.Split('@')[1]
   if (-not (Test-Pnpm)) {
     Write-Host "[2/3] Instaluji pnpm $PnpmVersion…"
     & npm install -g "pnpm@$PnpmVersion"

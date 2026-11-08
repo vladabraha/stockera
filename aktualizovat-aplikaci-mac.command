@@ -41,6 +41,14 @@ main() {
 
   echo "[2/3] Doinstalovávám nástroje projektu…"
   command -v pnpm >/dev/null 2>&1 || fail "Chybí pnpm." "Spusť instalace-mac.command." "Pak spusť aktualizovat-aplikaci-mac.command znovu."
+  pv=$(node -p "require('./package.json').packageManager.split('@')[1]")
+  # Bez přepínání verzí: jinak by pnpm sám stahoval jinou verzi mimo složku projektu.
+  if [ "$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null)" != "$pv" ]; then
+    echo "      Povyšuji pnpm na ${pv}…"
+    npm install -g "pnpm@$pv" || fail "pnpm se nepodařilo povýšit." \
+      "Zkontroluj připojení k internetu a spusť skript znovu." \
+      "Když to hlásí oprávnění (EACCES), otevři Terminál a zadej: sudo npm install -g pnpm@$pv"
+  fi
   pnpm install --frozen-lockfile || fail "Instalace nástrojů projektu selhala (podrobnosti výše)." \
     "Zkontroluj připojení k internetu a spusť skript znovu."
 

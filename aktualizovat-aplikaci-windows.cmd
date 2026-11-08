@@ -38,6 +38,17 @@ git --no-pager log --format="      - %%s" %BEFORE%..HEAD
 echo [2/3] Doinstalovavam nastroje projektu...
 where pnpm >nul 2>nul
 if errorlevel 1 goto :nopnpm
+rem Bez prepinani verzi: jinak by pnpm sam stahoval jinou verzi mimo slozku projektu.
+for /f "delims=" %%v in ('node -p "require('./package.json').packageManager.split('@')[1]"') do set "PNPMV=%%v"
+set "PNPMCUR="
+set "npm_config_manage_package_manager_versions=false"
+for /f "delims=" %%v in ('pnpm --version 2^>nul') do set "PNPMCUR=%%v"
+set "npm_config_manage_package_manager_versions="
+if "%PNPMCUR%"=="%PNPMV%" goto :pnpmok
+echo       Povysuji pnpm na %PNPMV%...
+call npm install -g "pnpm@%PNPMV%"
+if errorlevel 1 goto :installfailed
+:pnpmok
 call pnpm install --frozen-lockfile
 if errorlevel 1 goto :installfailed
 

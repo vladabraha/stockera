@@ -45,13 +45,13 @@ Ruční doplnění (ISIN, země akcie, sektor, složení ETF bez dat, zdroj cen)
 Vše potřebné je ve složce projektu; mimo ni jsou jen Node.js a pnpm.
 1. Zkopíruj celou složku **včetně `data/`** (databáze, výpisy, ruční konfigurace; `out/` a `node_modules/` není potřeba).
 2. Spusť `instalace-windows.cmd` / `instalace-mac.command`: doinstaluje Node.js ≥ 24 (winget / Homebrew),
-   pnpm 10.18.1 (`npm install -g`) a závislosti projektu. Ručně: Node.js z nodejs.org, `npm install -g pnpm@10.18.1`, `pnpm install`.
+   pnpm ve verzi z `packageManager` v `package.json` (`npm install -g`) a závislosti projektu. Ručně: Node.js z nodejs.org, `npm install -g pnpm@10.34.9`, `pnpm install`.
 3. Aktualizace dvojklikem `aktualizovat-windows.cmd` / `aktualizovat-mac.command`, nebo libovolný příkaz výše.
 
 ## Nová verze aplikace
 V gitu je jen program; osobní data (`data/`, `out/`, výpisy, databáze, logy) jsou v `.gitignore`. Ve složce stažené
 přes `git clone` stačí dvojklik na `aktualizovat-aplikaci-windows.cmd` / `aktualizovat-aplikaci-mac.command`:
-`git pull --ff-only` → `pnpm install --frozen-lockfile` → přegenerování reportu. Databáze se na novou verzi převede
+`git pull --ff-only` → povýšení pnpm, pokud se změnil `packageManager` → `pnpm install --frozen-lockfile` → přegenerování reportu. Databáze se na novou verzi převede
 sama (migrace v `src/db/database.ts`).
 
 ## Vývoj
