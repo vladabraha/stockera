@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Analysis } from '../src/analysis/portfolio.ts';
-import { applyLive, ecbFxUrl, fetchLive, liveFxUrl, parseEcbFx, parseLiveFx, parseTradegate, pickLiveQuote, tradegateDay } from '../src/report/live.ts';
+import { applyLive, ecbFxUrl, periodGain, fetchLive, liveFxUrl, parseEcbFx, parseLiveFx, parseTradegate, pickLiveQuote, tradegateDay } from '../src/report/live.ts';
 
 const q = (market: string, last: number, isoCurrency: string, datetimeLast: string) => ({ last, isoCurrency, datetimeLast, market: { codeMarket: market } });
 
@@ -180,4 +180,15 @@ test('fetchLive discards suspicious responses, reports them and falls back', asy
   assert.deepEqual(r.czkPer, { CZK: 1, EUR: 25 });
   assert.deepEqual([...r.sources.unsafe].sort(), ['Frankfurter: nečekaný typ text/html', 'Tradegate: zakázaný klíč "__proto__"', 'onvista: HTML s obsluhou události']);
   assert.equal(({} as Record<string, unknown>).polluted, undefined);
+});
+
+test('periodGain: selling a winner within the period is realized profit, not a loss', () => {
+  const pt = (date: string, valueCzk: number, investedCzk: number) => ({ date, valueCzk, investedCzk, valueEur: valueCzk / 25, investedEur: investedCzk / 25 });
+  // Held: 100k cost worth 150k; the winner is sold on 2026-06-01 for +40k, the rest stays flat.
+  const first = pt('2026-01-01', 150_000, 100_000);
+  const last = pt('2026-11-01', 70_000, 60_000);
+  const sale = (closeDate: string, czk: number) => ({ closeDate, profit: { native: czk, currency: 'CZK', czk, eur: czk / 25 } });
+  assert.deepEqual(periodGain(first, last, [sale('2026-06-01', 40_000), sale('2026-01-01', 999), sale('2026-11-02', 999)], 'czk'),
+    { total: 0, realized: 40_000 }, 'only sales after the first and up to the last point count');
+  assert.equal(periodGain(first, last, [sale('2026-06-01', 40_000)], 'eur').total, 0);
 });

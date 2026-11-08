@@ -5,7 +5,7 @@ import type { Analysis, Holding, HoldingLot, RealizedInstrument, RealizedLot, Ta
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
-import { applyLive, fetchLive, type LiveSources } from './live.ts';
+import { applyLive, fetchLive, periodGain, type LiveSources } from './live.ts';
 import { SALES_LIMIT_CZK, lossOffsetPlan, taxReturnGuide, type TaxReturnGuide } from '../analysis/tax.ts';
 
 type Cur = 'czk' | 'eur';
@@ -920,14 +920,15 @@ function heroPanel(a: Analysis): HTMLElement {
         h('div', { class: 'big' }, totals(s.value)),
         h('div', { class: 'delta' }, chip(pct(s.unrealizedPct), pctValue(s.unrealizedPct)),
           signed(signedMoney(totals(s.unrealizedProfit), totalsValue(s.unrealizedProfit)), totalsValue(s.unrealizedProfit)), h('span', { class: 'muted' }, 'nerealizovaný zisk')),
-        rangeChange(a.history)),
+        rangeChange(a)),
       h('div', { class: 'hero-tools' }, rangeButtons(a.history[0]?.date, a.history.at(-1)?.date))),
     portfolioChart(a.history),
   );
   return hero;
 }
 
-function rangeChange(history: HistoryPoint[]): HTMLElement | null {
+function rangeChange(a: Analysis): HTMLElement | null {
+  const history = a.history;
   if (history.length < 2) return null;
   const start = rangeStart(history.at(-1)!.date);
   const end = rangeEnd();
@@ -936,10 +937,10 @@ function rangeChange(history: HistoryPoint[]): HTMLElement | null {
   const first = pts[0];
   const last = pts.at(-1);
   if (!first || !last || first === last) return null;
-  const gain = (p: HistoryPoint) => (state.cur === 'czk' ? p.valueCzk - p.investedCzk : p.valueEur - p.investedEur);
-  const d = gain(last) - gain(first);
+  const { total: d, realized } = periodGain(first, last, a.realized.flatMap((r) => r.lots), state.cur);
   const label = state.range === CUSTOM ? `Od ${czDate(first.date)} do ${czDate(last.date)}: ` : `Za období ${state.range}: `;
-  return h('div', { class: 'muted small' }, label, signed(signedMoney(fmtMoney(d, curCode()), d), d), ' zisku');
+  return h('div', { class: 'muted small' }, label, signed(signedMoney(fmtMoney(d, curCode()), d), d), ' zisku',
+    realized ? ' včetně pozic prodaných v tomto období' : null);
 }
 
 interface Series { name: string; color: string; points: Point[]; dashed?: boolean; area?: boolean }

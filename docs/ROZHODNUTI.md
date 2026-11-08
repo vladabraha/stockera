@@ -156,6 +156,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - Ceny za kus (nákupní/prodejní) jsou v měně obchodování instrumentu → v UI a CSV se zobrazují v měně stažené kotace
   (`priceCurrency`), ne v měně účtu.
 - Vývoj hodnoty: denně hodnota vs. investováno v CZK i EUR; dny bez kurzu se vynechají.
+  Graf obsahuje jen pozice držené v daný den, proto „Za období …: X zisku“ nad grafem = změna nerealizovaného
+  zisku + realizovaný zisk prodejů uzavřených v období (`periodGain` v `live.ts`). Jinak by prodej ziskové pozice
+  vypadal jako ztráta.
 - Neúplná historie (první cash op je později než nejstarší lot) → varování.
 - Splity: **neimplementováno** (chybí vzorek exportu).
 

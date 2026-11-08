@@ -2,6 +2,7 @@
 // Privacy: requests carry only ISINs and currency codes – never quantities, prices, values or account numbers.
 import type { Analysis, Holding, HoldingLot } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
+import type { HistoryPoint } from '../analysis/market.ts';
 import { breakdown, lookThrough } from '../analysis/breakdown.ts';
 import { parseSafeJson, UnsafeDataError } from '../net/inspect.ts';
 
@@ -307,4 +308,15 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
     else a.history.push(point);
   }
   return { analysis: a, updated, missing, date };
+}
+
+/**
+ * Profit made between two history points: the change of the unrealized gain of the held lots plus the realized profit
+ * of sales closed after the first point. The history only covers lots held on each day, so without the realized part
+ * selling a winner would look like a loss.
+ */
+export function periodGain(first: HistoryPoint, last: HistoryPoint, sales: { closeDate: string; profit: Money }[], cur: 'czk' | 'eur'): { total: number; realized: number } {
+  const gain = (p: HistoryPoint) => (cur === 'czk' ? p.valueCzk - p.investedCzk : p.valueEur - p.investedEur);
+  const realized = sales.filter((s) => s.closeDate > first.date && s.closeDate <= last.date).reduce((n, s) => n + (s.profit[cur] ?? 0), 0);
+  return { total: gain(last) - gain(first) + realized, realized };
 }
