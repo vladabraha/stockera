@@ -2,7 +2,7 @@
 rem Stockera - stahne novou verzi aplikace z GitHubu (git pull), doinstaluje nastroje a pregeneruje report.
 rem Tvoje data (data\, out\) git ignoruje, takze zustanou beze zmeny.
 chcp 65001 >nul
-title Stockera - aktualizace aplikace
+title Stockera - stazeni nove verze aplikace
 if "%~1"=="--z-kopie" goto :main
 set "HERE=%~dp0"
 set "HERE_FWD=%HERE:\=/%"
@@ -14,7 +14,7 @@ copy /y "%~f0" "%TEMP%\stockera-aktualizace-aplikace.cmd" >nul & call "%TEMP%\st
 :main
 set "HERE=%~2"
 cd /d "%HERE%"
-echo == Stockera: aktualizace aplikace ==
+echo == Stockera: stazeni nove verze aplikace ==
 echo Stahne novou verzi programu. Tvoje vypisy, databaze ani report se nikam neposilaji ani nemazou.
 echo.
 
@@ -53,20 +53,20 @@ call pnpm install --frozen-lockfile
 if errorlevel 1 goto :installfailed
 
 echo.
-echo  Aplikace je aktualizovana.
+echo  Nova verze aplikace je nainstalovana.
 set "HASINPUT="
 if exist "data\input\*.xlsx" set "HASINPUT=1"
 if exist "data\input\*.csv" set "HASINPUT=1"
 if not defined HASINPUT goto :noinput
 echo.
 echo == Pregenerovani reportu novou verzi ==
-call "%HERE%aktualizovat-windows.cmd"
+call "%HERE%2-vytvorit-report-windows.cmd"
 exit /b %errorlevel%
 
 :noinput
 echo.
 echo  Dalsi krok: uloz vypisy z XTB (XLSX) nebo Trading 212 (CSV) do slozky data\input
-echo  a spust aktualizovat-windows.cmd.
+echo  a spust 2-vytvorit-report-windows.cmd.
 echo.
 pause
 exit /b 0
@@ -85,7 +85,7 @@ echo.
 echo  Co delat:
 echo    1. Nainstaluj ho z https://git-scm.com (staci porad klikat Dalsi),
 echo       nebo prikazem: winget install --id Git.Git -e
-echo    2. Zavri toto okno a spust aktualizovat-aplikaci-windows.cmd znovu.
+echo    2. Zavri toto okno a spust 3-stahnout-novou-verzi-aplikace-windows.cmd znovu.
 goto :fail
 
 :noclone
@@ -93,18 +93,18 @@ echo.
 echo  [CHYBA] Tato slozka neni stazena pres git (nejspis ze ZIPu).
 echo.
 echo  Co delat:
-echo    1. Stahni aplikaci znovu prikazem git clone (viz NAVOD.md, cast Aktualizace aplikace).
+echo    1. Stahni aplikaci znovu prikazem git clone (viz NAVOD.md, cast 4. Nova verze aplikace).
 echo    2. Do nove slozky presun svou slozku data (vypisy, databaze, nastaveni).
 goto :fail
 
 :dirty
 git status --short --untracked-files=no
 echo.
-echo  [CHYBA] Soubory programu (vyse) jsou na tomto pocitaci upravene - aktualizace by je prepsala.
+echo  [CHYBA] Soubory programu (vyse) jsou na tomto pocitaci upravene - nova verze by je prepsala.
 echo.
 echo  Co delat:
 echo    1. Pokud upravy nepotrebujes, vrat je prikazem: git checkout -- .
-echo    2. Pak spust aktualizovat-aplikaci-windows.cmd znovu.
+echo    2. Pak spust 3-stahnout-novou-verzi-aplikace-windows.cmd znovu.
 goto :fail
 
 :pullfailed
@@ -115,7 +115,7 @@ goto :fail
 
 :nopnpm
 echo.
-echo  [CHYBA] Chybi pnpm. Spust instalace-windows.cmd a pak tento skript znovu.
+echo  [CHYBA] Chybi pnpm. Spust 1-instalace-windows.cmd a pak tento skript znovu.
 goto :fail
 
 :installfailed

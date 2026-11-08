@@ -44,13 +44,13 @@ Ruční doplnění (ISIN, země akcie, sektor, složení ETF bez dat, zdroj cen)
 ## Přenos na jiný počítač (i Windows)
 Vše potřebné je ve složce projektu; mimo ni jsou jen Node.js a pnpm.
 1. Zkopíruj celou složku **včetně `data/`** (databáze, výpisy, ruční konfigurace; `out/` a `node_modules/` není potřeba).
-2. Spusť `instalace-windows.cmd` / `instalace-mac.command`: doinstaluje Node.js ≥ 24 (winget / Homebrew),
+2. Spusť `1-instalace-windows.cmd` / `1-instalace-mac.command`: doinstaluje Node.js ≥ 24 (winget / Homebrew),
    pnpm ve verzi z `packageManager` v `package.json` (`npm install -g`) a závislosti projektu. Ručně: Node.js z nodejs.org, `npm install -g pnpm@10.34.9`, `pnpm install`.
-3. Aktualizace dvojklikem `aktualizovat-windows.cmd` / `aktualizovat-mac.command`, nebo libovolný příkaz výše.
+3. Report dvojklikem `2-vytvorit-report-windows.cmd` / `2-vytvorit-report-mac.command`, nebo libovolný příkaz výše.
 
 ## Nová verze aplikace
 V gitu je jen program; osobní data (`data/`, `out/`, výpisy, databáze, logy) jsou v `.gitignore`. Ve složce stažené
-přes `git clone` stačí dvojklik na `aktualizovat-aplikaci-windows.cmd` / `aktualizovat-aplikaci-mac.command`:
+přes `git clone` stačí dvojklik na `3-stahnout-novou-verzi-aplikace-windows.cmd` / `3-stahnout-novou-verzi-aplikace-mac.command`:
 `git pull --ff-only` → povýšení pnpm, pokud se změnil `packageManager` → `pnpm install --frozen-lockfile` → přegenerování reportu. Databáze se na novou verzi převede
 sama (migrace v `src/db/database.ts`).
 
@@ -78,7 +78,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
 | `out/` | **výstupy – v .gitignore** (`stockera.html` zašifrovaně; `analysis.json` jen s `pnpm analyze --json`, nešifrovaně – po použití smazat) |
 | `config/` | vzor ruční konfigurace instrumentů |
-| `instalace-*`, `aktualizovat-*`, `aktualizovat-aplikaci-*`, `scripts/` | dvojklikací skripty pro Windows (`.cmd` → `scripts/instalace.ps1`) a macOS (`.command`) – instalace, aktualizace dat, nová verze aplikace |
+| `1-instalace-*`, `2-vytvorit-report-*`, `3-stahnout-novou-verzi-aplikace-*`, `scripts/` | dvojklikací skripty pro Windows (`.cmd` → `scripts/instalace.ps1`) a macOS (`.command`) – instalace, aktualizace dat, nová verze aplikace |
 | `data/` | **osobní data – v .gitignore**: `input/` výpisy, `stockera.db` databáze, `instruments.json`, `logs/network.log` |
 
 ## Bezpečnost

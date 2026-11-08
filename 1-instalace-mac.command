@@ -24,7 +24,7 @@ if [ "$(node_major)" -lt 24 ]; then
     fail "Chybí Node.js 24+." \
       "V prohlížeči se otevřela stránka nodejs.org – stáhni verzi LTS (soubor .pkg)." \
       "Nainstaluj ji (pořád Pokračovat, nakonec zadej heslo k Macu)." \
-      "Spusť instalace-mac.command znovu."
+      "Spusť 1-instalace-mac.command znovu."
   fi
   [ "$(node_major)" -ge 24 ] || fail "Node.js 24+ se nepodařilo nainstalovat." \
     "Zkontroluj připojení k internetu a spusť instalaci znovu." \
@@ -49,6 +49,6 @@ pnpm install || fail "Instalace nástrojů projektu selhala (podrobnosti výše)
 echo "[3/3] Nástroje projektu ✓"
 
 mkdir -p data/input
-printf '\nHotovo ✓\nDalší krok: ulož export z XTB do složky data/input (právě se otevřela) a spusť aktualizovat-mac.command.\n'
+printf '\nHotovo ✓\nDalší krok: ulož export z XTB do složky data/input (právě se otevřela) a spusť 2-vytvorit-report-mac.command.\n'
 open data/input
 printf '\nOkno můžeš zavřít.\n'

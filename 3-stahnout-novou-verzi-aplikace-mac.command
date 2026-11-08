@@ -13,21 +13,21 @@ main() {
     printf '\nOkno můžeš zavřít.\n'; exit 1
   }
 
-  echo "== Stockera: aktualizace aplikace =="
+  echo "== Stockera: stažení nové verze aplikace =="
   echo "Stáhne novou verzi programu. Tvoje výpisy, databáze ani report se nikam neposílají ani nemažou."
   echo
 
   git --version >/dev/null 2>&1 || fail "Na tomto Macu chybí git." \
     "Pokud se otevřelo okno s nabídkou „Nástroje příkazového řádku“, klikni na Instalovat." \
-    "Po dokončení spusť aktualizovat-aplikaci-mac.command znovu."
+    "Po dokončení spusť 3-stahnout-novou-verzi-aplikace-mac.command znovu."
   git rev-parse --is-inside-work-tree >/dev/null 2>&1 || fail "Tato složka není stažená přes git (nejspíš z ZIPu)." \
-    "Stáhni aplikaci znovu příkazem git clone (viz NAVOD.md, část Aktualizace aplikace)." \
+    "Stáhni aplikaci znovu příkazem git clone (viz NAVOD.md, část 4. Nová verze aplikace)." \
     "Do nové složky přesuň svou složku data (výpisy, databáze, nastavení)."
   if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     git status --short --untracked-files=no
-    fail "Soubory programu (výše) jsou na tomto počítači upravené – aktualizace by je přepsala." \
+    fail "Soubory programu (výše) jsou na tomto počítači upravené – nová verze by je přepsala." \
       "Pokud úpravy nepotřebuješ, vrať je příkazem: git checkout -- ." \
-      "Pak spusť aktualizovat-aplikaci-mac.command znovu."
+      "Pak spusť 3-stahnout-novou-verzi-aplikace-mac.command znovu."
   fi
 
   before=$(git rev-parse HEAD)
@@ -40,7 +40,7 @@ main() {
   echo "      Novinky:"; git --no-pager log --format='      • %s' "$before..HEAD"
 
   echo "[2/2] Doinstalovávám nástroje projektu…"
-  command -v pnpm >/dev/null 2>&1 || fail "Chybí pnpm." "Spusť instalace-mac.command." "Pak spusť aktualizovat-aplikaci-mac.command znovu."
+  command -v pnpm >/dev/null 2>&1 || fail "Chybí pnpm." "Spusť 1-instalace-mac.command." "Pak spusť 3-stahnout-novou-verzi-aplikace-mac.command znovu."
   pv=$(node -p "require('./package.json').packageManager.split('@')[1]")
   # Bez přepínání verzí: jinak by pnpm sám stahoval jinou verzi mimo složku projektu.
   if [ "$(npm_config_manage_package_manager_versions=false pnpm --version 2>/dev/null)" != "$pv" ]; then
@@ -52,12 +52,12 @@ main() {
   pnpm install --frozen-lockfile || fail "Instalace nástrojů projektu selhala (podrobnosti výše)." \
     "Zkontroluj připojení k internetu a spusť skript znovu."
 
-  printf '\nAplikace je aktualizovaná ✓\n'
+  printf '\nNová verze aplikace je nainstalovaná ✓\n'
   if ! ls data/input 2>/dev/null | grep -qiE '\.(xlsx|csv)$'; then
-    printf '\nDalší krok: ulož výpisy z XTB (XLSX) nebo Trading 212 (CSV) do složky data/input\na spusť aktualizovat-mac.command.\n\nOkno můžeš zavřít.\n'
+    printf '\nDalší krok: ulož výpisy z XTB (XLSX) nebo Trading 212 (CSV) do složky data/input\na spusť 2-vytvorit-report-mac.command.\n\nOkno můžeš zavřít.\n'
     exit 0
   fi
   printf '\n== Přegenerování reportu novou verzí ==\n'
-  exec ./aktualizovat-mac.command
+  exec ./2-vytvorit-report-mac.command
 }
 main "$@"; exit

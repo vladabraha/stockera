@@ -128,7 +128,7 @@ export function validatePortfolio(v: ValidationInput): DataCheck[] {
   }
 
   out.push(v.missingRates
-    ? { status: 'warn', title: 'Chybí kurzy ČNB', detail: `Pro ${v.missingRates} dní chybí kurz – částky v Kč/€ a daně jsou neúplné. Spusť aktualizaci s internetem.` }
+    ? { status: 'warn', title: 'Chybí kurzy ČNB', detail: `Pro ${v.missingRates} dní chybí kurz – částky v Kč/€ a daně jsou neúplné. Spusť 2-vytvorit-report s připojením k internetu.` }
     : { status: 'ok', title: 'Kurzy ČNB kompletní', detail: 'Každý nákup i prodej má kurz ČNB ke dni obchodu.' });
   out.push(v.fifoMismatches
     ? { status: 'warn', title: 'Párování prodejů nesedí s FIFO', detail: `${v.fifoMismatches} prodejů XTB spárovalo jinak než metodou FIFO – zkontroluj daně u těchto prodejů.` }

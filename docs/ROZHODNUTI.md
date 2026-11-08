@@ -38,16 +38,16 @@ Quirky `node:sqlite`: řádky mají null prototype (před `deepEqual` spread), `
 SQL řetězce v jednoduchých uvozovkách.
 
 ### Instalační a spouštěcí skripty
-- `instalace-windows.cmd` (→ `scripts/instalace.ps1`) a `instalace-mac.command` jsou výjimka z pravidla „nic mimo
+- `1-instalace-windows.cmd` (→ `scripts/instalace.ps1`) a `1-instalace-mac.command` jsou výjimka z pravidla „nic mimo
   složku“: na výslovné přání uživatele doinstalují Node.js (winget `OpenJS.NodeJS.LTS` / Homebrew) a pnpm
   (`npm install -g pnpm@<verze>` – přesná verze čtená z `packageManager`; při jiné verzi povýší). Verzi zjišťují s
   `npm_config_manage_package_manager_versions=false`, aby pnpm nezačal sám stahovat jinou verzi do domovské složky.
-  `aktualizovat-aplikaci-*` po `git pull` dělá totéž, takže změna verze v `package.json` se rozšíří sama. Bez winget/brew jen odkážou na nodejs.org.
-- `aktualizovat-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
+  `3-stahnout-novou-verzi-aplikace-*` po `git pull` dělá totéž, takže změna verze v `package.json` se rozšíří sama. Bez winget/brew jen odkážou na nodejs.org.
+- `2-vytvorit-report-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
   odpadá i problém s execution policy u `pnpm.ps1`). Předem ověří Node; po úspěchu otevřou `out/stockera.html`.
-  `instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).
-- `aktualizovat-aplikaci-*` (na přání uživatele **přes git**): odmítne složku, která není klon, a upravené sledované
-  soubory (nic nepřepíše); `git pull --ff-only` → `pnpm install --frozen-lockfile` → spustí `aktualizovat-*`.
+  `1-instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).
+- `3-stahnout-novou-verzi-aplikace-*` (na přání uživatele **přes git**): odmítne složku, která není klon, a upravené sledované
+  soubory (nic nepřepíše); `git pull --ff-only` → `pnpm install --frozen-lockfile` → spustí `2-vytvorit-report-*`.
   Osobní data jsou v `.gitignore`, takže je pull nemůže změnit. `git pull` přepisuje i běžící skript a sh/cmd čtou
   skript průběžně: `.command` má vše ve funkci `main` (zparsuje se celá předem), `.cmd` se spustí z kopie v `%TEMP%`.
 - `.gitignore` je záměrně široký (i `*.xlsx`, `*.csv`, `*.pdf`, `*.db`, `*.log`, `.env`, `.idea/` mimo `data/`) –

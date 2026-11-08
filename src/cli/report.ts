@@ -8,7 +8,7 @@ import { buildReport } from '../report/build.ts';
 const { db: dbPath, report: outPath } = paths;
 
 if (!existsSync(dbPath)) {
-  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť aktualizaci (aktualizovat-windows.cmd / aktualizovat-mac.command).']);
+  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť 2-vytvorit-report-windows.cmd / 2-vytvorit-report-mac.command.']);
 }
 
 const db = openDatabase(dbPath);
@@ -33,11 +33,11 @@ async function getPassword(): Promise<string> {
   }
   if (!process.stdin.isTTY) {
     fail('Nejde se zeptat na heslo – program neběží v okně terminálu.', [
-      'Spusť aktualizaci dvojklikem na aktualizovat-windows.cmd / aktualizovat-mac.command.',
+      'Spusť dvojklikem 2-vytvorit-report-windows.cmd / 2-vytvorit-report-mac.command.',
     ]);
   }
   console.log('\nZvol heslo, kterým budeš report otevírat. Potvrď klávesou Enter.');
-  console.log('Heslo si zapamatuj; když ho zapomeneš, stačí znovu spustit aktualizaci a zvolit nové.\n');
+  console.log('Heslo si zapamatuj; když ho zapomeneš, stačí znovu spustit 2-vytvorit-report a zvolit nové.\n');
   for (;;) {
     const first = await promptHidden('Heslo: ');
     if (!first) {

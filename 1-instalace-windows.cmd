@@ -14,7 +14,7 @@ exit /b 0
 echo.
 echo  Instalace se nedokoncila - duvod a postup jsou vypsane vyse.
 echo  Kdyz si nevis rady, nainstaluj Node.js (verze LTS) rucne z https://nodejs.org
-echo  a spust instalace-windows.cmd znovu.
+echo  a spust 1-instalace-windows.cmd znovu.
 echo.
 pause
 exit /b 1

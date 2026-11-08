@@ -1,4 +1,4 @@
-﻿# Stockera – příprava na Windows: Node.js 24+, pnpm, závislosti projektu. Spouští se přes instalace-windows.cmd.
+﻿# Stockera – příprava na Windows: Node.js 24+, pnpm, závislosti projektu. Spouští se přes 1-instalace-windows.cmd.
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path $PSScriptRoot -Parent)
 
@@ -37,7 +37,7 @@ try {
       Stop-Setup 'Chybí Node.js 24+ a tento Windows ho neumí nainstalovat automaticky.' @(
         'Otevři https://nodejs.org a stáhni verzi LTS (tlačítko vlevo).',
         'Nainstaluj ji (stačí pořád klikat Další).',
-        'Spusť instalace-windows.cmd znovu.')
+        'Spusť 1-instalace-windows.cmd znovu.')
     }
     Write-Host '[1/3] Instaluji Node.js (LTS)…'
     Write-Host '      Windows se může zeptat „Chcete aplikaci povolit provádět změny?“ – potvrď Ano.' -ForegroundColor Yellow
@@ -46,7 +46,7 @@ try {
     if ((Get-NodeMajor) -lt 24) {
       Stop-Setup 'Node.js 24+ se nepodařilo nainstalovat.' @(
         'Zkontroluj připojení k internetu.',
-        'Zavři toto okno a spusť instalace-windows.cmd znovu.',
+        'Zavři toto okno a spusť 1-instalace-windows.cmd znovu.',
         'Když to nepomůže, nainstaluj Node.js (LTS) ručně z https://nodejs.org.')
     }
   }
@@ -60,7 +60,7 @@ try {
     if (-not (Test-Pnpm)) {
       Stop-Setup 'pnpm se nepodařilo nainstalovat.' @(
         'Zkontroluj připojení k internetu.',
-        'Zavři toto okno a spusť instalace-windows.cmd znovu (nové okno načte nové nastavení).')
+        'Zavři toto okno a spusť 1-instalace-windows.cmd znovu (nové okno načte nové nastavení).')
     }
   }
   Write-Host "[2/3] pnpm $(& pnpm --version) ✓" -ForegroundColor Green
@@ -69,7 +69,7 @@ try {
   & pnpm install
   if ($LASTEXITCODE -ne 0) {
     Stop-Setup 'Instalace nástrojů projektu selhala (podrobnosti výše).' @(
-      'Zkontroluj připojení k internetu a spusť instalace-windows.cmd znovu.',
+      'Zkontroluj připojení k internetu a spusť 1-instalace-windows.cmd znovu.',
       'Pokud je složka na síťovém disku nebo v OneDrive, přesuň ji do Dokumentů.')
   }
   Write-Host '[3/3] Nástroje projektu ✓' -ForegroundColor Green
@@ -77,10 +77,10 @@ try {
   New-Item -ItemType Directory -Force -Path 'data\input' | Out-Null
   Write-Host ''
   Write-Host 'Hotovo ✓' -ForegroundColor Green
-  Write-Host 'Další krok: ulož export z XTB do složky data\input a spusť aktualizovat-windows.cmd.'
+  Write-Host 'Další krok: ulož export z XTB do složky data\input a spusť 2-vytvorit-report-windows.cmd.'
   if (Test-Path 'data\input') { Start-Process explorer.exe (Resolve-Path 'data\input') }
 } catch {
   Stop-Setup "Nečekaná chyba: $($_.Exception.Message)" @(
-    'Zavři okno a spusť instalace-windows.cmd znovu.',
+    'Zavři okno a spusť 1-instalace-windows.cmd znovu.',
     'Když chyba trvá, nainstaluj Node.js (LTS) ručně z https://nodejs.org a zkus to znovu.')
 }

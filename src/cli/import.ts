@@ -80,7 +80,7 @@ function printSummary(rs: ImportReport[], failed: string[], b: ReturnType<typeof
   const consistent = a.cash - b.cash === cashNew && a.closed - b.closed === closedNew;
   console.log(consistent
     ? '  ✓ Počty sedí: každý nový záznam je v databázi právě jednou, duplicity z překrývajících se výpisů se přeskočily.'
-    : '  ⚠ Počty v databázi nesedí s načtenými soubory – smaž data/stockera.db a spusť aktualizaci znovu (výpisy zůstanou v data/input).');
+    : '  ⚠ Počty v databázi nesedí s načtenými soubory – smaž data/stockera.db a spusť znovu 2-vytvorit-report (výpisy zůstanou v data/input).');
   if (!n('imported') && !failed.length) console.log('  Nic nového – všechny výpisy už byly načtené dříve.');
 }
 
@@ -98,7 +98,7 @@ function adviceFor(e: unknown): string {
   if (e instanceof XtbFormatError || /ZIP|XLSX|workbook|Sheet/i.test(errorText(e))) {
     return 'nejde o export historie účtu z xStation, nebo je soubor poškozený či upravený v Excelu. Stáhni export znovu a nijak ho neupravuj; ostatní soubory se načetly normálně.';
   }
-  return 'stáhni výpis z xStation znovu a spusť aktualizaci ještě jednou. Ostatní soubory se načetly normálně.';
+  return 'stáhni výpis z xStation znovu a spusť znovu 2-vytvorit-report. Ostatní soubory se načetly normálně.';
 }
 
 function printReport(r: ImportReport): void {

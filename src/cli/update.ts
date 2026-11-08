@@ -9,12 +9,12 @@ mkdirSync(paths.input, { recursive: true });
 const xlsx = readdirSync(paths.input).filter((f) => /\.(xlsx|csv)$/i.test(f) && !f.startsWith('~$'));
 const hadDb = existsSync(paths.db);
 
-console.log('Stockera – aktualizace portfolia');
+console.log('Stockera – vytvoření reportu (načtení výpisů, stažení cen, report)');
 console.log('Všechny výpočty probíhají jen v tomto počítači. Z internetu se stahují pouze kurzy a ceny.');
 
 if (!xlsx.length && !hadDb) {
   console.log(`\nVe složce ${paths.input} zatím není žádný výpis z XTB ani Trading 212.`);
-  printSteps('Jak začít:', [...HOW_TO_EXPORT, 'Spusť aktualizaci znovu.']);
+  printSteps('Jak začít:', [...HOW_TO_EXPORT, 'Spusť znovu 2-vytvorit-report.']);
   process.exit(1);
 }
 
@@ -35,12 +35,12 @@ if (!xlsx.length) {
 
 heading('Krok 2 ze 3: stahuji kurzy ČNB a ceny akcií/ETF');
 const market = run('market.ts');
-if (market === 2) problems.push('Nešel internet – report používá naposledy stažené ceny. Až bude připojení, spusť aktualizaci znovu.');
+if (market === 2) problems.push('Nešel internet – report používá naposledy stažené ceny. Až bude připojení, spusť znovu 2-vytvorit-report.');
 else if (market !== 0) problems.push('Ceny se nepodařilo aktualizovat (podrobnosti v kroku 2) – report používá naposledy stažené ceny.');
 
 heading('Krok 3 ze 3: vytvářím zašifrovaný report');
 if (run('report.ts') !== 0) {
-  fail('Report se nepodařilo vytvořit.', ['Přečti si hlášku výše v kroku 3 a postupuj podle ní.', 'Pak spusť aktualizaci znovu.']);
+  fail('Report se nepodařilo vytvořit.', ['Přečti si hlášku výše v kroku 3 a postupuj podle ní.', 'Pak spusť znovu 2-vytvorit-report.']);
 }
 
 heading(problems.length ? 'Hotovo, ale s upozorněním' : 'Hotovo ✓');
@@ -48,7 +48,7 @@ for (const p of problems) console.log(`⚠ ${p}`);
 printSteps('Co dál:', [
   `Otevři soubor ${paths.report} (dvojklikem – otevře se v prohlížeči) a zadej heslo.`,
   'Na mobil soubor zkopíruj (AirDrop, kabel, cloud) a otevři ho tam – funguje i bez internetu.',
-  'Příště stačí přidat nový výpis do data/input a spustit aktualizaci znovu (staré výpisy tam klidně nech).',
+  'Příště stačí přidat nový výpis do data/input a spustit znovu 2-vytvorit-report (staré výpisy tam klidně nech).',
 ]);
 
 function run(script: string): number {
