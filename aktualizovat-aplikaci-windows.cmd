@@ -27,7 +27,7 @@ for /f "delims=" %%i in ('git status --porcelain --untracked-files^=no') do set 
 if defined DIRTY goto :dirty
 
 for /f %%i in ('git rev-parse HEAD') do set "BEFORE=%%i"
-echo [1/3] Stahuji novou verzi...
+echo [1/2] Stahuji novou verzi...
 git pull --ff-only
 if errorlevel 1 goto :pullfailed
 for /f %%i in ('git rev-parse HEAD') do set "AFTER=%%i"
@@ -35,7 +35,7 @@ if "%BEFORE%"=="%AFTER%" goto :uptodate
 echo       Novinky:
 git --no-pager log --format="      - %%s" %BEFORE%..HEAD
 
-echo [2/3] Doinstalovavam nastroje projektu...
+echo [2/2] Doinstalovavam nastroje projektu...
 where pnpm >nul 2>nul
 if errorlevel 1 goto :nopnpm
 rem Bez prepinani verzi: jinak by pnpm sam stahoval jinou verzi mimo slozku projektu.
@@ -52,9 +52,24 @@ if errorlevel 1 goto :installfailed
 call pnpm install --frozen-lockfile
 if errorlevel 1 goto :installfailed
 
-echo [3/3] Pregeneruji report novou verzi...
+echo.
+echo  Aplikace je aktualizovana.
+set "HASINPUT="
+if exist "data\input\*.xlsx" set "HASINPUT=1"
+if exist "data\input\*.csv" set "HASINPUT=1"
+if not defined HASINPUT goto :noinput
+echo.
+echo == Pregenerovani reportu novou verzi ==
 call "%HERE%aktualizovat-windows.cmd"
 exit /b %errorlevel%
+
+:noinput
+echo.
+echo  Dalsi krok: uloz vypisy z XTB (XLSX) nebo Trading 212 (CSV) do slozky data\input
+echo  a spust aktualizovat-windows.cmd.
+echo.
+pause
+exit /b 0
 
 :uptodate
 echo.

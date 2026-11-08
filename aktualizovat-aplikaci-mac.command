@@ -31,7 +31,7 @@ main() {
   fi
 
   before=$(git rev-parse HEAD)
-  echo "[1/3] Stahuji novou verzi…"
+  echo "[1/2] Stahuji novou verzi…"
   git pull --ff-only || fail "Novou verzi se nepodařilo stáhnout (podrobnosti výše)." \
     "Zkontroluj připojení k internetu a spusť skript znovu."
   if [ "$before" = "$(git rev-parse HEAD)" ]; then
@@ -39,7 +39,7 @@ main() {
   fi
   echo "      Novinky:"; git --no-pager log --format='      • %s' "$before..HEAD"
 
-  echo "[2/3] Doinstalovávám nástroje projektu…"
+  echo "[2/2] Doinstalovávám nástroje projektu…"
   command -v pnpm >/dev/null 2>&1 || fail "Chybí pnpm." "Spusť instalace-mac.command." "Pak spusť aktualizovat-aplikaci-mac.command znovu."
   pv=$(node -p "require('./package.json').packageManager.split('@')[1]")
   # Bez přepínání verzí: jinak by pnpm sám stahoval jinou verzi mimo složku projektu.
@@ -52,7 +52,12 @@ main() {
   pnpm install --frozen-lockfile || fail "Instalace nástrojů projektu selhala (podrobnosti výše)." \
     "Zkontroluj připojení k internetu a spusť skript znovu."
 
-  echo "[3/3] Přegeneruji report novou verzí…"
+  printf '\nAplikace je aktualizovaná ✓\n'
+  if ! ls data/input 2>/dev/null | grep -qiE '\.(xlsx|csv)$'; then
+    printf '\nDalší krok: ulož výpisy z XTB (XLSX) nebo Trading 212 (CSV) do složky data/input\na spusť aktualizovat-mac.command.\n\nOkno můžeš zavřít.\n'
+    exit 0
+  fi
+  printf '\n== Přegenerování reportu novou verzí ==\n'
   exec ./aktualizovat-mac.command
 }
 main "$@"; exit
