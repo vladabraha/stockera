@@ -775,7 +775,8 @@ function taxFreeAtDate(a: Analysis, date: string): HTMLElement {
       const cur = l.currentPrice;
       const p = cur && date >= cur.date ? cur.close : closeOn(a.instruments[x.ticker]?.prices, date);
       if (cur) [px, ccy] = [p, cur.currency];
-      const ratio = cur && p != null ? p / cur.close : null;
+      // no downloaded price: the known value (XTB export or cost) holds from its date on
+      const ratio = cur ? (p != null ? p / cur.close : null) : (!l.valueDate || date >= l.valueDate ? 1 : null);
       const v = l.value?.[state.cur];
       value = value == null || v == null || ratio == null ? null : value + v * ratio;
       const c = l.cost[state.cur];
