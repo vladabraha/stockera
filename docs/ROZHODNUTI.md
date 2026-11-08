@@ -134,6 +134,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - zdanitelné prodeje (limit překročen, bez časového testu, i ztrátové) → **Příloha č. 2, oddíl 2**, druh příjmu
     **D**, řádek zvlášť pro zahraniční (sloupec 5 kód **„z“**) a tuzemské cenné papíry; ř. 207 příjmy,
     ř. 208 výdaje (nejvýše do výše příjmů, § 10 odst. 4), ř. 209 → **ř. 40** DAP;
+    částky každého řádku se zaokrouhlí na celé Kč zvlášť; „Základ daně“ v kartě roku = tento ř. 209 (`computeTaxYears`
+    volá `taxReturnGuide`), aby se obě místa nelišila o korunu;
   - zahraniční dividendy → **Příloha č. 4** (samostatný základ § 16a): ř. 401a hrubé dividendy, ř. 411 příjmy se
     sraženou daní, ř. 412 sražená daň, ř. 414 (15 % − zápočet, zápočet nejvýše 15 %) → ř. 74a DAP; alternativa ř. 38
     + Příloha č. 3 je jen zmíněná. České dividendy jsou zdaněné srážkou a neuvádějí se;

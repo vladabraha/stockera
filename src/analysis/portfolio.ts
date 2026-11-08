@@ -11,7 +11,7 @@ import {
   type MarketData,
 } from './market.ts';
 
-import { SALES_LIMIT_CZK, incomeTax } from './tax.ts';
+import { SALES_LIMIT_CZK, incomeTax, taxReturnGuide } from './tax.ts';
 /** 2025 only: cap on income exempted by the time test. */
 export const TIME_TEST_CAP_CZK = 40_000_000;
 export const TIME_TEST_CAP_YEARS = new Set([2025]);
@@ -337,7 +337,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   });
   realized.sort((a, b) => b.lastSale.localeCompare(a.lastSale));
 
-  const taxYears = computeTaxYears(realized.flatMap((r) => r.lots));
+  const taxYears = computeTaxYears(realized.flatMap((r) => r.lots), new Map(realized.flatMap((r) => r.lots.map((l) => [l, { ticker: r.ticker, isin: market.info(r.ticker).isin }]))));
 
   // --- cash flows & dividends ----------------------------------------------
   const ops = db
@@ -514,7 +514,8 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   };
 }
 
-export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
+/** `issuer` tells domestic and foreign securities apart (Příloha č. 2 rounds each line separately); unknown = foreign. */
+export function computeTaxYears(lots: RealizedLot[], issuer = new Map<RealizedLot, { ticker: string; isin: string | null }>()): TaxYear[] {
   const byYear = new Map<number, RealizedLot[]>();
   for (const l of lots) {
     const y = Number(l.closeDate.slice(0, 4));
@@ -535,7 +536,11 @@ export function computeTaxYears(lots: RealizedLot[]): TaxYear[] {
       const tCost = sumMoney(taxableLots.map((l) => l.cost));
       const tProceeds = sumMoney(taxableLots.map((l) => l.proceeds));
       const tProfit = subTotals(tProceeds, tCost);
-      const baseCzk = limitStatus === 'unknown' || tProfit.czk == null ? null : Math.max(0, tProfit.czk);
+      // The base is row 209 of Příloha č. 2 (whole crowns per line), so the year card and the tax return guide agree.
+      const guideLots = taxableLots.map((l) => ({ ticker: issuer.get(l)?.ticker ?? '', isin: issuer.get(l)?.isin ?? null,
+        closeDate: l.closeDate, timeTestMet: l.timeTestMet, proceedsCzk: l.proceeds.czk, costCzk: l.cost.czk }));
+      const baseCzk = limitStatus === 'unknown' || tProfit.czk == null ? null
+        : limitStatus === 'within' ? 0 : taxReturnGuide(year, true, guideLots, []).annex2?.r209 ?? 0;
       return {
         year,
         salesCount: ls.length,

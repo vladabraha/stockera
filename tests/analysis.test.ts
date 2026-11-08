@@ -76,6 +76,11 @@ test('tax years: above the limit, losses offset gains, time-tested lots excluded
 
   const [loss] = computeTaxYears([lot('2024-03-01', 150_000, 101_000)]);
   assert.equal(loss!.taxable.baseCzk, 0);
+
+  // The base equals row 209 of the tax return guide: whole crowns per line (domestic and foreign separately).
+  const cz = lot('2024-03-01', 0, 60_000.4), us = lot('2024-04-01', 0, 60_000.4);
+  const [r] = computeTaxYears([cz, us], new Map([[cz, { ticker: 'CEZ.CZ', isin: 'CZ0005112300' }], [us, { ticker: 'X.US', isin: 'US0000000001' }]]));
+  assert.equal(r!.taxable.baseCzk, 120_000, '60 000 + 60 000, not round(120 000,80) = 120 001');
 });
 
 test('tax years: time-tested sales do not count towards the 100k limit (§4(1)(x) ZDP)', () => {
