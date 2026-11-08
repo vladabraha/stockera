@@ -19,7 +19,9 @@ const RANGES: [label: string, days: number | null][] = [
 const CUSTOM = 'Vlastní';
 const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
 
-type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; notice?: string; alert?: string };
+/** Instrument left at the price from the last report build, with the reason and that price's date. */
+type LiveGap = { ticker: string; name: string | null; reason: string; date: string | null };
+type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: string | null; updated: number; total: number; missing?: LiveGap[]; notice?: string; alert?: string };
 
 /** Rows a long list loads at once while scrolling (and shows before "Zobrazit zbývajících"). */
 const LIST_STEP = 10;
@@ -332,7 +334,11 @@ async function refreshLive(): Promise<void> {
   const base = state.base;
   if (!base) return;
   const run = ++state.liveRun;
-  const total = base.holdings.filter((x) => x.isin).length;
+  const total = base.holdings.length;
+  const gaps = (list: { ticker: string; reason: string }[]): LiveGap[] => list.map(({ ticker, reason }) => {
+    const x = base.holdings.find((y) => y.ticker === ticker);
+    return { ticker, reason, name: x?.name ?? null, date: x?.lots.find((l) => l.valueDate)?.valueDate ?? null };
+  });
   state.live = { status: 'loading', date: null, updated: 0, total };
   render();
   let next: Live;
@@ -346,7 +352,7 @@ async function refreshLive(): Promise<void> {
     if (czkPer) {
       const r = applyLive(base, czkPer, quotes);
       state.data = r.analysis;
-      next = { status: r.updated.length ? 'live' : 'stale', date: r.date, updated: r.updated.length, total, notice: fallbackNotice(sources, total), alert };
+      next = { status: r.updated.length ? 'live' : 'stale', date: r.date, updated: r.updated.length, total, missing: gaps(r.missing), notice: fallbackNotice(sources, total), alert };
     } else {
       state.data = base;
       next = { status: 'offline', date: null, updated: 0, total, alert };
@@ -370,16 +376,36 @@ function fallbackNotice(src: LiveSources, total: number): string | undefined {
   return `Hlavní zdroj (${failed}) teď nefunguje. ${parts.join(' ')}`;
 }
 
-function liveStatus(valueDate: string | null): string {
+/** Status line above the portfolio value: where the prices come from; orange with a list when some are missing. */
+function liveStatus(valueDate: string | null): HTMLElement {
   const snap = valueDate ? ` k ${czDate(valueDate)}` : '';
   const l = state.live;
-  switch (l.status) {
-    case 'loading': return `Hodnota portfolia${snap}, aktualizuji ceny…`;
-    case 'live': return `Živé ceny k ${czDate(l.date!)}${l.updated < l.total ? ` (${l.updated} z ${l.total} instrumentů, zbytek z výpisu)` : ''}`;
-    case 'stale': return `Hodnota portfolia${snap}, novější ceny zatím nejsou`;
-    case 'offline': return `Hodnota portfolia${snap}, bez připojení – ceny z výpisu`;
-    default: return `Hodnota portfolia${snap}`;
-  }
+  const missing = l.missing ?? [];
+  const built = 'z posledního vytvoření reportu';
+  const text = (() => {
+    switch (l.status) {
+      case 'loading': return `Hodnota portfolia${snap}, načítám aktuální ceny…`;
+      case 'live': return missing.length
+        ? `Aktuální ceny k ${czDate(l.date!)} – u ${missing.length} z ${l.total} instrumentů chybí, mají cenu ${built}`
+        : `Aktuální ceny k ${czDate(l.date!)}`;
+      case 'stale': return missing.length
+        ? `Hodnota portfolia${snap} – novější ceny nejsou, u ${missing.length} z ${l.total} instrumentů je nejde zjistit`
+        : `Hodnota portfolia${snap} – novější ceny zatím nejsou`;
+      case 'offline': return `Hodnota portfolia${snap} – aktuální ceny se nepodařilo načíst (bez internetu?), ceny jsou ${built}`;
+      default: return `Hodnota portfolia${snap}`;
+    }
+  })();
+  const warn = l.status === 'offline' || ((l.status === 'live' || l.status === 'stale') && missing.length > 0);
+  const el = h('div', { class: `eyebrow live-${l.status}${warn ? ' live-warn' : ''}`, role: 'status' }, text);
+  if (!missing.length || (l.status !== 'live' && l.status !== 'stale')) return el;
+  const tip = h('div', { class: 'tip live-tip', role: 'tooltip', id: 'live-tip' },
+    h('b', {}, `Bez aktuální ceny (použitá cena ${built}):`),
+    h('ul', {}, ...missing.map((m) => h('li', {},
+      h('span', { class: 'ticker' }, m.ticker), ' ', m.name ?? '',
+      h('div', { class: 'muted' }, `${m.reason}${m.date ? `; cena k ${czDate(m.date)}` : ''}`)))));
+  const info = h('span', { class: 'live-info', tabindex: '0', 'aria-describedby': 'live-tip', 'aria-label': 'Které instrumenty' }, 'ⓘ', tip);
+  el.append(' ', info);
+  return el;
 }
 
 // ---------------------------------------------------------------- layout
@@ -888,7 +914,7 @@ function heroPanel(a: Analysis): HTMLElement {
   hero.append(
     h('div', { class: 'hero-head' },
       h('div', {},
-        h('div', { class: `eyebrow live-${state.live.status}`, role: 'status' }, liveStatus(s.valueDate)),
+        liveStatus(s.valueDate),
         state.live.alert ? h('div', { class: 'live-notice danger', role: 'alert' }, state.live.alert) : null,
         state.live.notice ? h('div', { class: 'live-notice', role: 'status' }, state.live.notice) : null,
         h('div', { class: 'big' }, totals(s.value)),

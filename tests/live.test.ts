@@ -67,6 +67,7 @@ test('applyLive revalues held lots, totals, breakdowns and today\'s history poin
   const r = applyLive(a, { CZK: 1, EUR: 25, USD: 20 }, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-06' } });
   assert.deepEqual(a, before, 'input snapshot is not mutated');
   assert.deepEqual(r.updated, ['AAA.US']);
+  assert.deepEqual(r.missing, [{ ticker: 'NOISIN', reason: 'chybí ISIN, podle kterého se aktuální cena hledá' }]);
   assert.equal(r.date, '2026-11-06');
   const x = r.analysis.holdings[0]!;
   assert.deepEqual(x.lots[1]!.value, { native: 2400, currency: 'CZK', czk: 2400, eur: 96 });
@@ -89,8 +90,19 @@ test('applyLive converts a quote in another currency and ignores stale or implau
   const fx = { CZK: 1, EUR: 25, USD: 20 };
   const eur = applyLive(base(), fx, { 'AAA.US': { price: 48, currency: 'EUR', date: '2026-11-06' } });
   assert.equal(eur.analysis.holdings[0]!.lots[0]!.currentPrice!.close, 60);
-  assert.equal(applyLive(base(), fx, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-04' } }).updated.length, 0);
-  assert.equal(applyLive(base(), fx, { 'AAA.US': { price: 600, currency: 'USD', date: '2026-11-06' } }).updated.length, 0);
+  const older = applyLive(base(), fx, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-04' } });
+  assert.deepEqual([older.updated, older.missing.map((m) => m.ticker)], [[], ['NOISIN']], 'stored price is newer → AAA is not missing');
+  const jump = applyLive(base(), fx, { 'AAA.US': { price: 600, currency: 'USD', date: '2026-11-06' } });
+  assert.equal(jump.updated.length, 0);
+  assert.match(jump.missing[0]!.reason, /bezpečnostní kontrola/);
+});
+
+test('applyLive lists instruments left without a live price and why', () => {
+  const reasons = (fx: Record<string, number>, q: Parameters<typeof applyLive>[2]) =>
+    applyLive(base(), fx, q).missing.map((m) => `${m.ticker}: ${m.reason}`);
+  const noIsin = 'NOISIN: chybí ISIN, podle kterého se aktuální cena hledá';
+  assert.deepEqual(reasons({ CZK: 1, EUR: 25, USD: 20 }, {}), ['AAA.US: onvista ani Tradegate aktuální cenu nemají', noIsin]);
+  assert.deepEqual(reasons({ CZK: 1, EUR: 25 }, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-06' } }), ['AAA.US: chybí aktuální kurz USD', noIsin]);
 });
 
 test('fetchLive sends only ISIN / currency GETs without credentials and survives failing quotes', async () => {

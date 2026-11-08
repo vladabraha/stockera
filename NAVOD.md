@@ -35,7 +35,7 @@ Ve složce jsou očíslované v pořadí, jak se používají (každý ve verzi 
 ## 3. Prohlížení
 - Počítač: `out/stockera.html` → dvojklik → heslo.
 - Mobil: soubor zkopíruj (AirDrop, kabel, cloud) a otevři ho v prohlížeči. Funguje i offline.
-- Po odemknutí si report sám stáhne **aktuální ceny** (nahoře „Živé ceny k …“, znovu tlačítkem *Aktualizovat ceny*; na mobilu ikona kruhové šipky, vedle ní zámek = *Zamknout*).
+- Po odemknutí si report sám stáhne **aktuální ceny** (nahoře „Aktuální ceny k …“, znovu tlačítkem *Aktualizovat ceny*; oranžová tečka a ⓘ = u některých instrumentů aktuální cena chybí – po najetí nebo klepnutí na ⓘ uvidíš u kterých a proč; na mobilu ikona kruhové šipky, vedle ní zámek = *Zamknout*).
   Odchází jen kód instrumentu (ISIN), nikdy tvoje počty kusů ani částky. Bez internetu uvidíš hodnoty z poslední aktualizace.
   Když hlavní zdroj nefunguje, použije se záložní a report to napíše žlutě pod datem.
 - **FIRE renta** (pod grafem): kolik by šlo měsíčně vybírat, kdybys každý rok prodal 4 % dnešní hodnoty portfolia (před daní).

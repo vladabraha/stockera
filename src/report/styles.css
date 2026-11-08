@@ -118,7 +118,16 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .date-field input:focus { outline: none; border-color: var(--accent); }
 .hero .date-field input { color-scheme: dark; }
 .eyebrow { color: var(--muted); font-size: .88rem; margin-bottom: 4px; }
-.eyebrow.live-live::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--pos); vertical-align: 1px; }
+.eyebrow.live-live::before, .eyebrow.live-warn::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--pos); vertical-align: 1px; }
+.eyebrow.live-warn::before { background: var(--warn); }
+/* ⓘ next to the status: list of instruments without a live price on hover, tap or keyboard focus */
+.eyebrow.live-warn { position: relative; }
+.live-info { display: inline-block; margin-left: 2px; padding: 0 4px; border-radius: 99px; cursor: help; color: var(--warn); font-weight: 600; outline: none; }
+.live-info:focus-visible { box-shadow: 0 0 0 2px var(--warn); }
+.live-info .live-tip { top: calc(100% + 6px); left: 0; z-index: 20; color: var(--text); font-weight: 400; white-space: normal; width: max-content; max-width: min(440px, 86vw); max-height: 60vh; overflow-y: auto; }
+.live-info:hover .live-tip, .live-info:focus .live-tip { opacity: 1; pointer-events: auto; }
+.live-tip ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.live-tip li { padding: 5px 0; border-top: 1px solid var(--line); }
 /* Hero sits on the dark band in both themes, hence fixed light text. */
 .live-notice { max-width: 60ch; margin: -2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: rgba(242, 184, 75, .12); color: #f6d48f; font-size: .84rem; line-height: 1.4; }
 .live-notice.danger { border-left-color: #ff6b80; background: rgba(255, 107, 128, .14); color: #ffc2cc; }

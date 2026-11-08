@@ -30,6 +30,8 @@ export interface LiveResult {
   analysis: Analysis;
   /** Tickers whose value was recalculated. */
   updated: string[];
+  /** Held instruments left at the stored price although a newer one may exist, with the reason (Czech). */
+  missing: { ticker: string; reason: string }[];
   /** Newest quote date used, or null when nothing changed. */
   date: string | null;
 }
@@ -226,21 +228,32 @@ const pctT = (profit: Totals, cost: Totals): Percent => {
 export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes: Record<string, LiveQuote>): LiveResult {
   const a = structuredClone(base);
   const updated: string[] = [];
+  const missing: LiveResult['missing'] = [];
   let date: string | null = null;
   const rate = (c: string) => czkPer[c] ?? null;
+  const noRate = (...cs: (string | null)[]) => cs.find((c) => c && rate(c) == null);
 
   for (const x of a.holdings) {
     const q = quotes[x.ticker];
     const ic = instrumentCurrency(a, x);
-    if (!q || !ic || rate(q.currency) == null || rate(ic) == null) continue;
+    const skip = (reason: string) => missing.push({ ticker: x.ticker, reason });
+    if (!q) { skip(x.isin ? 'onvista ani Tradegate aktuální cenu nemají' : 'chybí ISIN, podle kterého se aktuální cena hledá'); continue; }
+    if (!ic) { skip('není známá měna, ve které se obchoduje'); continue; }
+    const fx = noRate(q.currency, ic);
+    if (fx) { skip(`chybí aktuální kurz ${fx}`); continue; }
     const price = (q.price * rate(q.currency)!) / rate(ic)!;
     const stored = x.lots.find((l) => l.currentPrice)?.currentPrice?.close;
-    if (stored && Math.abs(price / stored - 1) > MAX_JUMP) continue;
+    if (stored && Math.abs(price / stored - 1) > MAX_JUMP) {
+      skip(`aktuální cena se od uložené liší o víc než ${MAX_JUMP * 100} %, proto ji bezpečnostní kontrola zahodila`);
+      continue;
+    }
     let changed = false;
+    let lotFx: string | undefined;
     for (const l of x.lots) {
+      // the stored price is already newer than the live one – nothing is missing
       if (l.valueDate && q.date < l.valueDate) continue;
       const ac = l.cost.currency;
-      if (rate(ac) == null) continue;
+      if (rate(ac) == null) { lotFx = ac; continue; }
       const czk = l.quantity * price * rate(ic)!;
       const value: Money = { native: czk / rate(ac)!, currency: ac, czk, eur: czk / rate('EUR')! };
       const profit: Money = {
@@ -256,6 +269,7 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
       } satisfies Partial<HoldingLot>);
       changed = true;
     }
+    if (lotFx) skip(`chybí aktuální kurz ${lotFx}`);
     if (!changed) continue;
     updated.push(x.ticker);
     if (!date || q.date > date) date = q.date;
@@ -269,7 +283,7 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
       else if (!last || last[0] < q.date) series.prices.push([q.date, price]);
     }
   }
-  if (!updated.length) return { analysis: base, updated, date: null };
+  if (!updated.length) return { analysis: base, updated, missing, date: null };
 
   const s = a.summary;
   s.value = sumT(a.holdings.map((x) => x.value));
@@ -288,5 +302,5 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
     if (last.date === date) a.history[a.history.length - 1] = point;
     else a.history.push(point);
   }
-  return { analysis: a, updated, date };
+  return { analysis: a, updated, missing, date };
 }

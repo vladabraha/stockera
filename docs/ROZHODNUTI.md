@@ -284,8 +284,13 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     řada instrumentu. Cena odlišná o > 50 % od uložené se zahodí (špatný trh/jednotka). **Nákupní náklady, prodeje
     a daně se nemění** (zafixované kurzem ČNB ke dni obchodu); živé hodnoty používají dnešní kurz ECB – proto může
     nerealizovaný zisk nepatrně odbočit od `pnpm report`. Pořadí instrumentů a barvy zůstávají podle snímku.
-  - Hlavička hodnoty ukazuje stav: „aktualizuji ceny…“, „Živé ceny k …“ (příp. kolik instrumentů z kolika),
-    „novější ceny zatím nejsou“, „bez připojení – ceny z výpisu“. *Zamknout* zahodí i živá data.
+  - Hlavička hodnoty ukazuje stav: „načítám aktuální ceny…“, „Aktuální ceny k …“ (zelená tečka jen když nic
+    nechybí), „novější ceny zatím nejsou“, „aktuální ceny se nepodařilo načíst“. Když u některých instrumentů aktuální
+    cena chybí (oranžová tečka, „u N z M instrumentů chybí, mají cenu z posledního vytvoření reportu“), ikona ⓘ
+    ukáže (najetí, klepnutí, fokus – čisté CSS) seznam instrumentů s důvodem z `applyLive().missing`: bez ISIN,
+    onvista ani Tradegate cenu nemají, chybí kurz, cena zahozená kontrolou skoku > 50 %, a datum použité ceny.
+    Instrument, jehož uložená cena je novější než živá, se za chybějící nepočítá. Počet M = všechny držené
+    instrumenty (i bez ISIN). *Zamknout* zahodí i živá data.
 - Testy (`tests/report.test.ts`) hlídají: round-trip šifrování, nepřítomnost plaintextu (tickery, účty), shodu CSP
   hashů, přesný `connect-src`, jediné URL v HTML jsou SVG namespace a čtyři API živých cen, žádné `style=`/`on*=`/`<link>`/`<img>`/`<iframe>`, přesně 2 `<script>`.
 - Nešifrovaný `out/analysis.json` vzniká **jen** s `pnpm analyze --json` (práva 600); bez přepínače se starý smaže.
