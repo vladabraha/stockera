@@ -348,8 +348,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   na mobilu jeden sloupec. Najetí/klepnutí na úsek pruhu nebo řádek ukáže tooltip: název, co sektor zahrnuje
   (`SECTOR_INFO`), podíl a hodnotu v Kč/€. Na dotyk zůstane do klepnutí jinam (drží ho fokus, `pointerleave` se ignoruje).
 - **Design = moderní trading aplikace** (přání uživatele; zamítnuté směry „úřední razítko“ a „vkladní knížka“).
-  Jediný výrazný prvek: **tmavě modrý pás s hodnotou portfolia a grafem** (`.hero`, `--band #0f1d3a`, přepisuje
-  barevné proměnné uvnitř). Okolí klidné: pozadí #eef1f6, bílé panely bez stínů, text #14213d, akcent #2f5bff,
+  Jediný výrazný prvek: **pás s hodnotou portfolia a grafem** (`.hero`, přepisuje barevné proměnné uvnitř podle
+  tokenů `--band-*`). Respektuje motiv: ve světlém režimu je to bílá karta s rámečkem (stejné barvy jako zbytek
+  stránky), v tmavém tmavě modrý „terminálový“ pás `#0d1830` (přání uživatele – dřív byl tmavý i ve světlém režimu). Okolí klidné: pozadí #eef1f6, bílé panely bez stínů, text #14213d, akcent #2f5bff,
   zisk #0b9a6d, ztráta #e03a55 (tmavý režim bg #0a1222). Čísla a nadpisy v `--fig` (Bahnschrift / DIN Alternate –
   systémové „burzovní“ fonty, CSP blokuje webfonty), UI v systémovém sans, tabulkové číslice.
   Taby = podtržené tlačítka s počtem, změny jako **pill `chip()`** (zelená/červená), **sparkline** posledních ~3 měsíců

@@ -1,11 +1,15 @@
-/* Stockera – trading-app look: cool canvas, one deep-navy "terminal" band for the hero chart, DIN figures.
+/* Stockera – trading-app look: cool canvas, the hero chart as a light card (deep-navy "terminal" band in dark mode), DIN figures.
    Colour tokens: canvas, surface, ink, muted, line, signal blue; up/down are semantic only. */
 :root {
   --bg: #eef1f6; --panel: #ffffff; --sunk: #f3f5f9; --text: #14213d; --muted: #5f6b7f; --line: #e1e6ee;
   --accent: #2f5bff; --accent-soft: #e6ecff; --on-accent: #fff;
   --pos: #0b9a6d; --neg: #e03a55; --warn: #c27a00;
   --ok-bg: #e2f5ee; --wait-bg: #fdf1dc; --bad-bg: #fde6ea; --info-bg: #e6ecff; --info: #2f5bff;
-  --band: #0f1d3a; --band-2: #16274a; --band-text: #eef3ff; --band-muted: #95a3c2; --band-line: #253760; --band-accent: #6f93ff;
+  /* hero chart band: light card in the light theme, deep navy in the dark one */
+  --band: #ffffff; --band-2: #ffffff; --band-text: #14213d; --band-muted: #5f6b7f; --band-line: #e1e6ee; --band-accent: #2f5bff;
+  --band-pos: #0b9a6d; --band-neg: #e03a55; --band-sunk: #f3f5f9; --band-on: #ffffff;
+  --band-border: #e1e6ee; --band-scheme: light; --band-warn-text: #7a4d00; --band-danger-text: #b3203a;
+  --logo-bg: #0f1d3a; --logo-line: #6f93ff;
   --radius-lg: 20px; --radius: 14px; --radius-sm: 8px;
   --fig: "Bahnschrift", "DIN Alternate", "DIN Next", "D-DIN", "Roboto Condensed", "Arial Narrow", system-ui, sans-serif;
   --ui: system-ui, "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", sans-serif;
@@ -18,7 +22,9 @@
     --accent: #6f93ff; --accent-soft: #1b2a52; --on-accent: #0a1222;
     --pos: #2fc792; --neg: #ff6b80; --warn: #f2b84b;
     --ok-bg: #12352b; --wait-bg: #3a2c10; --bad-bg: #3e1a24; --info-bg: #1b2a52; --info: #a9bdff;
-    --band: #0d1830; --band-2: #13213f; --band-line: #22355c;
+    --band: #0d1830; --band-2: #13213f; --band-text: #eef3ff; --band-muted: #95a3c2; --band-line: #22355c; --band-accent: #6f93ff;
+    --band-pos: #35d39b; --band-neg: #ff7a8e; --band-sunk: color-mix(in srgb, #fff 7%, transparent); --band-on: color-mix(in srgb, #fff 16%, transparent);
+    --band-border: transparent; --band-scheme: dark; --band-warn-text: #f6d48f; --band-danger-text: #ffc2cc;
     color-scheme: dark;
   }
 }
@@ -27,7 +33,9 @@
   --accent: #6f93ff; --accent-soft: #1b2a52; --on-accent: #0a1222;
   --pos: #2fc792; --neg: #ff6b80; --warn: #f2b84b;
   --ok-bg: #12352b; --wait-bg: #3a2c10; --bad-bg: #3e1a24; --info-bg: #1b2a52; --info: #a9bdff;
-  --band: #0d1830; --band-2: #13213f; --band-line: #22355c;
+  --band: #0d1830; --band-2: #13213f; --band-text: #eef3ff; --band-muted: #95a3c2; --band-line: #22355c; --band-accent: #6f93ff;
+  --band-pos: #35d39b; --band-neg: #ff7a8e; --band-sunk: color-mix(in srgb, #fff 7%, transparent); --band-on: color-mix(in srgb, #fff 16%, transparent);
+  --band-border: transparent; --band-scheme: dark; --band-warn-text: #f6d48f; --band-danger-text: #ffc2cc;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -66,8 +74,8 @@ td.num, th.num { text-align: right; }
 
 /* logo */
 .logo { flex: none; }
-.logo-bg { fill: var(--band); }
-.logo-line { fill: none; stroke: var(--band-accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.logo-bg { fill: var(--logo-bg); }
+.logo-line { fill: none; stroke: var(--logo-line); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .logo-dot { fill: #fff; }
 
 /* header: brand, underline tabs, tools */
@@ -104,11 +112,11 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .panel-head h2 { margin: 0; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 
-/* hero: the one bold element – a deep navy band with the chart */
-.hero { --text: var(--band-text); --muted: var(--band-muted); --line: var(--band-line); --panel: var(--band-2); --sunk: color-mix(in srgb, #fff 7%, transparent);
-  --accent: var(--band-accent); --pos: #35d39b; --neg: #ff7a8e;
-  background: var(--band); color: var(--text); border: 0; border-radius: var(--radius-lg); padding: 26px 26px 18px; }
-.hero .seg button.on { background: color-mix(in srgb, #fff 16%, transparent); }
+/* hero: the one bold element – the chart band (colours from the --band-* tokens of the theme) */
+.hero { --text: var(--band-text); --muted: var(--band-muted); --line: var(--band-line); --panel: var(--band-2); --sunk: var(--band-sunk);
+  --accent: var(--band-accent); --pos: var(--band-pos); --neg: var(--band-neg);
+  background: var(--band); color: var(--text); border: 1px solid var(--band-border); border-radius: var(--radius-lg); padding: 26px 26px 18px; }
+.hero .seg button.on { background: var(--band-on); }
 .hero-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 14px 24px; margin-bottom: 14px; }
 .hero-tools { display: flex; flex-wrap: wrap; gap: 8px; }
 .range-tools { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
@@ -116,7 +124,7 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .date-field { display: flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--muted); }
 .date-field input { font: inherit; font-size: .85rem; color: var(--text); background: var(--sunk); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 3px 6px; min-height: 30px; }
 .date-field input:focus { outline: none; border-color: var(--accent); }
-.hero .date-field input { color-scheme: dark; }
+.hero .date-field input { color-scheme: var(--band-scheme); }
 .eyebrow { color: var(--muted); font-size: .88rem; margin-bottom: 4px; }
 .eyebrow.live-live::before, .eyebrow.live-warn::before { content: ""; display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--pos); vertical-align: 1px; }
 .eyebrow.live-warn::before { background: var(--warn); }
@@ -128,9 +136,9 @@ header { position: sticky; top: 0; z-index: 5; display: flex; align-items: cente
 .live-info:hover .live-tip, .live-info:focus .live-tip { opacity: 1; pointer-events: auto; }
 .live-tip ul { margin: 6px 0 0; padding: 0; list-style: none; }
 .live-tip li { padding: 5px 0; border-top: 1px solid var(--line); }
-/* Hero sits on the dark band in both themes, hence fixed light text. */
-.live-notice { max-width: 60ch; margin: -2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: rgba(242, 184, 75, .12); color: #f6d48f; font-size: .84rem; line-height: 1.4; }
-.live-notice.danger { border-left-color: #ff6b80; background: rgba(255, 107, 128, .14); color: #ffc2cc; }
+/* Notice text colours come from the band tokens so they stay readable on the light and the dark hero. */
+.live-notice { max-width: 60ch; margin: -2px 0 8px; padding: 6px 10px; border-left: 3px solid var(--warn); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: rgba(242, 184, 75, .12); color: var(--band-warn-text); font-size: .84rem; line-height: 1.4; }
+.live-notice.danger { border-left-color: #ff6b80; background: rgba(255, 107, 128, .14); color: var(--band-danger-text); }
 .big { font: 600 clamp(2.4rem, 7vw, 3.8rem)/1.05 var(--fig); letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
 .delta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 10px; font-weight: 600; }
 .delta .muted { font-weight: 400; }
