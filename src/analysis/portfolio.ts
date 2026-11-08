@@ -215,10 +215,11 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   const quoteCurrency = (ticker: string) => market.series(ticker).at(-1)?.currency ?? null;
 
   // --- holdings -------------------------------------------------------------
-  const valueDate = loaded.snapshotAsOf ? pragueDate(loaded.snapshotAsOf) : today;
   const holdingLots = new Map<string, HoldingLot[]>();
   const unpriced = new Set<string>();
   for (const l of loaded.open) {
+    const asOf = loaded.snapshotAsOfByAccount[l.accountNumber];
+    const valueDate = asOf ? pragueDate(asOf) : today;
     const openDate = pragueDate(l.openTime);
     const free = taxFreeFrom(openDate);
     const cost = conv.money(l.cost, l.currency, openDate);

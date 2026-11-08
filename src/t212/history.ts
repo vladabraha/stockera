@@ -307,6 +307,13 @@ export function buildT212Ledger(rows: T212Row[], tickerOf: (r: T212Row) => strin
           l.qty *= ratio;
           l.price /= ratio;
         }
+        // Sales before the split too, so they match the split-adjusted price history; amounts (and taxes) stay.
+        for (const c of closed) {
+          if (c.account !== account || c.ticker !== ticker || c.closeTime >= r.time) continue;
+          c.volume *= ratio;
+          c.openPrice /= ratio;
+          c.closePrice /= ratio;
+        }
         break;
       }
       case 'dividend': {

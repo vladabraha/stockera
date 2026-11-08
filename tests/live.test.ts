@@ -105,6 +105,8 @@ test('applyLive revalues an instrument that had no price at build time in the qu
   const r = applyLive(a, { CZK: 1, EUR: 25, USD: 20 }, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-06' } });
   assert.deepEqual(r.updated, ['AAA.US']);
   assert.deepEqual([r.analysis.holdings[0]!.lots[1]!.value!.czk, r.analysis.holdings[0]!.lots[1]!.currentPrice], [2400, { date: '2026-11-06', close: 60, currency: 'USD' }]);
+  assert.equal(r.analysis.holdings[0]!.priceCurrency, 'USD', 'purchase prices are shown in the quote currency');
+  assert.deepEqual([r.analysis.instruments['AAA.US']!.currency, r.analysis.instruments['AAA.US']!.prices], ['USD', [['2026-11-06', 60]]]);
 });
 
 test('applyLive lists instruments left without a live price and why', () => {

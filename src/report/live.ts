@@ -278,11 +278,14 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
     if (!changed) continue;
     updated.push(x.ticker);
     if (!date || q.date > date) date = q.date;
+    x.priceCurrency ??= ic;
     x.value = sumT(x.lots.flatMap((l) => (l.value ? [moneyT(l.value)] : [])));
     x.profit = subT(x.value, x.cost);
     x.profitPct = pctT(x.profit, x.cost);
-    const series = a.instruments[x.ticker];
-    if (series && series.currency === ic) {
+    // an instrument without stored prices gets its series started by the live quote
+    const series = (a.instruments[x.ticker] ??= { isin: x.isin, priceSource: null, currency: ic, prices: [] });
+    series.currency ??= ic;
+    if (series.currency === ic) {
       const last = series.prices.at(-1);
       if (last?.[0] === q.date) last[1] = price;
       else if (!last || last[0] < q.date) series.prices.push([q.date, price]);

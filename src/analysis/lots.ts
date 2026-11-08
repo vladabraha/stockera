@@ -39,7 +39,10 @@ export interface OpenLot {
 export interface LoadedLots {
   closed: ClosedLot[];
   open: OpenLot[];
+  /** Oldest export snapshot over all XTB accounts (shown in the report header). */
   snapshotAsOf: string | null;
+  /** Export snapshot per account – each account's positions are valued as of its own export. */
+  snapshotAsOfByAccount: Record<string, string>;
   warnings: string[];
 }
 
@@ -204,6 +207,7 @@ export function loadLots(db: Db): LoadedLots {
     };
   });
 
-  const snap = db.prepare('SELECT MIN(as_of) as_of FROM open_snapshots').get() as { as_of: string | null };
-  return { closed, open, snapshotAsOf: snap.as_of, warnings };
+  const snaps = db.prepare('SELECT account_number, as_of FROM open_snapshots').all() as { account_number: string; as_of: string }[];
+  const snapshotAsOf = snaps.map((s) => s.as_of).sort()[0] ?? null;
+  return { closed, open, snapshotAsOf, snapshotAsOfByAccount: Object.fromEntries(snaps.map((s) => [s.account_number, s.as_of])), warnings };
 }

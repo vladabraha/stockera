@@ -93,6 +93,8 @@ SQL řetězce v jednoduchých uvozovkách.
   ISIN z exportu se uloží do `instruments.isin` a má přednost při stahování dat. Ceny v pencích (GBX) → GBP.
 - Kategorie: ETF, když název obsahuje ETF/UCITS/ETC nebo `(Acc)`/`(Dist)` (T212 slovo ETF v názvu nemá).
 - Splity (`Stock split close` + `open`) zachovají náklad i datum nákupu, mění jen kusy (názvy akcí neověřené vzorkem).
+  Prodeje před splitem se přepočtou na kusy a ceny po splitu (částky a daně beze změny), aby seděly s cenami
+  od Yahoo, které jsou o splity očištěné (graf instrumentu, historie hodnoty).
 - Prodej bez nákupu v nahraných exportech → varování v kontrole dat („nahraj exporty za celé období“); takový prodej
   v daních chybí. Úroky (`Interest on cash`, `Lending interest`) = úrok, převody měn se přeskakují.
 
@@ -151,7 +153,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   `null` se propaguje, když chybí kurz → UI ukáže nativní měnu, nic se nevymýšlí.
 - **Zdroj nákupní ceny / výnosu** (fake export má prohozené sloupce Purchase/Sale Value): cash operace →
   sloupce XTB → cena × objem. Otevřené loty: cash op → `purchase_value` (T212) → value − gross_profit → objem × open price.
-- Ocenění držby: tržní cena, pokud je novější než snapshot XTB nebo lot nemá hodnotu ze snapshotu (T212); jinak
+- Ocenění držby: tržní cena, pokud je novější než snapshot XTB (každý účet má vlastní datum výpisu, hlavička
+  ukazuje nejstarší) nebo lot nemá hodnotu ze snapshotu (T212); jinak
   hodnota ze snapshotu. Lot bez ceny i bez hodnoty ze snapshotu (typicky T212, když se cenu nepodaří stáhnout) =
   nákupní cena (`valueSource: 'cost'`, zisk lotu neznámý → „—“, do souhrnu 0) – stejně jako v grafu vývoje, aby
   číslo nad grafem sedělo s jeho posledním bodem a nevznikla falešná ztráta −100 %. Graf bere nákupní cenu v Kč/€
@@ -164,7 +167,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   zisku + realizovaný zisk prodejů uzavřených v období (`periodGain` v `live.ts`). Jinak by prodej ziskové pozice
   vypadal jako ztráta.
 - Neúplná historie (první cash op je později než nejstarší lot) → varování.
-- Splity: **neimplementováno** (chybí vzorek exportu).
+- Splity: Trading 212 ano (viz výše), XTB **neimplementováno** (chybí vzorek exportu).
 
 ## 5. Tržní data a síť – `src/net`, `src/market`
 
@@ -294,7 +297,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     `valueDate` se přepočte `currentPrice`, `value`, `profit`, `profitPct`; pak součty instrumentů, `summary`,
     země a sektory (sdílený `src/analysis/breakdown.ts`, bundlovaný i do reportu), poslední bod `history` a cenová
     řada instrumentu. Cena odlišná o > 50 % od uložené se zahodí (špatný trh/jednotka). Instrument bez uložené ceny
-    se přecení v měně živé kotace (kurz měny instrumentu se ve výpočtu vykrátí). **Nákupní náklady, prodeje
+    se přecení v měně živé kotace (kurz měny instrumentu se ve výpočtu vykrátí); ta se nastaví jako jeho měna
+    (nákupní ceny v tabulce) a začne jí cenová řada. **Nákupní náklady, prodeje
     a daně se nemění** (zafixované kurzem ČNB ke dni obchodu); živé hodnoty používají dnešní kurz ECB – proto může
     nerealizovaný zisk nepatrně odbočit od `pnpm report`. Pořadí instrumentů a barvy zůstávají podle snímku.
   - Hlavička hodnoty ukazuje stav: „načítám aktuální ceny…“, „Aktuální ceny k …“ (zelená tečka jen když nic
@@ -420,6 +424,6 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
 
 ## 9. Otevřené body
 
-- Splity, skutečné názvy dividend / srážkové daně / výběrů (čeká se na anonymizovaný vzorek).
+- Splity u XTB, skutečné názvy dividend / srážkové daně / výběrů (čeká se na anonymizovaný vzorek).
 - Export CZK subúčtu (čeká se na uživatele).
 - Volitelné: zaokrouhlení čísel v payloadu reportu (menší soubor) – pak upravit `deepEqual` v testu.

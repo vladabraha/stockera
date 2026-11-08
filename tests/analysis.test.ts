@@ -258,3 +258,19 @@ test('valueHistory: a lot without a price counts at its purchase CZK/EUR cost on
   const pts = valueHistory([lot], market as never, fx, '2026-01-04');
   assert.deepEqual(pts.map((p) => [p.valueCzk, p.valueEur]), [[2_500, 100], [2_500, 100], [2_500, 100], [2_500, 100]]);
 });
+
+test('each XTB account is valued against its own export date', () => {
+  const db = openDatabase(':memory:');
+  for (const [account, asOf] of [['111', '2024-12-02T10:00:00Z'], ['222', '2025-01-10T10:00:00Z']] as const) {
+    importBuffer(db, `${account}.xlsx`, fakeXtbExport({
+      account, from: '2023-12-31T23:00:00Z', to: asOf, openAsOf: asOf,
+      cash: [{ id: `${account}1`, type: 'Deposit', time: '2024-01-02T08:00:00Z', amount: 1000 }],
+      open: [{ ticker: 'TICK.DE', name: 'Tick', positionId: `${account}9`, volume: 1, openPrice: 10, openTime: '2024-01-03T09:00:00Z', currentPrice: 12 }],
+    }));
+  }
+  db.prepare("INSERT INTO prices VALUES ('TICK.DE', '2025-01-05', 11, 'EUR', 'test')").run();
+  const a = analyze(db, { today: '2025-01-11', fx: { czkPer: (c) => (c === 'EUR' ? 25 : null) } });
+  const lots = a.holdings[0]!.lots.map((l) => [l.accountNumber, l.valueSource, l.valueDate]);
+  // the 5. 1. price is newer than account 111's export but older than account 222's
+  assert.deepEqual(lots, [['111', 'market', '2025-01-05'], ['222', 'xtb', '2025-01-10']]);
+});

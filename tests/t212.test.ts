@@ -52,9 +52,10 @@ test('ledger: FIFO across partial sales, split keeps cost and dates, missing pur
     { action: 'Stop sell', time: '2024-06-01 10:00:00', id: 'S3', shares: 1, price: 300, rate: 0.04, total: 7000, isin: 'US0000000001', ticker: 'OLD', name: 'Old Inc', ccy: 'USD' },
   ])).rows;
   const l = buildT212Ledger(rows, t212Ticker);
-  // S1 takes 4 of B1 (cost 400); S2 = 20 post-split shares = 6 rest of B1 (×2 = 12) + 8 of B2
-  assert.deepEqual(l.closed.map((c) => [c.positionId, c.sourceKey, c.volume, Math.round(c.purchaseValue), Math.round(c.saleValue)]), [
-    ['B1', 'S1', 4, 400, 600], ['B1', 'S2', 12, 600, 1200], ['B2', 'S2', 8, 480, 800],
+  // S1 takes 4 of B1 (cost 400) and is restated in post-split shares (8 @ 20/25) like the split-adjusted prices;
+  // S2 = 20 post-split shares = 6 rest of B1 (×2 = 12) + 8 of B2. Amounts never change.
+  assert.deepEqual(l.closed.map((c) => [c.positionId, c.sourceKey, c.volume, c.openPrice, c.closePrice, Math.round(c.purchaseValue), Math.round(c.saleValue)]), [
+    ['B1', 'S1', 8, 20, 25, 400, 600], ['B1', 'S2', 12, 20, 50, 600, 1200], ['B2', 'S2', 8, 20, 50, 480, 800],
   ]);
   assert.deepEqual(l.open.map((o) => [o.positionId, o.ticker, o.volume, Math.round(o.purchaseValue), o.openTime]),
     [['B2', 'TETF.DE', 12, 720, '2024-02-02T10:00:00.000Z']]);
