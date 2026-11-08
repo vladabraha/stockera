@@ -89,6 +89,7 @@ export const EXEMPT_NOTICE_CZK = 5_000_000;
 
 export interface GuideLot {
   ticker: string;
+  isin?: string | null;
   closeDate: string;
   timeTestMet: boolean;
   proceedsCzk: number | null;
@@ -97,6 +98,7 @@ export interface GuideLot {
 
 export interface GuideDividend {
   ticker: string;
+  isin?: string | null;
   year: number;
   grossCzk: number | null;
   /** Tax withheld abroad, positive. */
@@ -125,7 +127,11 @@ export interface TaxReturnGuide {
   incomplete: boolean;
 }
 
-const isDomestic = (ticker: string) => /\.CZ$/i.test(ticker);
+/**
+ * Czech source = Czech issuer, told by the ISIN country (Erste, VIG or Photon trade in Prague as .CZ but are foreign).
+ * The ticker suffix is only a fallback when the ISIN is unknown.
+ */
+const isDomestic = (x: { ticker: string; isin?: string | null }) => (x.isin ? /^CZ/i.test(x.isin) : /\.CZ$/i.test(x.ticker));
 const kc = (v: number) => Math.round(v);
 
 /**
@@ -143,7 +149,7 @@ export function taxReturnGuide(year: number, limitExceeded: boolean, lots: Guide
   if (taxable.length) {
     const rows: Annex2Row[] = [];
     for (const [domestic, kind, code] of [[false, 'D – prodej cenných papírů (zahraniční)', 'z'], [true, 'D – prodej cenných papírů (tuzemské)', '']] as const) {
-      const ls = taxable.filter((l) => isDomestic(l.ticker) === domestic);
+      const ls = taxable.filter((l) => isDomestic(l) === domestic);
       if (!ls.length) continue;
       const income = kc(ls.reduce((s, l) => s + val(l.proceedsCzk), 0));
       const expense = kc(ls.reduce((s, l) => s + val(l.costCzk), 0));
@@ -156,7 +162,7 @@ export function taxReturnGuide(year: number, limitExceeded: boolean, lots: Guide
   }
 
   let annex4: TaxReturnGuide['annex4'] = null;
-  const foreign = dividends.filter((d) => d.year === year && !isDomestic(d.ticker));
+  const foreign = dividends.filter((d) => d.year === year && !isDomestic(d));
   if (foreign.length) {
     const r401a = kc(foreign.reduce((s, d) => s + val(d.grossCzk), 0));
     const withTax = foreign.filter((d) => (d.withholdingCzk ?? 0) > 0);

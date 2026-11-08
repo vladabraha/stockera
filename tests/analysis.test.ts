@@ -221,7 +221,7 @@ test('tax return guide: Příloha č. 2 rows 207–209, foreign dividends in Př
   const divs = [
     { ticker: 'AAPL.US', year: 2025, grossCzk: 1_000, withholdingCzk: 150 },
     { ticker: 'VWCE.DE', year: 2025, grossCzk: 500, withholdingCzk: 0 },
-    { ticker: 'CEZ.CZ', year: 2025, grossCzk: 2_000, withholdingCzk: 300 }, // taxed finally in CZ
+    { ticker: 'CEZ.CZ', isin: 'CZ0005112300', year: 2025, grossCzk: 2_000, withholdingCzk: 300 }, // taxed finally in CZ
   ];
   const g = taxReturnGuide(2025, true, lots, divs);
   assert.deepEqual(g.annex2, {
@@ -238,5 +238,9 @@ test('tax return guide: Příloha č. 2 rows 207–209, foreign dividends in Př
   // Within the 100k limit nothing from the sales goes to the return; a total loss caps expenses at the income.
   assert.equal(taxReturnGuide(2025, false, lots, []).annex2, null);
   const loss = taxReturnGuide(2025, true, [sale('X.US', '2025-01-02', false, 120_000, 150_000)], []).annex2!;
+  // A foreign issuer traded in Prague (Erste, AT ISIN) is a foreign source despite the .CZ ticker.
+  const erste = taxReturnGuide(2025, true, [{ ...sale('EBS.CZ', '2025-01-02', false, 120_000, 100_000), isin: 'AT0000652011' }],
+    [{ ticker: 'EBS.CZ', isin: 'AT0000652011', year: 2025, grossCzk: 1_000, withholdingCzk: 250 }]);
+  assert.deepEqual([erste.annex2!.rows.map((r) => r.code), erste.annex4?.r411], [['z'], 1_000]);
   assert.deepEqual([loss.r207, loss.r208, loss.r209], [120_000, 120_000, 0]);
 });

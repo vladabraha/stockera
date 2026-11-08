@@ -1429,8 +1429,8 @@ function taxYearsPanel(a: Analysis): HTMLElement {
 function taxGuidePanel(a: Analysis, y: TaxYear): HTMLElement {
   const lots = a.realized.flatMap((r) => r.lots.map((l) => ({ ticker: r.ticker, name: r.name, priceCurrency: r.priceCurrency, lot: l })));
   const g: TaxReturnGuide = taxReturnGuide(y.year, y.limitStatus === 'exceeded',
-    lots.map(({ ticker, lot }) => ({ ticker, closeDate: lot.closeDate, timeTestMet: lot.timeTestMet, proceedsCzk: lot.proceeds.czk, costCzk: lot.cost.czk })),
-    a.dividends.map((d) => ({ ticker: d.ticker, year: d.year, grossCzk: d.gross.czk, withholdingCzk: d.withholdingTax.czk == null ? null : -d.withholdingTax.czk })));
+    lots.map(({ ticker, lot }) => ({ ticker, isin: a.instruments[ticker]?.isin, closeDate: lot.closeDate, timeTestMet: lot.timeTestMet, proceedsCzk: lot.proceeds.czk, costCzk: lot.cost.czk })),
+    a.dividends.map((d) => ({ ticker: d.ticker, isin: a.instruments[d.ticker]?.isin, year: d.year, grossCzk: d.gross.czk, withholdingCzk: d.withholdingTax.czk == null ? null : -d.withholdingTax.czk })));
   const kc = (v: number) => fmtMoney(v, 'CZK');
   const rowList = (items: [string, string, string?][]) => h('dl', { class: 'dap' },
     ...items.flatMap(([row, label, value]) => [h('dt', {}, h('b', {}, row), ` ${label}`), h('dd', {}, value ?? '')]));
