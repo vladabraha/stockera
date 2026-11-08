@@ -98,6 +98,15 @@ test('applyLive converts a quote in another currency and ignores stale or implau
   assert.match(jump.missing[0]!.reason, /bezpečnostní kontrola/);
 });
 
+test('applyLive revalues an instrument that had no price at build time in the quote currency', () => {
+  const a = base();
+  for (const l of a.holdings[0]!.lots) Object.assign(l, { currentPrice: null, valueSource: 'cost', valueDate: null });
+  delete a.instruments['AAA.US'];
+  const r = applyLive(a, { CZK: 1, EUR: 25, USD: 20 }, { 'AAA.US': { price: 60, currency: 'USD', date: '2026-11-06' } });
+  assert.deepEqual(r.updated, ['AAA.US']);
+  assert.deepEqual([r.analysis.holdings[0]!.lots[1]!.value!.czk, r.analysis.holdings[0]!.lots[1]!.currentPrice], [2400, { date: '2026-11-06', close: 60, currency: 'USD' }]);
+});
+
 test('applyLive lists instruments left without a live price and why', () => {
   const reasons = (fx: Record<string, number>, q: Parameters<typeof applyLive>[2]) =>
     applyLive(base(), fx, q).missing.map((m) => `${m.ticker}: ${m.reason}`);

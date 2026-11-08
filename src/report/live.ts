@@ -238,10 +238,10 @@ export function applyLive(base: Analysis, czkPer: Record<string, number>, quotes
 
   for (const x of a.holdings) {
     const q = quotes[x.ticker];
-    const ic = instrumentCurrency(a, x);
     const skip = (reason: string) => missing.push({ ticker: x.ticker, reason });
     if (!q) { skip(x.isin ? 'onvista ani Tradegate aktuální cenu nemají' : 'chybí ISIN, podle kterého se aktuální cena hledá'); continue; }
-    if (!ic) { skip('není známá měna, ve které se obchoduje'); continue; }
+    // without a stored price the quote's own currency works too – the instrument rate cancels out in the value
+    const ic = instrumentCurrency(a, x) ?? x.priceCurrency ?? q.currency;
     const fx = noRate(q.currency, ic);
     if (fx) { skip(`chybí aktuální kurz ${fx}`); continue; }
     const price = (q.price * rate(q.currency)!) / rate(ic)!;

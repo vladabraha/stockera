@@ -289,7 +289,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - Přepočet v paměti na kopii snímku (`applyLive`, idempotentní): u lotů s cenou stejného nebo novějšího dne než
     `valueDate` se přepočte `currentPrice`, `value`, `profit`, `profitPct`; pak součty instrumentů, `summary`,
     země a sektory (sdílený `src/analysis/breakdown.ts`, bundlovaný i do reportu), poslední bod `history` a cenová
-    řada instrumentu. Cena odlišná o > 50 % od uložené se zahodí (špatný trh/jednotka). **Nákupní náklady, prodeje
+    řada instrumentu. Cena odlišná o > 50 % od uložené se zahodí (špatný trh/jednotka). Instrument bez uložené ceny
+    se přecení v měně živé kotace (kurz měny instrumentu se ve výpočtu vykrátí). **Nákupní náklady, prodeje
     a daně se nemění** (zafixované kurzem ČNB ke dni obchodu); živé hodnoty používají dnešní kurz ECB – proto může
     nerealizovaný zisk nepatrně odbočit od `pnpm report`. Pořadí instrumentů a barvy zůstávají podle snímku.
   - Hlavička hodnoty ukazuje stav: „načítám aktuální ceny…“, „Aktuální ceny k …“ (zelená tečka jen když nic
