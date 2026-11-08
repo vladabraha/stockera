@@ -3,7 +3,8 @@
 Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurzy, tvoje data se nikam neposílají.
 
 ## 1. Poprvé (jednou na počítači)
-1. Složku Stockera **rozbal** (pokud je v ZIPu) – např. do Dokumentů.
+1. Aplikaci si stáhni přes git (pak půjde aktualizovat jedním kliknutím, viz část 4) – např. do Dokumentů:
+   `git clone <adresa repozitáře na GitHubu> Stockera`. Případně složku **rozbal** ze ZIPu.
 2. Dvakrát klikni na:
    - **Windows:** `instalace-windows.cmd`
    - **Mac:** `instalace-mac.command`
@@ -34,6 +35,12 @@ Vše běží jen na tvém počítači. Z internetu se stahují pouze ceny a kurz
 - Tlačítko s kolečkem vedle *Aktualizovat ceny* přepíná vzhled: podle systému → světlý → tmavý.
 - **Akcie uvnitř ETF**: které firmy skutečně vlastníš přes všechna ETF dohromady. Řádek rozklikneš a uvidíš, z kterého ETF kolik je. U každého ETF je známých jen 10 největších pozic.
 
+## 4. Aktualizace aplikace (nová verze programu)
+Dvakrát klikni na `aktualizovat-aplikaci-windows.cmd` / `aktualizovat-aplikaci-mac.command`. Stáhne novou verzi z GitHubu,
+vypíše novinky, doinstaluje nástroje a přegeneruje report. Tvoje složky `data/` a `out/` se nemění – v gitu nikdy nejsou.
+- Potřebuje git (Mac ho nabídne doinstalovat sám, Windows: https://git-scm.com).
+- Funguje jen ve složce stažené přes `git clone`. Složku ze ZIPu nahraď klonem a přesuň do něj svou složku `data`.
+
 ## Když něco nejde
 Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastější situace:
 
@@ -43,6 +50,7 @@ Program vždy napíše, co se stalo, a pod tím **„Co dělat“**. Nejčastěj
 | Mac: „nelze otevřít, protože pochází od neidentifikovaného vývojáře“ | Pravé tlačítko na soubor → **Otevřít** → Otevřít. |
 | „Složka je ještě zabalená v ZIPu“ | ZIP rozbal (pravé tlačítko → Extrahovat vše) a spouštěj z rozbalené složky. |
 | „Chybí Node.js“ | Spusť nejdřív instalační skript (krok 1). |
+| „Soubory programu jsou upravené“ (aktualizace aplikace) | Vrať úpravy příkazem `git checkout -- .` (tvoje data to nezmění) a spusť aktualizaci znovu. |
 | „Zatím není žádný výpis z XTB ani Trading 212“ | Ulož XLSX export z XTB nebo CSV z Trading 212 do `data/input/`. |
 | „Soubor se nepodařilo načíst“ / „nejsou XLSX ani CSV“ | Stáhni znovu export (**XLSX** z xStation, **CSV** z Trading 212) a neotevírej ho/neukládej v Excelu. PDF nejde. |
 | „…chybí nákup – nahraj exporty za celé období“ | Z Trading 212 stáhni exporty i za starší roky a ulož je do `data/input/`. |

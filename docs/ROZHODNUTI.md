@@ -44,7 +44,13 @@ SQL řetězce v jednoduchých uvozovkách.
 - `aktualizovat-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
   odpadá i problém s execution policy u `pnpm.ps1`). Předem ověří Node; po úspěchu otevřou `out/stockera.html`.
   `instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).
-- Oba `.cmd` odmítnou běh ze ZIPu / `%TEMP%` (Průzkumník spouští soubory ze ZIPu z dočasné složky) – detekce přes
+- `aktualizovat-aplikaci-*` (na přání uživatele **přes git**): odmítne složku, která není klon, a upravené sledované
+  soubory (nic nepřepíše); `git pull --ff-only` → `pnpm install --frozen-lockfile` → spustí `aktualizovat-*`.
+  Osobní data jsou v `.gitignore`, takže je pull nemůže změnit. `git pull` přepisuje i běžící skript a sh/cmd čtou
+  skript průběžně: `.command` má vše ve funkci `main` (zparsuje se celá předem), `.cmd` se spustí z kopie v `%TEMP%`.
+- `.gitignore` je záměrně široký (i `*.xlsx`, `*.csv`, `*.pdf`, `*.db`, `*.log`, `.env`, `.idea/` mimo `data/`) –
+  repozitář je určený ke zveřejnění na GitHubu.
+- Všechny `.cmd` odmítnou běh ze ZIPu / `%TEMP%` (Průzkumník spouští soubory ze ZIPu z dočasné složky) – detekce přes
   `findstr /l` na cestu s `/` místo `\` (findstr bere `\` jako escape).
 - `.cmd` soubory jen ASCII + CRLF (kódová stránka cmd), `.ps1` UTF-8 **s BOM** + CRLF (jinak PowerShell 5.1 rozbije
   diakritiku), `.command` LF + spustitelný bit; hlídá `.gitattributes`. PowerShell skript nebyl spuštěn na Windows

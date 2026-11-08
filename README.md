@@ -48,6 +48,12 @@ Vše potřebné je ve složce projektu; mimo ni jsou jen Node.js a pnpm.
    pnpm 10.18.1 (`npm install -g`) a závislosti projektu. Ručně: Node.js z nodejs.org, `npm install -g pnpm@10.18.1`, `pnpm install`.
 3. Aktualizace dvojklikem `aktualizovat-windows.cmd` / `aktualizovat-mac.command`, nebo libovolný příkaz výše.
 
+## Nová verze aplikace
+V gitu je jen program; osobní data (`data/`, `out/`, výpisy, databáze, logy) jsou v `.gitignore`. Ve složce stažené
+přes `git clone` stačí dvojklik na `aktualizovat-aplikaci-windows.cmd` / `aktualizovat-aplikaci-mac.command`:
+`git pull --ff-only` → `pnpm install --frozen-lockfile` → přegenerování reportu. Databáze se na novou verzi převede
+sama (migrace v `src/db/database.ts`).
+
 ## Vývoj
 ```bash
 pnpm test         # testy (node:test, pouze syntetická data)
@@ -72,7 +78,7 @@ pnpm audit        # kontrola zranitelností závislostí
 | `tests/` | testy + generátor syntetických XLSX (`tests/helpers`) |
 | `out/` | **výstupy – v .gitignore** (`stockera.html` zašifrovaně; `analysis.json` jen s `pnpm analyze --json`, nešifrovaně – po použití smazat) |
 | `config/` | vzor ruční konfigurace instrumentů |
-| `instalace-*`, `aktualizovat-*`, `scripts/` | dvojklikací skripty pro Windows (`.cmd` → `scripts/instalace.ps1`) a macOS (`.command`) |
+| `instalace-*`, `aktualizovat-*`, `aktualizovat-aplikaci-*`, `scripts/` | dvojklikací skripty pro Windows (`.cmd` → `scripts/instalace.ps1`) a macOS (`.command`) – instalace, aktualizace dat, nová verze aplikace |
 | `data/` | **osobní data – v .gitignore**: `input/` výpisy, `stockera.db` databáze, `instruments.json`, `logs/network.log` |
 
 ## Bezpečnost
