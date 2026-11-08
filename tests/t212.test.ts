@@ -123,3 +123,17 @@ test('import: overlapping exports are deduplicated and merged with XTB holdings 
   assert.deepEqual([sold.lots[0]!.cost.czk, sold.lots[0]!.proceeds.czk], [400, 600]);
   assert.ok(!a.checks.warnings.some((w) => /Nezpracované typy/.test(w)), a.checks.warnings.join('\n'));
 });
+
+test('a position without any price is valued at cost (like the chart), not as a −100 % loss', () => {
+  const db = openDatabase(':memory:');
+  importBuffer(db, 't.csv', Buffer.from(csv([
+    { action: 'Deposit', time: '2024-01-01 09:00:00', id: 'D1', total: 5000 },
+    buy('B1', '2024-01-02 10:00:00', 10, 1000),
+  ])));
+  const a = analyze(db, { today: '2024-01-05', fx });
+  const lot = a.holdings[0]!.lots[0]!;
+  assert.deepEqual([lot.valueSource, lot.value?.czk, lot.profit], ['cost', 1000, null]);
+  assert.deepEqual([a.summary.value.czk, a.summary.unrealizedProfit.czk], [1000, 0]);
+  assert.equal(a.history.at(-1)!.valueCzk, a.summary.value.czk, 'chart and headline agree');
+  assert.ok(a.checks.warnings.some((w) => w.includes(a.holdings[0]!.ticker) && /nákupní cenou/.test(w)), a.checks.warnings.join('\n'));
+});

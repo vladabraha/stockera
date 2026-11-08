@@ -147,7 +147,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Zdroj nákupní ceny / výnosu** (fake export má prohozené sloupce Purchase/Sale Value): cash operace →
   sloupce XTB → cena × objem. Otevřené loty: cash op → `purchase_value` (T212) → value − gross_profit → objem × open price.
 - Ocenění držby: tržní cena, pokud je novější než snapshot XTB nebo lot nemá hodnotu ze snapshotu (T212); jinak
-  hodnota ze snapshotu. Lot bez ceny = nákupní cena.
+  hodnota ze snapshotu. Lot bez ceny i bez hodnoty ze snapshotu (typicky T212, když se cenu nepodaří stáhnout) =
+  nákupní cena (`valueSource: 'cost'`, zisk lotu neznámý → „—“, do souhrnu 0) – stejně jako v grafu vývoje, aby
+  číslo nad grafem sedělo s jeho posledním bodem a nevznikla falešná ztráta −100 %. Kontroly to vypíšou jako upozornění.
 - Ceny za kus (nákupní/prodejní) jsou v měně obchodování instrumentu → v UI a CSV se zobrazují v měně stažené kotace
   (`priceCurrency`), ne v měně účtu.
 - Vývoj hodnoty: denně hodnota vs. investováno v CZK i EUR; dny bez kurzu se vynechají.

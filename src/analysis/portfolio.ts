@@ -26,8 +26,11 @@ export interface HoldingLot {
   cost: Money;
   costSource: ValueSource | 'xtb-profit';
   value: Money | null;
-  /** `market` = downloaded price, `xtb` = value from the XTB export snapshot. */
-  valueSource: 'market' | 'xtb' | null;
+  /**
+   * `market` = downloaded price, `xtb` = value from the XTB export snapshot,
+   * `cost` = no price at all (e.g. Trading 212 without market data) – valued at purchase cost like the history chart, profit unknown.
+   */
+  valueSource: 'market' | 'xtb' | 'cost' | null;
   valueDate: string | null;
   currentPrice: { date: string; close: number; currency: string } | null;
   profit: Money | null;
@@ -214,6 +217,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
   // --- holdings -------------------------------------------------------------
   const valueDate = loaded.snapshotAsOf ? pragueDate(loaded.snapshotAsOf) : today;
   const holdingLots = new Map<string, HoldingLot[]>();
+  const unpriced = new Set<string>();
   for (const l of loaded.open) {
     const openDate = pragueDate(l.openTime);
     const free = taxFreeFrom(openDate);
@@ -228,7 +232,12 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
       if (native != null) [value, valueSource, lotValueDate] = [conv.money(native, l.currency, quote.date), 'market', quote.date];
     }
     if (!value && l.value != null) [value, valueSource, lotValueDate] = [conv.money(l.value, l.currency, valueDate), 'xtb', valueDate];
-    const profit = value ? diffMoney(value, cost) : null;
+    if (!value) {
+      // no price: count it at cost (as the chart does) instead of 0, which would show a fake −100 % loss
+      [value, valueSource] = [cost, 'cost'];
+      unpriced.add(l.ticker);
+    }
+    const profit = valueSource === 'cost' ? null : diffMoney(value, cost);
     const lot: HoldingLot = {
       accountNumber: l.accountNumber,
       positionId: l.positionId,
@@ -392,6 +401,9 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     .sort((a, b) => b.year - a.year || a.ticker.localeCompare(b.ticker));
 
   const unsupported = new Set(ops.filter((o) => classifyCashOperation(o.type) === 'other').map((o) => o.type));
+  if (unpriced.size) {
+    warnings.push(`Bez tržní ceny i hodnoty z výpisu: ${[...unpriced].sort().join(', ')} – počítá se nákupní cenou (zisk 0), dokud se cenu nepodaří stáhnout.`);
+  }
   if (unsupported.size) warnings.push(`Nezpracované typy peněžních operací: ${[...unsupported].join(', ')}`);
 
   // --- summary --------------------------------------------------------------
