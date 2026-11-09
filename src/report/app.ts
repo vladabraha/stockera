@@ -25,7 +25,7 @@ type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: s
 
 /** Rows a long list loads at once while scrolling (and shows before "Zobrazit zbývajících"). */
 const LIST_STEP = 10;
-type ListKey = 'holdings' | 'realized' | 'upcoming' | 'lookThrough';
+type ListKey = 'holdings' | 'realized' | 'upcoming' | 'lookThrough' | 'offset' | `year:${string}`;
 
 const state = {
   data: null as Analysis | null,
@@ -46,6 +46,9 @@ const state = {
   taxFreeDate: null as string | null,
   /** Year whose tax-return guide is open in "Daně podle let". */
   taxGuideYear: null as number | null,
+  /** Expanded sale groups of the tax year cards ("2026:free") and the open loss-offset advice. */
+  yearParts: new Set<string>(),
+  offsetOpen: false,
   /** Long lists: expanded into a scroll box (`open`) and how many rows are loaded there (`n`). */
   lists: {} as Partial<Record<ListKey, { open: boolean; n: number }>>,
   /** Inner scroll positions kept across re-renders (lists, tax years). */
@@ -1413,17 +1416,23 @@ function taxYearsPanel(a: Analysis): HTMLElement {
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
     const open = state.taxGuideYear === y.year;
     const card = h('div', { class: open ? 'year active tip-host' : 'year tip-host' });
+    const offset = y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0;
     card.append(
       h('div', { class: 'year-head' }, h('b', {}, String(y.year)), limit),
       ...yearSales(a, y, hoverTip(card)),
       h('dl', {},
         h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
         h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
-      y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0 ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
-      button(open ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
-        state.taxGuideYear = open ? null : y.year;
-        render();
-      }, 'ghost'),
+      offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
+      h('div', { class: 'year-actions' },
+        offset ? button(state.offsetOpen ? 'Skrýt snížení daně' : 'Jak snížit daň', () => {
+          state.offsetOpen = !state.offsetOpen;
+          render();
+        }, 'ghost') : null,
+        button(open ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
+          state.taxGuideYear = open ? null : y.year;
+          render();
+        }, 'ghost')),
     );
     return card;
   };
@@ -1439,62 +1448,70 @@ const salesWord = (n: number) => (n === 1 ? 'prodej' : n >= 2 && n <= 4 ? 'prode
 
 /**
  * Sales of one year split into time-tested (exempt) and short-term (counted towards the 100k limit):
- * a proportional bar, a legend with counts and amounts (readable without hover on mobile) and the limit meter.
- * Tooltips list the sold instruments.
+ * a proportional bar, one row per group ("2 prodeje za 172 000 Kč", click → explanation and the sold instruments
+ * in a lazily loaded list) and the limit meter.
  */
 function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>): HTMLElement[] {
   const sold = a.realized.flatMap((r) => r.lots.filter((l) => l.closeDate.startsWith(`${y.year}-`)).map((l) => ({ r, l })));
   const over = y.limitStatus === 'exceeded';
   const parts = [
-    { label: 'Po časovém testu', total: y.timeTestedProceeds, cls: 'free', sold: sold.filter((s) => s.l.timeTestMet),
-      status: 'osvobozeno', info: 'Drženo déle než 3 roky – osvobozeno od daně a do limitu 100 000 Kč se nepočítá.' },
-    { label: 'Bez časového testu', total: y.shortTermProceeds, cls: over ? 'taxed' : 'short', sold: sold.filter((s) => !s.l.timeTestMet),
-      status: over ? 'zdaní se zisk' : y.limitStatus === 'within' ? 'v limitu, osvobozeno' : 'limit neověřen',
-      info: over ? 'Příjmy přesáhly limit 100 000 Kč – daní se zisk ze všech těchto prodejů (ztráty se odečtou).'
-        : y.limitStatus === 'within' ? 'Příjmy se vešly do limitu 100 000 Kč – osvobozeno.'
+    { key: 'free', label: 'Osvobozeno – splněn časový test', total: y.timeTestedProceeds, cls: 'free', sold: sold.filter((s) => s.l.timeTestMet),
+      info: 'Drženo déle než 3 roky – od daně osvobozeno a do limitu 100 000 Kč se nepočítá.' },
+    { key: 'short', total: y.shortTermProceeds, cls: over ? 'taxed' : 'short', sold: sold.filter((s) => !s.l.timeTestMet),
+      label: over ? 'Ke zdanění – bez časového testu' : y.limitStatus === 'within' ? 'Osvobozeno – v limitu 100 tis.' : 'Bez časového testu – limit neověřen',
+      info: over ? 'Prodeje bez časového testu přesáhly limit 100 000 Kč – daní se zisk ze všech (ztráty se odečtou).'
+        : y.limitStatus === 'within' ? 'Prodeje bez časového testu se vešly do limitu 100 000 Kč – osvobozeno.'
           : 'Chybí kurz ČNB, limit 100 000 Kč nejde ověřit.' },
   ].filter((p) => p.sold.length);
-  const amount = (m: Money) => m[state.cur];
-  const content = (p: (typeof parts)[number]) => () => {
-    const byTicker = new Map<string, { name: string; qty: number; value: number | null; n: number }>();
-    for (const { r, l } of p.sold) {
-      const e = byTicker.get(r.ticker) ?? { name: r.name ?? r.ticker, qty: 0, value: 0, n: 0 };
-      e.qty += l.quantity;
-      e.n++;
-      e.value = e.value == null || amount(l.proceeds) == null ? null : e.value + amount(l.proceeds)!;
-      byTicker.set(r.ticker, e);
-    }
-    const rows = [...byTicker.entries()].sort(([, x], [, z]) => (z.value ?? 0) - (x.value ?? 0));
-    const shown = rows.slice(0, 6);
-    return [
-      h('div', {}, h('span', { class: `dot ${p.cls}` }), ' ', h('b', {}, p.label), ` · ${p.sold.length} ${salesWord(p.sold.length)} za ${totals(p.total)}`),
-      h('div', { class: 'muted' }, p.info),
-      h('ul', { class: 'tip-list' }, ...shown.map(([ticker, e]) => h('li', {},
-        h('span', { class: 'lname' }, h('b', {}, ticker), ` ${e.name}`),
-        h('span', { class: 'num muted' }, `${fmtNum(e.qty, 4)} ks`),
-        h('span', { class: 'num' }, fmtMoney(e.value, curCode()))))),
-      rows.length > shown.length ? h('div', { class: 'muted' }, `a ${rows.length - shown.length} dalších`) : null,
-    ];
-  };
-  const share = (p: (typeof parts)[number]) => {
+  type Part = (typeof parts)[number];
+  const count = (n: number) => `${n} ${salesWord(n)}`;
+  const share = (p: Part) => {
     const all = measure(y.proceeds);
     return all > 0 ? (measure(p.total) / all) * 100 : 100 / parts.length;
   };
+  const instruments = (p: Part) => {
+    const byTicker = new Map<string, { ticker: string; name: string; qty: number; value: number | null; n: number }>();
+    for (const { r, l } of p.sold) {
+      const e = byTicker.get(r.ticker) ?? { ticker: r.ticker, name: r.name ?? r.ticker, qty: 0, value: 0, n: 0 };
+      const v = l.proceeds[state.cur];
+      e.qty += l.quantity;
+      e.n++;
+      e.value = e.value == null || v == null ? null : e.value + v;
+      byTicker.set(r.ticker, e);
+    }
+    return [...byTicker.values()].sort((x, z) => (z.value ?? 0) - (x.value ?? 0));
+  };
+  const group = (p: Part) => {
+    const id = `${y.year}:${p.key}`;
+    const open = state.yearParts.has(id);
+    const head = button(h('span', { class: 'ypart-head' },
+      h('i', { class: p.cls }),
+      h('span', { class: 'ypart-text' }, h('span', { class: 'ypart-label' }, p.label), h('span', {}, `${count(p.sold.length)} za `, h('b', {}, totals(p.total)))),
+      h('span', { class: 'chev' }, '›')), () => {
+      if (open) state.yearParts.delete(id); else state.yearParts.add(id);
+      render();
+    }, open ? 'ypart open' : 'ypart');
+    head.setAttribute('aria-expanded', String(open));
+    if (!open) return h('div', {}, head);
+    const items = instruments(p);
+    return h('div', {}, head, h('div', { class: 'ypart-body' },
+      h('p', { class: 'muted small' }, p.info),
+      ...lazyList(`year:${id}`, h('ul', { class: 'ypart-list' }), items, (e) => h('li', {},
+        h('span', { class: 'lname', title: e.name }, h('b', {}, e.ticker), ` ${e.name}`),
+        h('span', { class: 'num' }, fmtMoney(e.value, curCode())),
+        h('span', { class: 'muted' }, `${count(e.n)} · ${fmtNum(e.qty, 4)} ks`)), 5)));
+  };
   const out: HTMLElement[] = [
-    h('div', { class: 'year-total' },
-      h('span', { class: 'muted' }, 'Prodáno za'), h('b', {}, totals(y.proceeds)),
-      h('span', { class: 'muted' }, `${y.salesCount} ${salesWord(y.salesCount)}`)),
+    h('div', { class: 'year-total' }, 'Celkem ', h('b', {}, `${count(y.salesCount)} za ${totals(y.proceeds)}`)),
   ];
   if (parts.length) {
     out.push(
-      h('div', { class: 'stackbar year-bar', role: 'img', 'aria-label': parts.map((p) => `${p.label}: ${p.sold.length}× za ${totals(p.total)}`).join(', ') },
-        ...parts.map((p) => tip(paint(h('span', { class: p.cls, tabindex: '-1' }), { width: `${share(p)}%` }), content(p)))),
-      h('ul', { class: 'year-legend' }, ...parts.map((p) => tip(h('li', { tabindex: '0' },
-        h('i', { class: p.cls }),
-        h('span', { class: 'lname' }, p.label),
-        h('span', { class: 'num muted' }, `${p.sold.length}×`),
-        h('b', { class: 'num' }, totals(p.total)),
-        h('span', { class: `ystat ${p.cls}` }, p.status)), content(p)))),
+      h('div', { class: 'stackbar year-bar', role: 'img', 'aria-label': parts.map((p) => `${p.label}: ${count(p.sold.length)} za ${totals(p.total)}`).join(', ') },
+        ...parts.map((p) => tip(paint(h('span', { class: p.cls, tabindex: '-1' }), { width: `${share(p)}%` }), () => [
+          h('div', {}, h('span', { class: `dot ${p.cls}` }), ' ', h('b', {}, p.label)),
+          h('div', {}, `${count(p.sold.length)} za ${totals(p.total)}`),
+          h('div', { class: 'muted' }, p.info)]))),
+      h('div', { class: 'year-parts' }, ...parts.map(group)),
     );
   }
   const used = y.shortTermProceeds.czk;
@@ -1618,12 +1635,12 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
       : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')}. Stačí prodat:`;
   return h('div', { class: 'offset' },
     h('p', {}, lead),
-    plan.sales.length ? h('ul', {}, ...plan.sales.map((s) => h('li', {},
+    ...(plan.sales.length ? lazyList('offset', h('ul', {}), plan.sales, (s) => h('li', {},
       h('b', {}, s.ticker), ` ${fmtNum(s.quantity, 4)} ks`, manyAccounts ? h('span', { class: 'muted' }, ` (účet ${s.account})`) : null,
       h('span', { class: 'muted' }, ', ztráta '), h('span', { class: 'neg' }, fmtMoney(s.lossCzk, 'CZK')),
       s.taxFreeQuantity > 0
         ? h('div', { class: 'muted small' }, `včetně ${fmtNum(s.taxFreeQuantity, 4)} ks s časovým testem – při zpětném nákupu poběží 3letý test znovu`)
-        : null))) : null,
+        : null), 5) : []),
     h('p', { class: 'muted small' }, 'Prodává se od nejstaršího nákupu. Ztráta z nákupů, které už splnily časový test, se nezapočítá. Podle aktuálních cen.'),
   );
 }

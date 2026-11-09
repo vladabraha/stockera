@@ -127,7 +127,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Daň** = 15 % ze základu (`src/analysis/tax.ts`, sdíleno s reportem). Pásmo 23 % závisí na všech příjmech, které
   aplikace nezná → jen poznámka v UI.
 - **Vyrovnání letošní daně ztrátou** (karta letošního roku v „Daně podle let“): když letošní prodeje mají daň,
-  ukáže se, které držené pozice prodat se ztrátou, aby se základ vynuloval (`lossOffsetPlan`). Prodej se páruje
+  ukáže se (po kliknutí na „Jak snížit daň“), které držené pozice prodat se ztrátou, aby se základ vynuloval (`lossOffsetPlan`). Prodej se páruje
   **FIFO** per účet a ticker, takže jde prodat jen nejstarší loty; loty se splněným testem se nezapočítají (jejich
   zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Podle aktuálních (i živých) cen.
   Když FIFO prodá i staré loty se splněným testem (`taxFreeQuantity`), doporučení na to upozorní – po zpětném nákupu
@@ -343,10 +343,13 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   Otevřený akordeon se v okně drží nahoře.
   **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
   okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
-  Karta roku (`yearSales`): „Prodáno za“ + počet prodejů, pruh rozdělený podle objemu na *po časovém testu*
-  (zelená, osvobozeno) a *bez časového testu* (oranžová v limitu, červená nad limitem), pod ním legenda s počtem
-  a částkou (čitelná i na mobilu bez najetí) a zvlášť popsaný ukazatel limitu 100 tis. v %. Tooltip (najetí,
-  klepnutí, fokus; sdílený `hoverTip` jako u sektorů) vysvětlí kategorii a vypíše prodané instrumenty (kusy, částka).
+  Karta roku (`yearSales`): „Celkem N prodejů za X“, pruh podle objemu (zelená = osvobozeno časovým testem,
+  oranžová = bez testu v limitu, červená = ke zdanění nad limitem) s tooltipem (sdílený `hoverTip` jako u sektorů)
+  a pod ním řádek za každou skupinu „Ke zdanění – bez časového testu / 22 prodejů za 252 560 Kč“. Klik na řádek
+  rozbalí vysvětlení a seznam prodaných instrumentů (částka, počet prodejů, kusy) – stejné chování jako ostatní
+  dlouhé seznamy (`lazyList`: prvních 5, pak posuvný box s donačítáním). Tooltip seznamy neobsahuje (na položky
+  v něm nejde najet). Rada „Jak snížit daň“ (vyrovnání ztrátou) je schovaná za tlačítkem a její seznam je také
+  `lazyList`. Ukazatel limitu 100 tis. v % je zvlášť a vlastní tooltip ukáže využitou a zbývající částku.
 - Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se
   mění i s živými cenami). Bez daní a inflace, sazba je konstanta `FIRE_RATE` v `app.ts`.
 - Patička ukazuje `lastTransactionDate` (nejnovější obchod nebo peněžní pohyb ve výpisech, pražské datum) vedle data
