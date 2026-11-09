@@ -378,13 +378,20 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   Jediný výrazný prvek: **pás s hodnotou portfolia a grafem** (`.hero`, přepisuje barevné proměnné uvnitř podle
   tokenů `--band-*`). Respektuje motiv: ve světlém režimu je to bílá karta s rámečkem (stejné barvy jako zbytek
   stránky), v tmavém tmavě modrý „terminálový“ pás `#0d1830` (přání uživatele – dřív byl tmavý i ve světlém režimu). Okolí klidné: pozadí #eef1f6, bílé panely bez stínů, text #14213d, akcent #2f5bff,
-  zisk #0b9a6d, ztráta #e03a55 (tmavý režim bg #0a1222). Čísla a nadpisy v `--fig` (Bahnschrift / DIN Alternate –
+  zisk #087a56, ztráta #c8243f, varování #9a5f00 (tmavý režim bg #0a1222). Čísla a nadpisy v `--fig` (Bahnschrift / DIN Alternate –
   systémové „burzovní“ fonty, CSP blokuje webfonty), UI v systémovém sans, tabulkové číslice.
   Taby = podtržené tlačítka s počtem, změny jako **pill `chip()`** (zelená/červená), **sparkline** posledních ~3 měsíců
   v řádku pozice, kulaté avatary tickerů. Jediná nevyžádaná animace: jednorázové vykreslení čáry grafu po odemčení
   (respektuje `prefers-reduced-motion`).
   Pravidla (skill frontend-design): žádné VERZÁLKY u popisků, žádné meta řetězce s „·“, žádné šipky „→/←“ v textu
   odkazů, žádné stíny/gradienty jako dekorace, šedé pro „Ostatní/Neznámé“ studené (#9aa3b2 / #cfd5de).
+- **Přístupnost (audit podle Web Interface Guidelines, přání uživatele):** text má kontrast ≥ 4,5:1 i na
+  tónovaném podkladu (chip 12 % barvy, štítky, ikony kontrol), proto světlé `--pos/--neg/--warn/--info` jsou tmavší
+  odstíny. Paleta tickerů (`PALETTE`) je ztmavená tak, aby bílý text avataru měl ≥ 4,5:1 a výplně grafů v tmavém
+  režimu ≥ 3:1. Na dotykových zařízeních (`pointer: coarse`) mají ovládací prvky min. 44 × 44 px; na displeji
+  ≤ 420 px zůstane v hlavičce jen logo (název čte čtečka) a období grafu jsou ve dvou řádcích. Hlavička je `<h1>`,
+  přepínače mají `aria-pressed`, nikde se neruší rámeček fokusu bez náhrady. Nesoulad FIFO v „K doplnění“ je
+  čitelná věta (ne JSON).
 - Světlý i tmavý režim: výchozí podle `prefers-color-scheme`, tlačítko v hlavičce (ikona) přepíná cyklicky
   podle systému → světlý → tmavý (přání uživatele). Volba = `data-theme` na `<html>` + `localStorage`
   (`stockera-theme`; jde i u souboru z disku, při zákazu úložiště platí do zavření). Tmavé proměnné jsou v CSS

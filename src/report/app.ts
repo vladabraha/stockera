@@ -4,6 +4,7 @@
 import type { Analysis, Holding, HoldingLot, RealizedInstrument, RealizedLot, TaxYear, DividendSummary } from '../analysis/portfolio.ts';
 import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
+import type { FifoMismatch } from '../analysis/fifo.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
 import { applyLive, fetchLive, periodGain, type LiveSources } from './live.ts';
 import { SALES_LIMIT_CZK, incomeTax, lossOffsetPlan, taxReturnGuide, type TaxReturnGuide } from '../analysis/tax.ts';
@@ -17,7 +18,8 @@ const RANGES: [label: string, days: number | null][] = [
   ['1M', 31], ['3M', 92], ['6M', 183], ['1R', 366], ['3R', 1096], ['Vše', null],
 ];
 const CUSTOM = 'Vlastní';
-const PALETTE = ['#3d6bff', '#12a17d', '#f0a020', '#e5486a', '#8a63e8', '#1aa3c8', '#9aa63a', '#f07a3c', '#5d6f94', '#c2559e', '#3f9c4a', '#b08a5a'];
+// White avatar text keeps ≥ 4.5:1 on every colour; as chart fills they keep ≥ 3:1 on the dark panel too.
+const PALETTE = ['#3c6afc', '#0f8668', '#a16b15', '#d04260', '#835edc', '#15819e', '#727b2b', '#b65d2e', '#5d6f94', '#b85196', '#368640', '#90714a'];
 
 /** Instrument left at the price from the last report build, with the reason and that price's date. */
 type LiveGap = { ticker: string; name: string | null; reason: string; date: string | null };
@@ -94,7 +96,11 @@ function button(label: Child, onClick: () => void, cls = '', title?: string): HT
 
 function segmented<T extends string>(options: [T, string][], active: T, onPick: (v: T) => void, cls = ''): HTMLElement {
   return h('div', { class: `seg ${cls}`, role: 'group' },
-    ...options.map(([v, label]) => button(label, () => onPick(v), v === active ? 'on' : '')));
+    ...options.map(([v, label]) => {
+      const b = button(label, () => onPick(v), v === active ? 'on' : '');
+      b.setAttribute('aria-pressed', String(v === active));
+      return b;
+    }));
 }
 
 // ---------------------------------------------------------------- formatting
@@ -431,7 +437,7 @@ function render(): void {
 
 function header(a: Analysis): HTMLElement {
   return h('header', {},
-    h('div', { class: 'brand' }, logo(), h('span', {}, 'Stockera')),
+    h('h1', { class: 'brand' }, logo(), h('span', {}, 'Stockera')),
     h('nav', { class: 'tabs' }, ...([['portfolio', 'Portfolio', null], ['sold', 'Prodané', a.realized.length || null]] as const).map(([t, label, count]) => {
       const b = button(h('span', {}, label, count ? h('span', { class: 'count' }, String(count)) : null), () => {
         state.tab = t;
@@ -816,7 +822,10 @@ function taxFreeAtDate(a: Analysis, date: string): HTMLElement {
 
 function checksPanel(a: Analysis): HTMLElement | null {
   const items: string[] = [...a.checks.warnings];
-  for (const m of a.checks.fifoMismatches) items.push(`FIFO nesedí: ${JSON.stringify(m)}`);
+  const lots = (l: FifoMismatch['xtb']) => l.map((x) => `${fmtNum(x.volume, 4)} ks z ${czDate(x.openTime)}`).join(', ') || '—';
+  for (const m of a.checks.fifoMismatches) {
+    items.push(`FIFO nesedí – ${m.ticker} (účet ${m.accountNumber}), prodej ${czDate(m.saleTime)}: XTB spárovalo ${lots(m.xtb)}, podle FIFO by šlo ${lots(m.fifo)}`);
+  }
   if (a.checks.missingRates.length) items.push(`Chybí kurzy ČNB: ${a.checks.missingRates.slice(0, 10).join(', ')}${a.checks.missingRates.length > 10 ? '…' : ''}`);
   const unknown = a.holdings.filter((x) => !x.countries.length).map((x) => x.ticker);
   if (unknown.length) items.push(`Neznámé geografické složení: ${unknown.join(', ')} (doplň data/instruments.json)`);
@@ -858,7 +867,7 @@ function rangeButtons(firstIso: string | undefined, lastIso: string | undefined)
     state.range = r;
     render();
   };
-  const seg = segmented([...RANGES.map(([l]) => [l, l] as [string, string]), [CUSTOM, CUSTOM]], state.range, pick, 'small');
+  const seg = segmented([...RANGES.map(([l]) => [l, l] as [string, string]), [CUSTOM, CUSTOM]], state.range, pick, 'small range');
   if (state.range !== CUSTOM) return seg;
   const field = (label: string, key: 'from' | 'to', fallback: string | undefined) => {
     const input = h('input', { type: 'date', min: firstIso, max: lastIso, value: state.custom[key] ?? fallback ?? '' });
