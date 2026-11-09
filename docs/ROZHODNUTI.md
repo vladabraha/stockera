@@ -343,13 +343,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   Otevřený akordeon se v okně drží nahoře.
   **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
   okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
-  Karta roku (`yearSales`): „Celkem N prodejů za X“, pruh podle objemu (zelená = osvobozeno časovým testem,
-  oranžová = bez testu v limitu, červená = ke zdanění nad limitem) s tooltipem (sdílený `hoverTip` jako u sektorů)
-  a pod ním řádek za každou skupinu „Ke zdanění – bez časového testu / 22 prodejů za 252 560 Kč“. Klik na řádek
-  rozbalí vysvětlení a seznam prodaných instrumentů (částka, počet prodejů, kusy) – stejné chování jako ostatní
-  dlouhé seznamy (`lazyList`: prvních 5, pak posuvný box s donačítáním). Tooltip seznamy neobsahuje (na položky
-  v něm nejde najet). Rada „Jak snížit daň“ (vyrovnání ztrátou) je schovaná za tlačítkem a její seznam je také
-  `lazyList`. Ukazatel limitu 100 tis. v % je zvlášť a vlastní tooltip ukáže využitou a zbývající částku.
+  Karta roku (`yearSales`): „Celkem N prodejů za X“, pod tím jednou „Limit 100 tis. bez časového testu využit
+  na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (největší rok
+  ≈ 95 % šířky, takže nic nepřeteče a malé prodeje nejsou ztracené vůči pevným 100 tis.; segment má min. 4 px):
+  zleva prodeje bez časového testu (červená = ke zdanění, světle zelená = osvobozeno v limitu, šedá = neověřeno),
+  za nimi prodeje po časovém testu (zelená). Čárkovaná čára „100 tis.“ ukazuje limit (jen když je v měřítku),
+  takže je vidět, kdy prodeje bez testu limit přetáhnou. Tooltip segmentu a čáry (sdílený `hoverTip`).
+  Pod pruhem řádek za každou skupinu „Ke zdanění – bez časového testu / 6 prodejů za 168 000 Kč“; klik rozbalí
+  vysvětlení a seznam prodaných instrumentů (`lazyList`: prvních 5, pak posuvný box s donačítáním). Rada „Jak
+  snížit daň“ (vyrovnání ztrátou) je schovaná za tlačítkem a její seznam je také `lazyList`.
 - Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se
   mění i s živými cenami). Bez daní a inflace, sazba je konstanta `FIRE_RATE` v `app.ts`.
 - Patička ukazuje `lastTransactionDate` (nejnovější obchod nebo peněžní pohyb ve výpisech, pražské datum) vedle data

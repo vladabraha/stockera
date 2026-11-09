@@ -1411,6 +1411,8 @@ function soldTab(a: Analysis): HTMLElement {
 
 function taxYearsPanel(a: Analysis): HTMLElement {
   const years = a.taxYears, holdings = a.holdings;
+  // Same scale for every year card: the biggest year fills ~95 % of the bar
+  const scaleCzk = Math.max(0, ...years.map((y) => y.proceeds.czk ?? 0)) * 1.05;
   const yearCard = (y: TaxYear) => {
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
@@ -1419,7 +1421,7 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     const offset = y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0;
     card.append(
       h('div', { class: 'year-head' }, h('b', {}, String(y.year)), limit),
-      ...yearSales(a, y, hoverTip(card)),
+      ...yearSales(a, y, hoverTip(card), scaleCzk),
       h('dl', {},
         h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
         h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
@@ -1451,21 +1453,25 @@ const salesWord = (n: number) => (n === 1 ? 'prodej' : n >= 2 && n <= 4 ? 'prode
  * a proportional bar, one row per group ("2 prodeje za 172 000 Kč", click → explanation and the sold instruments
  * in a lazily loaded list) and the limit meter.
  */
-function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>): HTMLElement[] {
+function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>, scaleCzk: number): HTMLElement[] {
   const sold = a.realized.flatMap((r) => r.lots.filter((l) => l.closeDate.startsWith(`${y.year}-`)).map((l) => ({ r, l })));
   const over = y.limitStatus === 'exceeded';
+  // Short-term first, so the 100k marker measures them from the left edge
   const parts = [
-    { key: 'free', label: 'Osvobozeno – splněn časový test', total: y.timeTestedProceeds, cls: 'free', sold: sold.filter((s) => s.l.timeTestMet),
-      info: 'Drženo déle než 3 roky – od daně osvobozeno a do limitu 100 000 Kč se nepočítá.' },
-    { key: 'short', total: y.shortTermProceeds, cls: over ? 'taxed' : 'short', sold: sold.filter((s) => !s.l.timeTestMet),
+    { key: 'short', total: y.shortTermProceeds, cls: over ? 'taxed' : y.limitStatus === 'within' ? 'short' : 'unknown', sold: sold.filter((s) => !s.l.timeTestMet),
       label: over ? 'Ke zdanění – bez časového testu' : y.limitStatus === 'within' ? 'Osvobozeno – v limitu 100 tis.' : 'Bez časového testu – limit neověřen',
       info: over ? 'Prodeje bez časového testu přesáhly limit 100 000 Kč – daní se zisk ze všech (ztráty se odečtou).'
         : y.limitStatus === 'within' ? 'Prodeje bez časového testu se vešly do limitu 100 000 Kč – osvobozeno.'
           : 'Chybí kurz ČNB, limit 100 000 Kč nejde ověřit.' },
+    { key: 'free', label: 'Osvobozeno – splněn časový test', total: y.timeTestedProceeds, cls: 'free', sold: sold.filter((s) => s.l.timeTestMet),
+      info: 'Drženo déle než 3 roky – od daně osvobozeno a do limitu 100 000 Kč se nepočítá.' },
   ].filter((p) => p.sold.length);
   type Part = (typeof parts)[number];
   const count = (n: number) => `${n} ${salesWord(n)}`;
+  // One CZK scale for all years (the largest year fills the bar); without CZK totals fall back to shares of the year
+  const byScale = y.proceeds.czk != null && scaleCzk > 0;
   const share = (p: Part) => {
+    if (byScale) return ((p.total.czk ?? 0) / scaleCzk) * 100;
     const all = measure(y.proceeds);
     return all > 0 ? (measure(p.total) / all) * 100 : 100 / parts.length;
   };
@@ -1501,31 +1507,33 @@ function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>): H
         h('span', { class: 'num' }, fmtMoney(e.value, curCode())),
         h('span', { class: 'muted' }, `${count(e.n)} · ${fmtNum(e.qty, 4)} ks`)), 5)));
   };
+  const used = y.shortTermProceeds.czk;
+  const limitTip = () => [
+    h('b', {}, `Prodeje bez časového testu za ${fmtMoney(used, 'CZK')} z limitu ${fmtMoney(SALES_LIMIT_CZK, 'CZK')}`),
+    h('div', { class: 'muted' }, used == null ? 'Chybí kurz ČNB, limit nejde ověřit.' : over
+      ? `Překročeno o ${fmtMoney(used - SALES_LIMIT_CZK, 'CZK')} – zdaní se zisk ze všech prodejů bez časového testu.`
+      : `Zbývá ${fmtMoney(SALES_LIMIT_CZK - used, 'CZK')}. Počítají se hrubé příjmy z prodejů, ne zisk; prodeje po časovém testu se nepočítají.`)];
   const out: HTMLElement[] = [
     h('div', { class: 'year-total' }, 'Celkem ', h('b', {}, `${count(y.salesCount)} za ${totals(y.proceeds)}`)),
   ];
+  if (used != null && used > 0) {
+    out.push(tip(h('div', { class: 'year-limit', tabindex: '0' },
+      'Limit 100 tis. bez časového testu využit na ', h('b', { class: over ? 'neg' : '' }, `${fmtNum((used / SALES_LIMIT_CZK) * 100, 0)} %`)), limitTip));
+  }
   if (parts.length) {
+    const limitAt = byScale && SALES_LIMIT_CZK <= scaleCzk ? (SALES_LIMIT_CZK / scaleCzk) * 100 : null;
+    const marker = limitAt == null ? null : tip(paint(h('div', { class: limitAt > 80 ? 'ybar-limit end' : 'ybar-limit', tabindex: '-1' },
+      h('span', {}, '100 tis.')), { left: `${limitAt}%` }), limitTip);
     out.push(
-      h('div', { class: 'stackbar year-bar', role: 'img', 'aria-label': parts.map((p) => `${p.label}: ${count(p.sold.length)} za ${totals(p.total)}`).join(', ') },
-        ...parts.map((p) => tip(paint(h('span', { class: p.cls, tabindex: '-1' }), { width: `${share(p)}%` }), () => [
-          h('div', {}, h('span', { class: `dot ${p.cls}` }), ' ', h('b', {}, p.label)),
-          h('div', {}, `${count(p.sold.length)} za ${totals(p.total)}`),
-          h('div', { class: 'muted' }, p.info)]))),
+      h('div', { class: marker ? 'ybar-wrap marked' : 'ybar-wrap' },
+        h('div', { class: 'ybar', role: 'img', 'aria-label': parts.map((p) => `${p.label}: ${count(p.sold.length)} za ${totals(p.total)}`).join(', ') },
+          ...parts.map((p) => tip(paint(h('span', { class: p.cls, tabindex: '-1' }), { width: `${share(p)}%` }), () => [
+            h('div', {}, h('span', { class: `dot ${p.cls}` }), ' ', h('b', {}, p.label)),
+            h('div', {}, `${count(p.sold.length)} za ${totals(p.total)}`),
+            h('div', { class: 'muted' }, p.info)]))),
+        marker),
       h('div', { class: 'year-parts' }, ...parts.map(group)),
     );
-  }
-  const used = y.shortTermProceeds.czk;
-  if (used != null && used > 0) {
-    const pctUsed = (used / SALES_LIMIT_CZK) * 100;
-    out.push(tip(h('div', { class: 'year-limit', tabindex: '0' },
-      h('div', { class: 'year-limit-head' },
-        h('span', { class: 'muted' }, 'Limit 100 tis. bez časového testu'),
-        h('span', { class: 'num' }, `${fmtNum(pctUsed, 0)} %`)),
-      progress(used / SALES_LIMIT_CZK, over ? 'over' : 'done')), () => [
-      h('b', {}, `Využito ${fmtMoney(used, 'CZK')} z ${fmtMoney(SALES_LIMIT_CZK, 'CZK')}`),
-      h('div', { class: 'muted' }, over
-        ? `Překročeno o ${fmtMoney(used - SALES_LIMIT_CZK, 'CZK')} – zdaní se zisk ze všech prodejů bez časového testu.`
-        : `Zbývá ${fmtMoney(SALES_LIMIT_CZK - used, 'CZK')}. Počítají se hrubé příjmy z prodejů, ne zisk.`)]));
   }
   return out;
 }

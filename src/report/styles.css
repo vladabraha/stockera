@@ -331,13 +331,22 @@ tbody tr:hover td { background: var(--sunk); }
 .year-head b { font: 600 1.35rem/1 var(--fig); }
 .year-total { color: var(--muted); }
 .year-total b { color: var(--text); font-weight: 600; }
-.year-bar { height: 10px; margin: 0; }
-.year-bar .free, .ypart i.free, .dot.free { background: var(--pos); }
-.year-bar .short, .ypart i.short, .dot.short { background: var(--warn); }
-.year-bar .taxed, .ypart i.taxed, .dot.taxed { background: var(--neg); }
+/* one bar per year on a shared scale: short-term sales from the left, the dashed line = 100k limit */
+.ybar-wrap { position: relative; margin: 4px 0 2px; }
+.ybar-wrap.marked { padding-bottom: 16px; }
+.ybar { display: flex; gap: 2px; height: 12px; border-radius: 99px; background: var(--sunk); overflow: hidden; }
+.ybar span { min-width: 4px; outline: none; cursor: default; }
+.ybar span:first-child { border-radius: 99px 0 0 99px; }
+.ybar-limit { position: absolute; top: -3px; height: 18px; border-left: 2px dashed var(--text); opacity: .7; outline: none; }
+.ybar-limit span { position: absolute; top: 19px; left: 0; transform: translateX(-50%); font-size: .68rem; color: var(--muted); white-space: nowrap; }
+.ybar-limit.end span { transform: translateX(-100%); }
+.ybar .free, .ypart i.free, .dot.free { background: var(--pos); }
+.ybar .short, .ypart i.short, .dot.short { background: color-mix(in srgb, var(--pos) 45%, transparent); }
+.ybar .taxed, .ypart i.taxed, .dot.taxed { background: var(--neg); }
+.ybar .unknown, .ypart i.unknown, .dot.unknown { background: var(--muted); }
 .year-parts { display: flex; flex-direction: column; }
 .ypart { all: unset; box-sizing: border-box; width: 100%; padding: 7px 6px; margin: 0 -6px; width: calc(100% + 12px); border-radius: 8px; cursor: pointer; }
-.ypart:hover, .ypart:focus-visible, .year-limit:hover, .year-limit:focus-visible { background: var(--sunk); outline: none; }
+.ypart:hover, .ypart:focus-visible { background: var(--sunk); outline: none; }
 .ypart-head { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .ypart i { width: 10px; height: 10px; border-radius: 50%; }
 .ypart-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -354,8 +363,10 @@ tbody tr:hover td { background: var(--sunk); }
 .ypart-list .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ypart-body .lt-more, .offset .lt-more { margin-top: 6px; }
 .year-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
-.year-limit { display: flex; flex-direction: column; gap: 5px; padding: 6px 4px; margin: 0 -4px; border-radius: 6px; cursor: default; }
-.year-limit-head { display: flex; justify-content: space-between; font-size: .8rem; }
+.year-limit { font-size: .82rem; color: var(--muted); cursor: default; outline: none; align-self: flex-start; }
+.year-limit b { color: var(--text); }
+.year-limit b.neg { color: var(--neg); }
+.year-limit:focus-visible { text-decoration: underline dotted; }
 .year dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 4px 0 0; font-size: .86rem; }
 .year dt { color: var(--muted); }
 .year dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
