@@ -129,7 +129,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Vyrovnání letošní daně ztrátou** (karta letošního roku v „Daně podle let“): když letošní prodeje mají daň,
   ukáže se (po kliknutí na „Jak snížit daň“), které držené pozice prodat se ztrátou, aby se základ vynuloval (`lossOffsetPlan`). Prodej se páruje
   **FIFO** per účet a ticker, takže jde prodat jen nejstarší loty; loty se splněným testem se nezapočítají (jejich
-  zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Podle aktuálních (i živých) cen.
+  zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Text uvádí, o kolik daň klesne (z → na). Podle aktuálních (i živých) cen.
   Když FIFO prodá i staré loty se splněným testem (`taxFreeQuantity`), doporučení na to upozorní – po zpětném nákupu
   by časový test běžel znovu. Při více účtech se u doporučení uvádí účet.
 - **Návod k daňovému přiznání** (tlačítko „Co vyplnit v přiznání“ v kartě roku, `taxReturnGuide` v `tax.ts`), podle

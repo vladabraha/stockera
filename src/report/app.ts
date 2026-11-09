@@ -6,7 +6,7 @@ import type { Money, Percent, Totals } from '../analysis/fx.ts';
 import type { HistoryPoint } from '../analysis/market.ts';
 import { decryptPayload, type EncryptedPayload } from './crypto.ts';
 import { applyLive, fetchLive, periodGain, type LiveSources } from './live.ts';
-import { SALES_LIMIT_CZK, lossOffsetPlan, taxReturnGuide, type TaxReturnGuide } from '../analysis/tax.ts';
+import { SALES_LIMIT_CZK, incomeTax, lossOffsetPlan, taxReturnGuide, type TaxReturnGuide } from '../analysis/tax.ts';
 
 type Cur = 'czk' | 'eur';
 type Child = Node | string | null | undefined | false;
@@ -1636,11 +1636,13 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
   })));
   const plan = lossOffsetPlan(baseCzk, lots);
   const manyAccounts = new Set(lots.map((l) => l.account)).size > 1;
+  const taxCzk = incomeTax(baseCzk) ?? 0;
+  const saved = fmtMoney(taxCzk - plan.remainingTaxCzk, 'CZK');
   const lead = !plan.sales.length
     ? 'Daň by šlo snížit prodejem pozic ve ztrátě, ale teď žádná ztrátová pozice bez časového testu není.'
     : plan.remainingTaxCzk > 0
-      ? `Ztrátové pozice pokryjí ${fmtMoney(-plan.lossCzk, 'CZK')} z ${fmtMoney(baseCzk, 'CZK')}. Po jejich prodeji klesne daň na ${fmtMoney(plan.remainingTaxCzk, 'CZK')}.`
-      : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')}. Stačí prodat:`;
+      ? `Ztrátové pozice pokryjí ${fmtMoney(-plan.lossCzk, 'CZK')} ze základu ${fmtMoney(baseCzk, 'CZK')}. Po jejich prodeji klesne daň o ${saved} z ${fmtMoney(taxCzk, 'CZK')} na ${fmtMoney(plan.remainingTaxCzk, 'CZK')}.`
+      : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')} – klesne o ${saved} na 0 Kč. Stačí prodat:`;
   return h('div', { class: 'offset' },
     h('p', {}, lead),
     ...(plan.sales.length ? lazyList('offset', h('ul', {}), plan.sales, (s) => h('li', {},
