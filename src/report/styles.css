@@ -204,12 +204,15 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 /* sectors */
 .stackbar { display: flex; gap: 2px; height: 14px; border-radius: 99px; overflow: hidden; margin-bottom: 16px; }
 .stackbar span { min-width: 2px; }
-.sector-wrap { position: relative; }
+.tip-host { position: relative; }
 .sector-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(var(--rows, 1), auto); grid-auto-flow: column; column-gap: 32px; }
 .sector-list li { cursor: default; }
 .sector-list li:hover, .sector-list li:focus-visible { background: var(--sunk); outline: none; }
 .stackbar span { cursor: default; outline: none; }
-.sector-tip { z-index: 6; white-space: normal; width: max-content; max-width: min(300px, 100%); }
+.float-tip { z-index: 6; white-space: normal; width: max-content; max-width: min(320px, 100%); }
+.tip-list { list-style: none; margin: 6px 0 0; padding: 0; }
+.tip-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 4px 0; border-top: 1px solid var(--line); }
+.tip-list .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sector-list li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto 64px; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line); }
 .sector-list .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sector-list b { text-align: right; }
@@ -329,6 +332,22 @@ tbody tr:hover td { background: var(--sunk); }
 .year { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
 .year-head { display: flex; justify-content: space-between; align-items: center; }
 .year-head b { font: 600 1.35rem/1 var(--fig); }
+.year-total { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.year-total b { font: 600 1.1rem var(--fig); }
+.year-total span:last-child { margin-left: auto; }
+.year-bar { height: 10px; margin: 2px 0 0; }
+.year-bar .free, .year-legend i.free, .dot.free { background: var(--pos); }
+.year-bar .short, .year-legend i.short, .dot.short { background: var(--warn); }
+.year-bar .taxed, .year-legend i.taxed, .dot.taxed { background: var(--neg); }
+.year-legend { list-style: none; margin: 0; padding: 0; }
+.year-legend li { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; align-items: center; column-gap: 10px; padding: 6px 4px; margin: 0 -4px; border-radius: 6px; cursor: default; }
+.year-legend li:hover, .year-legend li:focus-visible, .year-limit:hover, .year-limit:focus-visible { background: var(--sunk); outline: none; }
+.year-legend i { width: 10px; height: 10px; border-radius: 50%; }
+.year-legend .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.year-legend .ystat { grid-column: 2 / -1; font-size: .75rem; color: var(--muted); }
+.year-legend .ystat.free { color: var(--pos); } .year-legend .ystat.taxed { color: var(--neg); }
+.year-limit { display: flex; flex-direction: column; gap: 5px; padding: 6px 4px; margin: 0 -4px; border-radius: 6px; cursor: default; }
+.year-limit-head { display: flex; justify-content: space-between; font-size: .8rem; }
 .year dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 4px 0 0; font-size: .86rem; }
 .year dt { color: var(--muted); }
 .year dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }

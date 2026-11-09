@@ -343,6 +343,10 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   Otevřený akordeon se v okně drží nahoře.
   **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
   okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
+  Karta roku (`yearSales`): „Prodáno za“ + počet prodejů, pruh rozdělený podle objemu na *po časovém testu*
+  (zelená, osvobozeno) a *bez časového testu* (oranžová v limitu, červená nad limitem), pod ním legenda s počtem
+  a částkou (čitelná i na mobilu bez najetí) a zvlášť popsaný ukazatel limitu 100 tis. v %. Tooltip (najetí,
+  klepnutí, fokus; sdílený `hoverTip` jako u sektorů) vysvětlí kategorii a vypíše prodané instrumenty (kusy, částka).
 - Statistika **FIRE renta** = aktuální hodnota × 4 % / 12 v měně přepínače (počítá se při vykreslení, takže se
   mění i s živými cenami). Bez daní a inflace, sazba je konstanta `FIRE_RATE` v `app.ts`.
 - Patička ukazuje `lastTransactionDate` (nejnovější obchod nebo peněžní pohyb ve výpisech, pražské datum) vedle data

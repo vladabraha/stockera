@@ -1284,34 +1284,46 @@ function geographyPanel(a: Analysis): HTMLElement {
   );
 }
 
+/**
+ * Floating tooltip inside `host` (position: relative) for hover, tap and keyboard focus.
+ * Returns a function that wires an element to show the given content.
+ */
+function hoverTip(host: HTMLElement): <T extends HTMLElement>(el: T, content: () => Child[]) => T {
+  const tip = h('div', { class: 'tip float-tip', role: 'tooltip' });
+  host.append(tip);
+  const show = (target: HTMLElement, content: () => Child[], clientX: number | null) => {
+    tip.replaceChildren(...content().filter((c): c is Node | string => c != null && c !== false));
+    const box = host.getBoundingClientRect(), t = target.getBoundingClientRect();
+    tip.classList.add('show');
+    const left = (clientX ?? t.left + t.width / 2) - box.left - tip.offsetWidth / 2;
+    paint(tip, { left: `${Math.max(0, Math.min(left, box.width - tip.offsetWidth))}px`, top: `${t.bottom - box.top + 6}px` });
+  };
+  return (el, content) => {
+    el.addEventListener('pointerenter', (e) => show(el, content, e.clientX));
+    el.addEventListener('pointermove', (e) => show(el, content, e.clientX));
+    // On touch, pointerleave comes right after the tap: keep the tip until focus moves elsewhere
+    el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') tip.classList.remove('show'); });
+    el.addEventListener('focus', () => show(el, content, null));
+    el.addEventListener('blur', () => tip.classList.remove('show'));
+    return el;
+  };
+}
+
 function sectorsPanel(a: Analysis): HTMLElement | null {
   const items = (a.sectors ?? []).filter((x) => x.share >= 0.05);
   if (!items.length) return null;
   const sorted = [...items].sort((p, q) => (p.sector === 'other' || p.sector === '??' ? 1 : 0) - (q.sector === 'other' || q.sector === '??' ? 1 : 0) || q.share - p.share);
   const colour = (k: string) => SECTOR_COLORS[k] ?? '#9aa3b2';
   const value = (x: (typeof items)[number]) => { const v = x[state.cur]; return v == null ? null : fmtMoney(v, curCode()); };
-  const tip = h('div', { class: 'tip sector-tip', role: 'tooltip' });
-  const wrap = h('div', { class: 'sector-wrap' });
-  const showTip = (x: (typeof items)[number], target: HTMLElement, clientX: number | null) => {
+  const wrap = h('div', { class: 'tip-host' });
+  const tip = hoverTip(wrap);
+  const hover = <T extends HTMLElement>(el: T, x: (typeof items)[number]): T => tip(el, () => {
     const v = value(x);
-    tip.replaceChildren(
+    return [
       h('div', {}, paint(h('span', { class: 'dot' }), { background: colour(x.sector) }), ' ', h('b', {}, sectorName(x.sector))),
       h('div', { class: 'muted' }, SECTOR_INFO[x.sector] ?? ''),
-      h('div', {}, h('b', {}, `${fmtNum(x.share, 1)} %`), v ? ` portfolia · ${v}` : ' portfolia'));
-    const box = wrap.getBoundingClientRect(), t = target.getBoundingClientRect();
-    tip.classList.add('show');
-    const left = (clientX ?? t.left + t.width / 2) - box.left - tip.offsetWidth / 2;
-    paint(tip, { left: `${Math.max(0, Math.min(left, box.width - tip.offsetWidth))}px`, top: `${t.bottom - box.top + 6}px` });
-  };
-  const hover = <T extends HTMLElement>(el: T, x: (typeof items)[number]): T => {
-    el.addEventListener('pointerenter', (e) => showTip(x, el, e.clientX));
-    el.addEventListener('pointermove', (e) => showTip(x, el, e.clientX));
-    // On touch, pointerleave comes right after the tap: keep the tip until focus moves elsewhere
-    el.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') tip.classList.remove('show'); });
-    el.addEventListener('focus', () => showTip(x, el, null));
-    el.addEventListener('blur', () => tip.classList.remove('show'));
-    return el;
-  };
+      h('div', {}, h('b', {}, `${fmtNum(x.share, 1)} %`), v ? ` portfolia · ${v}` : ' portfolia')];
+  });
   wrap.append(
     h('div', { class: 'stackbar', role: 'img', 'aria-label': sorted.map((x) => `${sectorName(x.sector)} ${fmtNum(x.share, 1)} %`).join(', ') },
       ...sorted.map((x) => hover(paint(h('span', { tabindex: '-1' }), { width: `${x.share}%`, background: colour(x.sector) }), x))),
@@ -1320,8 +1332,7 @@ function sectorsPanel(a: Analysis): HTMLElement | null {
       paint(h('i', {}), { background: colour(x.sector) }),
       h('span', { class: 'lname' }, sectorName(x.sector)),
       h('span', { class: 'num muted' }, value(x) ?? ''),
-      h('b', { class: 'num' }, `${fmtNum(x.share, 1)} %`)), x))), { '--rows': String(Math.ceil(sorted.length / 2)) }),
-    tip);
+      h('b', { class: 'num' }, `${fmtNum(x.share, 1)} %`)), x))), { '--rows': String(Math.ceil(sorted.length / 2)) }));
   return panel('Podle sektorů',
     wrap,
     h('p', { class: 'hint' }, 'ETF jsou rozpočítané podle sektorů firem, do kterých investují (onvista, případně justETF).'),
@@ -1398,26 +1409,23 @@ function soldTab(a: Analysis): HTMLElement {
 function taxYearsPanel(a: Analysis): HTMLElement {
   const years = a.taxYears, holdings = a.holdings;
   const yearCard = (y: TaxYear) => {
-    const used = y.shortTermProceeds.czk;
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
     const open = state.taxGuideYear === y.year;
-    return h('div', { class: open ? 'year active' : 'year' },
+    const card = h('div', { class: open ? 'year active tip-host' : 'year tip-host' });
+    card.append(
       h('div', { class: 'year-head' }, h('b', {}, String(y.year)), limit),
-      used != null ? progress(used / SALES_LIMIT_CZK, y.limitStatus === 'exceeded' ? 'over' : 'done') : null,
-      h('div', { class: 'muted small' }, `Příjmy z prodejů bez časového testu ${fmtMoney(used, 'CZK')} z limitu ${fmtMoney(SALES_LIMIT_CZK, 'CZK')}`),
+      ...yearSales(a, y, hoverTip(card)),
       h('dl', {},
-        h('dt', {}, 'Prodejů'), h('dd', {}, String(y.salesCount)),
-        h('dt', {}, 'Osvobozeno časovým testem'), h('dd', {}, totals(y.timeTestedProceeds)),
-        h('dt', {}, 'Zdanitelné prodeje'), h('dd', {}, y.taxable.count ? `${y.taxable.count}× za ${totals(y.taxable.proceeds)}` : 'žádné'),
         h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
         h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
-      y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0 ? lossOffsetNote(y.taxable.baseCzk!, holdings) : null,
+      y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0 ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
       button(open ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
         state.taxGuideYear = open ? null : y.year;
         render();
       }, 'ghost'),
     );
+    return card;
   };
   const guideYear = years.find((y) => y.year === state.taxGuideYear);
   return panel('Daně podle let',
@@ -1425,6 +1433,84 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     guideYear ? taxGuidePanel(a, guideYear) : null,
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok z prodejů bez časového testu, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
   );
+}
+
+const salesWord = (n: number) => (n === 1 ? 'prodej' : n >= 2 && n <= 4 ? 'prodeje' : 'prodejů');
+
+/**
+ * Sales of one year split into time-tested (exempt) and short-term (counted towards the 100k limit):
+ * a proportional bar, a legend with counts and amounts (readable without hover on mobile) and the limit meter.
+ * Tooltips list the sold instruments.
+ */
+function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>): HTMLElement[] {
+  const sold = a.realized.flatMap((r) => r.lots.filter((l) => l.closeDate.startsWith(`${y.year}-`)).map((l) => ({ r, l })));
+  const over = y.limitStatus === 'exceeded';
+  const parts = [
+    { label: 'Po časovém testu', total: y.timeTestedProceeds, cls: 'free', sold: sold.filter((s) => s.l.timeTestMet),
+      status: 'osvobozeno', info: 'Drženo déle než 3 roky – osvobozeno od daně a do limitu 100 000 Kč se nepočítá.' },
+    { label: 'Bez časového testu', total: y.shortTermProceeds, cls: over ? 'taxed' : 'short', sold: sold.filter((s) => !s.l.timeTestMet),
+      status: over ? 'zdaní se zisk' : y.limitStatus === 'within' ? 'v limitu, osvobozeno' : 'limit neověřen',
+      info: over ? 'Příjmy přesáhly limit 100 000 Kč – daní se zisk ze všech těchto prodejů (ztráty se odečtou).'
+        : y.limitStatus === 'within' ? 'Příjmy se vešly do limitu 100 000 Kč – osvobozeno.'
+          : 'Chybí kurz ČNB, limit 100 000 Kč nejde ověřit.' },
+  ].filter((p) => p.sold.length);
+  const amount = (m: Money) => m[state.cur];
+  const content = (p: (typeof parts)[number]) => () => {
+    const byTicker = new Map<string, { name: string; qty: number; value: number | null; n: number }>();
+    for (const { r, l } of p.sold) {
+      const e = byTicker.get(r.ticker) ?? { name: r.name ?? r.ticker, qty: 0, value: 0, n: 0 };
+      e.qty += l.quantity;
+      e.n++;
+      e.value = e.value == null || amount(l.proceeds) == null ? null : e.value + amount(l.proceeds)!;
+      byTicker.set(r.ticker, e);
+    }
+    const rows = [...byTicker.entries()].sort(([, x], [, z]) => (z.value ?? 0) - (x.value ?? 0));
+    const shown = rows.slice(0, 6);
+    return [
+      h('div', {}, h('span', { class: `dot ${p.cls}` }), ' ', h('b', {}, p.label), ` · ${p.sold.length} ${salesWord(p.sold.length)} za ${totals(p.total)}`),
+      h('div', { class: 'muted' }, p.info),
+      h('ul', { class: 'tip-list' }, ...shown.map(([ticker, e]) => h('li', {},
+        h('span', { class: 'lname' }, h('b', {}, ticker), ` ${e.name}`),
+        h('span', { class: 'num muted' }, `${fmtNum(e.qty, 4)} ks`),
+        h('span', { class: 'num' }, fmtMoney(e.value, curCode()))))),
+      rows.length > shown.length ? h('div', { class: 'muted' }, `a ${rows.length - shown.length} dalších`) : null,
+    ];
+  };
+  const share = (p: (typeof parts)[number]) => {
+    const all = measure(y.proceeds);
+    return all > 0 ? (measure(p.total) / all) * 100 : 100 / parts.length;
+  };
+  const out: HTMLElement[] = [
+    h('div', { class: 'year-total' },
+      h('span', { class: 'muted' }, 'Prodáno za'), h('b', {}, totals(y.proceeds)),
+      h('span', { class: 'muted' }, `${y.salesCount} ${salesWord(y.salesCount)}`)),
+  ];
+  if (parts.length) {
+    out.push(
+      h('div', { class: 'stackbar year-bar', role: 'img', 'aria-label': parts.map((p) => `${p.label}: ${p.sold.length}× za ${totals(p.total)}`).join(', ') },
+        ...parts.map((p) => tip(paint(h('span', { class: p.cls, tabindex: '-1' }), { width: `${share(p)}%` }), content(p)))),
+      h('ul', { class: 'year-legend' }, ...parts.map((p) => tip(h('li', { tabindex: '0' },
+        h('i', { class: p.cls }),
+        h('span', { class: 'lname' }, p.label),
+        h('span', { class: 'num muted' }, `${p.sold.length}×`),
+        h('b', { class: 'num' }, totals(p.total)),
+        h('span', { class: `ystat ${p.cls}` }, p.status)), content(p)))),
+    );
+  }
+  const used = y.shortTermProceeds.czk;
+  if (used != null && used > 0) {
+    const pctUsed = (used / SALES_LIMIT_CZK) * 100;
+    out.push(tip(h('div', { class: 'year-limit', tabindex: '0' },
+      h('div', { class: 'year-limit-head' },
+        h('span', { class: 'muted' }, 'Limit 100 tis. bez časového testu'),
+        h('span', { class: 'num' }, `${fmtNum(pctUsed, 0)} %`)),
+      progress(used / SALES_LIMIT_CZK, over ? 'over' : 'done')), () => [
+      h('b', {}, `Využito ${fmtMoney(used, 'CZK')} z ${fmtMoney(SALES_LIMIT_CZK, 'CZK')}`),
+      h('div', { class: 'muted' }, over
+        ? `Překročeno o ${fmtMoney(used - SALES_LIMIT_CZK, 'CZK')} – zdaní se zisk ze všech prodejů bez časového testu.`
+        : `Zbývá ${fmtMoney(SALES_LIMIT_CZK - used, 'CZK')}. Počítají se hrubé příjmy z prodejů, ne zisk.`)]));
+  }
+  return out;
 }
 
 /** What to fill in the Czech tax return (DAP) for one year and what to attach. */
