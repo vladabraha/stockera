@@ -344,8 +344,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
   okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
   Karta roku (`yearSales`): „Celkem N prodejů za X“, pod tím jednou „Limit 100 tis. bez časového testu využit
-  na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (největší rok
-  ≈ 95 % šířky, takže nic nepřeteče a malé prodeje nejsou ztracené vůči pevným 100 tis.; segment má min. 4 px):
+  na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (rok s nejvyššími
+  prodeji = celá šířka, takže nic nepřeteče a malé prodeje nejsou ztracené vůči pevným 100 tis.; segment má min. 4 px):
   zleva prodeje bez časového testu (červená = ke zdanění, světle zelená = osvobozeno v limitu, šedá = neověřeno),
   za nimi prodeje po časovém testu (zelená). Čárkovaná čára „100 tis.“ ukazuje limit (jen když je v měřítku),
   takže je vidět, kdy prodeje bez testu limit přetáhnou. Tooltip segmentu a čáry (sdílený `hoverTip`).

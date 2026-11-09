@@ -1411,8 +1411,8 @@ function soldTab(a: Analysis): HTMLElement {
 
 function taxYearsPanel(a: Analysis): HTMLElement {
   const years = a.taxYears, holdings = a.holdings;
-  // Same scale for every year card: the biggest year fills ~95 % of the bar
-  const scaleCzk = Math.max(0, ...years.map((y) => y.proceeds.czk ?? 0)) * 1.05;
+  // Same scale for every year card: the year with the highest sales fills the whole bar
+  const scaleCzk = Math.max(0, ...years.map((y) => y.proceeds.czk ?? 0));
   const yearCard = (y: TaxYear) => {
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
