@@ -274,6 +274,7 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .upcoming li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .upcoming li:first-child { border-top: 0; padding-top: 0; }
 .upcoming .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.upcoming .iname > span { white-space: normal; }
 .upcoming .right { text-align: right; }
 .upcoming .right b { font-family: var(--fig); font-weight: 600; }
 
