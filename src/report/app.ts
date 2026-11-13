@@ -51,6 +51,8 @@ const state = {
   /** Expanded sale groups of the tax year cards ("2026:free") and the open loss-offset advice. */
   yearParts: new Set<string>(),
   offsetOpen: false,
+  /** "Složení portfolia": own instruments, or the stocks inside ETFs (look-through). */
+  allocView: 'instruments' as 'instruments' | 'lookThrough',
   /** Long lists: expanded into a scroll box (`open`) and how many rows are loaded there (`n`). */
   lists: {} as Partial<Record<ListKey, { open: boolean; n: number }>>,
   /** Inner scroll positions kept across re-renders (lists, tax years). */
@@ -603,7 +605,6 @@ function portfolioTab(a: Analysis): HTMLElement {
     ),
     h('div', { class: 'grid2' }, allocationPanel(a), geographyPanel(a)),
     sectorsPanel(a),
-    lookThroughPanel(a),
     panel(null,
       h('div', { class: 'panel-head' }, h('h2', {}, 'Pozice'), h('span', { class: 'muted' }, `${a.holdings.length} instrumentů, ${lots.length} nákupů`)),
       ...lazyList('holdings', h('div', { class: 'acc-list' }), a.holdings, holdingRow)),
@@ -1255,10 +1256,20 @@ function donut(items: { value: number; color: string; title: string }[], label: 
 }
 
 function allocationPanel(a: Analysis): HTMLElement {
+  const lt = hasLookThrough(a);
+  const view = lt ? state.allocView : 'instruments';
+  const head = h('div', { class: 'panel-head' }, h('h2', {}, 'Složení portfolia'),
+    lt ? segmented([['instruments', 'Instrumenty'], ['lookThrough', 'Akcie uvnitř ETF']], view, (v) => { state.allocView = v; render(); }, 'small') : null);
+  return panel(null, head, ...(view === 'lookThrough' ? lookThroughBody(a) : instrumentBars(a)));
+}
+
+const hasLookThrough = (a: Analysis) => !!a.lookThrough?.items.length && a.holdings.some((x) => x.category === 'ETF');
+
+function instrumentBars(a: Analysis): HTMLElement[] {
   const total = a.holdings.reduce((n, x) => n + measure(x.value), 0);
   const items = [...a.holdings].sort((p, q) => measure(q.value) - measure(p.value));
   const max = Math.max(...items.map((x) => measure(x.value)), 1);
-  return panel('Složení portfolia',
+  return [
     h('div', { class: 'bars alloc' }, ...items.map((x) => {
       const v = measure(x.value);
       const row = h('div', { class: 'bar-row', tabindex: '0', role: 'button', title: 'Zobrazit graf' },
@@ -1270,7 +1281,7 @@ function allocationPanel(a: Analysis): HTMLElement {
       return row;
     })),
     h('p', { class: 'hint' }, 'Kliknutím na instrument zobrazíš jeho graf.'),
-  );
+  ];
 }
 
 const COUNTRY_SLICES = 8;
@@ -1354,9 +1365,8 @@ function sectorsPanel(a: Analysis): HTMLElement | null {
 
 const LT_MAX = 100;
 
-function lookThroughPanel(a: Analysis): HTMLElement | null {
-  const lt = a.lookThrough;
-  if (!lt?.items.length || !a.holdings.some((x) => x.category === 'ETF')) return null;
+function lookThroughBody(a: Analysis): HTMLElement[] {
+  const lt = a.lookThrough!;
   const items = lt.items.slice(0, LT_MAX);
   const etf = new Set(a.holdings.filter((x) => x.category === 'ETF').map((x) => x.ticker));
   const max = Math.max(...items.map((c) => c.share), 0.0001);
@@ -1381,11 +1391,15 @@ function lookThroughPanel(a: Analysis): HTMLElement | null {
     return h('li', {}, d);
   };
   const missing = lt.missing.length ? ` U ${lt.missing.join(', ')} pozice nejsou známé.` : '';
-  return panel(null,
-    h('div', { class: 'panel-head' }, h('h2', {}, 'Akcie uvnitř ETF'), h('span', { class: 'muted' }, `Známé pozice tvoří ${fmtNum(lt.coveredShare, 0)} % portfolia`)),
+  const rest = Math.max(0, 100 - items.reduce((n, c) => n + c.share, 0));
+  return [
     ...lazyList('lookThrough', h('ol', { class: 'lt-list' }), items, row),
-    h('p', { class: 'hint' }, `Stejná akcie z více ETF i z přímého nákupu je sečtená. Procenta jsou z hodnoty celého portfolia. U každého ETF je známých jen 10 největších pozic (justETF, případně onvista), zbytek tvoří menší pozice.${missing}`),
-  );
+    rest >= 0.05 ? h('div', { class: 'lt-rest' },
+      h('span', { class: 'lt-name' }, h('b', {}, 'Ostatní'), h('small', {}, 'menší a neznámé pozice v ETF')),
+      h('span', {}),
+      h('span', { class: 'num' }, h('b', {}, `${fmtFixed(rest, 2)} %`))) : null,
+    h('p', { class: 'hint' }, `Známé pozice tvoří ${fmtNum(lt.coveredShare, 0)} % portfolia. Stejná akcie z více ETF i z přímého nákupu je sečtená, procenta jsou z hodnoty celého portfolia. U každého ETF je známých jen 10 největších pozic (justETF, případně onvista).${missing}`),
+  ].filter((x): x is HTMLElement => x != null);
 }
 
 // ---------------------------------------------------------------- sold tab

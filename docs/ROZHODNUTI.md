@@ -396,7 +396,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   podle systému → světlý → tmavý (přání uživatele). Volba = `data-theme` na `<html>` + `localStorage`
   (`stockera-theme`; jde i u souboru z disku, při zákazu úložiště platí do zavření). Tmavé proměnné jsou v CSS
   dvakrát (media query s `:not([data-theme="light"])` a `[data-theme="dark"]`) – při změně barev upravit obě.
-- Panel **Akcie uvnitř ETF** (Portfolio, pod sektory; přání uživatele): ETF rozložené na jednotlivé akcie a stejná
+- **Akcie uvnitř ETF** (přání uživatele): přepínač v hlavičce panelu Složení portfolia „Instrumenty | Akcie uvnitř ETF“
+  (výchozí Instrumenty, `state.allocView`; dřív samostatný panel pod sektory – uživatel chtěl akcie nahoře u zemí).
+  Pod seznamem řádek „Ostatní“ = 100 % − známé pozice (menší a neznámé pozice v ETF). ETF rozložené na jednotlivé akcie a stejná
   akcie (podle ISIN) sečtená přes všechna ETF i přímý nákup (`lookThrough()` v `src/analysis/breakdown.ts`, sdílené
   s živými cenami). Řazeno podle podílu na celém portfoliu, ukazuje 10, tlačítkem po 10 až do 100 (v analýze max 100),
   od 11. řádku se seznam posouvá uvnitř panelu (`max-height`). Řádek se rozbalí na rozpad „z kterého ETF kolik %“.
