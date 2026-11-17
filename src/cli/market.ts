@@ -10,7 +10,7 @@ import { pragueDate } from '../analysis/calendar.ts';
 const { db: dbPath, config: configPath, networkLog: auditLog, marketLog } = paths;
 
 if (!existsSync(dbPath)) {
-  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť 2-vytvorit-report-windows.cmd / 2-vytvorit-report-mac.command.']);
+  fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť 2-vytvorit-nebo-aktualizovat-report-windows.cmd / 2-vytvorit-nebo-aktualizovat-report-mac.command.']);
 }
 
 console.log(`Stahuji tržní data. Povolené servery: ${[...ALLOWED_HOSTS].join(', ')}`);
@@ -83,12 +83,12 @@ console.log(`\nSíťových požadavků: ${http.log.length} (zablokovaných ${htt
 
 if (http.log.length > 0 && failedRequests === http.log.length) {
   console.log('\n✗ Nepodařilo se spojit s žádným serverem – nejspíš nejde internet.');
-  console.log('  Report se vytvoří s naposledy staženými cenami. Až bude internet, spusť znovu 2-vytvorit-report.');
+  console.log('  Report se vytvoří s naposledy staženými cenami. Až bude internet, spusť znovu 2-vytvorit-nebo-aktualizovat-report.');
   process.exit(2);
 }
 if (report.warnings.length) {
   console.log('\nUpozornění výše report neblokují – u dotčených instrumentů jen bude chybět část údajů.');
-  console.log('  • „nepodařilo se stáhnout“: server byl dočasně nedostupný → zkus 2-vytvorit-report později.');
+  console.log('  • „nepodařilo se stáhnout“: server byl dočasně nedostupný → zkus 2-vytvorit-nebo-aktualizovat-report později.');
   console.log(`  • „doplň do data/instruments.json“: údaj se nedá zjistit automaticky → doplň ho ručně podle vzoru ${paths.configExample}`);
   if (!existsSync(configPath)) console.log('    (soubor data/instruments.json zatím neexistuje – zkopíruj vzor a uprav ho).');
 }

@@ -77,7 +77,7 @@ try {
   New-Item -ItemType Directory -Force -Path 'data\input' | Out-Null
   Write-Host ''
   Write-Host 'Hotovo ✓' -ForegroundColor Green
-  Write-Host 'Další krok: ulož export z XTB do složky data\input a spusť 2-vytvorit-report-windows.cmd.'
+  Write-Host 'Další krok: ulož export z XTB do složky data\input a spusť 2-vytvorit-nebo-aktualizovat-report-windows.cmd.'
   if (Test-Path 'data\input') { Start-Process explorer.exe (Resolve-Path 'data\input') }
 } catch {
   Stop-Setup "Nečekaná chyba: $($_.Exception.Message)" @(

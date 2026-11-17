@@ -49,6 +49,6 @@ pnpm install || fail "Instalace nástrojů projektu selhala (podrobnosti výše)
 echo "[3/3] Nástroje projektu ✓"
 
 mkdir -p data/input
-printf '\nHotovo ✓\nDalší krok: ulož export z XTB do složky data/input (právě se otevřela) a spusť 2-vytvorit-report-mac.command.\n'
+printf '\nHotovo ✓\nDalší krok: ulož export z XTB do složky data/input (právě se otevřela) a spusť 2-vytvorit-nebo-aktualizovat-report-mac.command.\n'
 open data/input
 printf '\nOkno můžeš zavřít.\n'

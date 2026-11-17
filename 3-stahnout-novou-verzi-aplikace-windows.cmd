@@ -60,13 +60,13 @@ if exist "data\input\*.csv" set "HASINPUT=1"
 if not defined HASINPUT goto :noinput
 echo.
 echo == Pregenerovani reportu novou verzi ==
-call "%HERE%2-vytvorit-report-windows.cmd"
+call "%HERE%2-vytvorit-nebo-aktualizovat-report-windows.cmd"
 exit /b %errorlevel%
 
 :noinput
 echo.
 echo  Dalsi krok: uloz vypisy z XTB (XLSX) nebo Trading 212 (CSV) do slozky data\input
-echo  a spust 2-vytvorit-report-windows.cmd.
+echo  a spust 2-vytvorit-nebo-aktualizovat-report-windows.cmd.
 echo.
 pause
 exit /b 0

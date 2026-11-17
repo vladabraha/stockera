@@ -43,11 +43,11 @@ SQL řetězce v jednoduchých uvozovkách.
   (`npm install -g pnpm@<verze>` – přesná verze čtená z `packageManager`; při jiné verzi povýší). Verzi zjišťují s
   `npm_config_manage_package_manager_versions=false`, aby pnpm nezačal sám stahovat jinou verzi do domovské složky.
   `3-stahnout-novou-verzi-aplikace-*` po `git pull` dělá totéž, takže změna verze v `package.json` se rozšíří sama. Bez winget/brew jen odkážou na nodejs.org.
-- `2-vytvorit-report-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
+- `2-vytvorit-nebo-aktualizovat-report-*.cmd/.command` spouští **přímo `node src/cli/update.ts`** (ne pnpm – k běhu stačí Node ≥ 24, tím
   odpadá i problém s execution policy u `pnpm.ps1`). Předem ověří Node; po úspěchu otevřou `out/stockera.html`.
   `1-instalace-windows.cmd` běží přes `powershell -ExecutionPolicy Bypass` (platí jen pro daný proces).
 - `3-stahnout-novou-verzi-aplikace-*` (na přání uživatele **přes git**): odmítne složku, která není klon, a upravené sledované
-  soubory (nic nepřepíše); `git pull --ff-only` → `pnpm install --frozen-lockfile` → spustí `2-vytvorit-report-*`.
+  soubory (nic nepřepíše); `git pull --ff-only` → `pnpm install --frozen-lockfile` → spustí `2-vytvorit-nebo-aktualizovat-report-*`.
   Osobní data jsou v `.gitignore`, takže je pull nemůže změnit. `git pull` přepisuje i běžící skript a sh/cmd čtou
   skript průběžně: `.command` má vše ve funkci `main` (zparsuje se celá předem), `.cmd` se spustí z kopie v `%TEMP%`.
 - `.gitignore` je záměrně široký (i `*.xlsx`, `*.csv`, `*.pdf`, `*.db`, `*.log`, `.env`, `.idea/` mimo `data/`) –
@@ -434,7 +434,7 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     zeptá znovu až **po 30 dnech** (`LOGO_REFRESH_DAYS`, logo se mohlo změnit); když obnova selže (síť, 404,
     odmítnutý soubor), zůstane uložené logo. Logo, které zdroj nemá (404), se také zapamatuje na 30 dní.
   - Stahování vypne `"$logos": false` v `data/instruments.json` (už stažená loga zůstanou).
-  - Při stahování se v průběhu (i v průvodci `2-vytvorit-report`) vypisuje „TICKER: logo (Parqet)…“ a výsledek
+  - Při stahování se v průběhu (i v průvodci `2-vytvorit-nebo-aktualizovat-report`) vypisuje „TICKER: logo (Parqet)…“ a výsledek
     (staženo / není k dispozici / nepodařilo se stáhnout – zůstává uložené). Na konci `pnpm market` u každého instrumentu vypíše stav loga (staženo / z cache / není k dispozici / nepodařilo se
     stáhnout / vypnuto) a souhrn. Ruční loga (`data/logos`) byla odebrána – uživatel je nepotřebuje.
 - Pruhy **Složení portfolia** jsou rozdělené podle sektorů instrumentu v barvách a pořadí panelu Podle sektorů

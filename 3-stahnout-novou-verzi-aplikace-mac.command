@@ -54,10 +54,10 @@ main() {
 
   printf '\nNová verze aplikace je nainstalovaná ✓\n'
   if ! ls data/input 2>/dev/null | grep -qiE '\.(xlsx|csv)$'; then
-    printf '\nDalší krok: ulož výpisy z XTB (XLSX) nebo Trading 212 (CSV) do složky data/input\na spusť 2-vytvorit-report-mac.command.\n\nOkno můžeš zavřít.\n'
+    printf '\nDalší krok: ulož výpisy z XTB (XLSX) nebo Trading 212 (CSV) do složky data/input\na spusť 2-vytvorit-nebo-aktualizovat-report-mac.command.\n\nOkno můžeš zavřít.\n'
     exit 0
   fi
   printf '\n== Přegenerování reportu novou verzí ==\n'
-  exec ./2-vytvorit-report-mac.command
+  exec ./2-vytvorit-nebo-aktualizovat-report-mac.command
 }
 main "$@"; exit

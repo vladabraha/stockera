@@ -1,5 +1,5 @@
 #!/bin/sh
-# Stockera – načte výpisy z data/input, stáhne ceny a vytvoří out/stockera.html.
+# Stockera – načte výpisy z data/input, stáhne ceny a vytvoří nebo aktualizuje out/stockera.html.
 cd "$(dirname "$0")" || exit 1
 for p in /opt/homebrew/bin /usr/local/bin; do [ -d "$p" ] && PATH="$p:$PATH"; done
 export PATH
@@ -8,7 +8,7 @@ finish() { printf '\n'; printf 'Okno můžeš zavřít.\n'; exit "$1"; }
 
 v=$(node --version 2>/dev/null | sed -E 's/^v([0-9]+).*/\1/')
 if [ "${v:-0}" -lt 24 ]; then
-  printf '\n✗ Na tomto Macu chybí Node.js 24 nebo novější.\n\nCo dělat:\n  1. Spusť nejdřív 1-instalace-mac.command (dvojklikem).\n  2. Pak spusť 2-vytvorit-report-mac.command znovu.\n'
+  printf '\n✗ Na tomto Macu chybí Node.js 24 nebo novější.\n\nCo dělat:\n  1. Spusť nejdřív 1-instalace-mac.command (dvojklikem).\n  2. Pak spusť 2-vytvorit-nebo-aktualizovat-report-mac.command znovu.\n'
   finish 1
 fi
 

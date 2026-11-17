@@ -1,7 +1,7 @@
 @echo off
-rem Stockera - nacte vypisy z data\input, stahne ceny a vytvori out\stockera.html.
+rem Stockera - nacte vypisy z data\input, stahne ceny a vytvori nebo aktualizuje out\stockera.html.
 chcp 65001 >nul
-title Stockera - vytvoreni reportu
+title Stockera - vytvoreni nebo aktualizace reportu
 set "HERE=%~dp0"
 set "HERE_FWD=%HERE:\=/%"
 echo "%HERE_FWD%" | findstr /l /i /c:"/AppData/Local/Temp/" /c:".zip/" >nul
@@ -37,7 +37,7 @@ echo  [CHYBA] Na tomto pocitaci chybi Node.js 24 nebo novejsi.
 echo.
 echo  Co delat:
 echo    1. Spust nejdriv 1-instalace-windows.cmd (dvojklikem).
-echo    2. Pak zavri toto okno a spust 2-vytvorit-report-windows.cmd znovu.
+echo    2. Pak zavri toto okno a spust 2-vytvorit-nebo-aktualizovat-report-windows.cmd znovu.
 echo.
 pause
 exit /b 1
