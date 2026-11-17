@@ -51,7 +51,7 @@ const state = {
   /** Expanded sale groups of the tax year cards ("2026:free") and the open loss-offset advice. */
   yearParts: new Set<string>(),
   offsetOpen: false,
-  /** Tax years whose open/closed state differs from the default (this and last year open, older closed). */
+  /** Tax years whose open/closed state differs from the default (this year open, older closed). */
   yearsToggled: new Set<number>(),
   /** "Složení portfolia": own instruments, or the stocks inside ETFs (look-through). */
   allocView: 'instruments' as 'instruments' | 'lookThrough',
@@ -1501,7 +1501,7 @@ function taxYearsPanel(a: Analysis): HTMLElement {
   const thisYear = new Date().getFullYear();
   // Same scale for every year: the year with the highest sales fills the whole bar
   const scaleCzk = Math.max(0, ...years.map((y) => y.proceeds.czk ?? 0));
-  const isOpen = (y: number) => (y >= thisYear - 1) !== state.yearsToggled.has(y);
+  const isOpen = (y: number) => (y >= thisYear) !== state.yearsToggled.has(y);
   const toggle = (y: number) => {
     if (state.yearsToggled.has(y)) state.yearsToggled.delete(y); else state.yearsToggled.add(y);
   };
