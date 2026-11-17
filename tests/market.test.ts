@@ -494,6 +494,15 @@ test('logos: hand-picked file wins, downloads are checked, refused files and "no
     assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': null });
     assert.deepEqual(calls.filter((u) => u.includes('parqet')), ['https://assets.parqet.com/logos/isin/US0000000002?format=png']);
 
+    // cached for 30 days; a failed refresh (here 404) keeps the stored logo
+    calls.length = 0;
+    r = await updateMarketData(db, http, { ...opts, today: '2025-02-11' });
+    assert.equal(calls.filter((u) => u.includes('parqet')).length, 0);
+    r = await updateMarketData(db, http, { ...opts, today: '2025-02-13' });
+    assert.equal(calls.filter((u) => u.includes('parqet')).length, 2);
+    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': null });
+    assert.ok(analyze(db).instruments['ETFA.DE']!.logo);
+
     writeFileSync(join(dir, 'STK.US.png'), '<svg/>');
     r = await updateMarketData(db, http, opts);
     assert.ok(r.warnings.some((w) => w.includes('STK.US') && w.includes('není to obrázek')));

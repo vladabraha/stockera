@@ -423,7 +423,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   - Uloží se do tabulky `logos` (`ticker`, `mime`, `data` BLOB, `source` `parqet`|`manual`, `checked_at`), do reportu
     jde jako `data:image/png;base64,…` (CSP `img-src data:`, nic se nestahuje). Frontend před vložením ověří tvar
     data URI (`LOGO_URI`) a nastavuje `src` vlastností, `alt=""` (název je vedle), pevné `width`/`height`.
-  - Logo, které zdroj nemá (404), se zapamatuje a zkusí znovu až **po 90 dnech**; síťová chyba se jen zaloguje.
+  - **Cache:** stažené logo je v databázi, report ani nová verze aplikace nic nestahují. `pnpm market` se zdroje
+    zeptá znovu až **po 30 dnech** (`LOGO_REFRESH_DAYS`, logo se mohlo změnit); když obnova selže (síť, 404,
+    odmítnutý soubor), zůstane uložené logo. Logo, které zdroj nemá (404), se také zapamatuje na 30 dní.
   - **Ruční logo:** `data/logos/<TICKER>.png|jpg|jpeg|webp` (např. `AAPL.US.png`) má přednost, projde stejnou
     kontrolou (špatný soubor → varování); po smazání souboru se ruční logo odebere.
   - Stahování vypne `"$logos": false` v `data/instruments.json` (už stažená loga zůstanou).

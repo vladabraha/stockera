@@ -79,7 +79,8 @@ export interface UpdateReport {
 
 const PRICE_OVERLAP_DAYS = 7;
 /** An ISIN for which the logo service had nothing is asked again after this many days. */
-const LOGO_RETRY_DAYS = 90;
+/** Downloaded logos (and "no logo" answers) are reused this long before asking the source again. */
+const LOGO_REFRESH_DAYS = 30;
 const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 // Ticker as a file name: no path separators, no leading dot (so "../x" or ".hidden" can never be read).
 const SAFE_FILE_TICKER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -248,9 +249,9 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       db.prepare('DELETE FROM logos WHERE ticker = ?').run(ticker); // the file was removed
     }
     const current = stored?.source === 'manual' ? undefined : stored;
-    if (current?.has) return current.source;
-    if (!opts.logos || !isin || !ISIN_RE.test(isin)) return null;
-    if (current && (Date.parse(opts.today) - Date.parse(current.checked_at)) / 86_400_000 < LOGO_RETRY_DAYS) return null;
+    const cached = current?.has ? current.source : null;
+    if (!opts.logos || !isin || !ISIN_RE.test(isin)) return cached;
+    if (current && (Date.parse(opts.today) - Date.parse(current.checked_at)) / 86_400_000 < LOGO_REFRESH_DAYS) return cached;
     log(`${ticker}: logo…`);
     const url = logoUrl(isin);
     try {
@@ -260,10 +261,13 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       saveLogo.run(ticker, check.mime, bytes, 'parqet', opts.today);
       return 'parqet';
     } catch (e) {
-      // 404 = the service has no logo → remembered; network errors and refused files are retried next time
-      if ((e as { status?: number }).status === 404) saveLogo.run(ticker, null, null, 'parqet', opts.today);
-      else if (!(e instanceof UnsafeDataError)) log(`${ticker}: logo se nepodařilo stáhnout (${(e as Error).message})`);
-      return null;
+      // a failed refresh keeps the cached logo; 404 = the service has no logo → remembered for LOGO_REFRESH_DAYS;
+      // network errors and refused files are retried next time
+      if ((e as { status?: number }).status === 404) {
+        if (cached) db.prepare('UPDATE logos SET checked_at = ? WHERE ticker = ?').run(opts.today, ticker);
+        else saveLogo.run(ticker, null, null, 'parqet', opts.today);
+      } else if (!(e instanceof UnsafeDataError)) log(`${ticker}: logo se nepodařilo stáhnout (${(e as Error).message})`);
+      return cached;
     }
   };
 
