@@ -27,7 +27,7 @@ type Live = { status: 'idle' | 'loading' | 'live' | 'stale' | 'offline'; date: s
 
 /** Rows a long list loads at once while scrolling (and shows before "Zobrazit zbývajících"). */
 const LIST_STEP = 10;
-type ListKey = 'holdings' | 'realized' | 'upcoming' | 'lookThrough' | 'offset' | `year:${string}`;
+type ListKey = 'holdings' | 'realized' | 'upcoming' | 'lookThrough' | 'offset' | `year:${string}` | `div:${string}`;
 
 const state = {
   data: null as Analysis | null,
@@ -249,7 +249,10 @@ const SECTOR_INFO: Record<string, string> = {
 
 function progress(fraction: number, cls = ''): HTMLElement {
   const f = Math.max(0, Math.min(1, fraction));
-  return h('div', { class: `progress ${cls}` }, paint(h('div', { class: 'fill' }), { width: `${(f * 100).toFixed(1)}%` }));
+  const fill = paint(h('div', { class: 'fill' }), { width: `${(f * 100).toFixed(1)}%` });
+  // "heat": the fill reveals a red → green gradient spanning the whole track, so its end colour shows the progress
+  if (f > 0) paint(fill, { '--span': `${(100 / f).toFixed(1)}%` });
+  return h('div', { class: `progress ${cls}` }, fill);
 }
 
 function logo(): SVGElement {
@@ -758,7 +761,7 @@ function upcomingPanel(a: Analysis): HTMLElement | null {
     h('div', { class: 'grow' },
       h('div', { class: 'iname' }, h('b', { title: x.name ?? x.ticker }, x.name || x.ticker),
         h('span', {}, h('span', { class: 'ticker' }, x.ticker), `${fmtNum(l.quantity, 4)}\u00a0ks z `, h('span', { class: 'num' }, czDate(l.openDate)))),
-      progress(lotProgress(l))),
+      progress(lotProgress(l), 'heat')),
     h('div', { class: 'right' },
       h('b', {}, czDate(l.taxFreeFrom)),
       h('div', { class: 'muted small' }, `${inDays(l.daysUntilTaxFree)}, zisk `, signed(signedMoney(money(l.profit), moneyValue(l.profit)), moneyValue(l.profit)))));
@@ -1427,7 +1430,7 @@ function soldTab(a: Analysis): HTMLElement {
     ),
     taxYearsPanel(a),
     panel(null,
-      h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty'), h('span', { class: 'muted' }, 'Po rozbalení jednotlivé prodeje')),
+      h('div', { class: 'panel-head' }, h('h2', {}, 'Prodané instrumenty')),
       ...lazyList('realized', h('div', { class: 'acc-list' }), a.realized, realizedRow)),
     dividendsPanel(a.dividends),
   );
@@ -1681,7 +1684,7 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
 
 function realizedRow(r: RealizedInstrument): HTMLElement {
   return accordion(`r:${r.ticker}`, [
-    h('div', { class: 'irow' },
+    h('div', { class: 'irow sold' },
       avatar(r.ticker),
       instrumentName(r.ticker, r.name, r.quantity),
       h('div', { class: 'ival lead' },
@@ -1717,17 +1720,34 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
   });
 }
 
+function addTotals(p: Totals, q: Totals): Totals {
+  const native = { ...p.native };
+  for (const [c, v] of Object.entries(q.native)) native[c] = (native[c] ?? 0) + v;
+  return { czk: p.czk == null || q.czk == null ? null : p.czk + q.czk, eur: p.eur == null || q.eur == null ? null : p.eur + q.eur, native };
+}
+const sumTotals = <T>(list: T[], f: (x: T) => Totals): Totals => list.reduce((t, x) => addTotals(t, f(x)), { czk: 0, eur: 0, native: {} } as Totals);
+const instrumentsCount = (n: number) => `${n} ${n === 1 ? 'instrument' : n < 5 ? 'instrumenty' : 'instrumentů'}`;
+
+/** Dividends per year (accordion), each year expands to its instruments (long list via lazyList). */
 function dividendsPanel(divs: DividendSummary[]): HTMLElement | null {
   if (!divs.length) return null;
-  return panel('Dividendy',
-    table(['Rok', 'Instrument', 'Hrubá', 'Srážková daň', 'Čistá'],
-      [...divs].sort((p, q) => q.year - p.year || p.ticker.localeCompare(q.ticker)).map((d) => h('tr', {},
-        h('td', {}, String(d.year)),
-        h('td', {}, h('b', {}, d.ticker), ` ${d.name ?? ''}`),
-        h('td', { class: 'num' }, totals(d.gross)),
-        h('td', { class: 'num' }, totals(d.withholdingTax)),
-        h('td', { class: 'num strong' }, totals(d.net)),
-      )), 2),
+  const years = [...new Set(divs.map((d) => d.year))].sort((p, q) => q - p);
+  const cells = (gross: Totals, tax: Totals, net: Totals) => [
+    h('span', { class: 'num', 'data-label': 'Hrubá' }, totals(gross)),
+    h('span', { class: 'num', 'data-label': 'Srážková daň' }, totals(tax)),
+    h('b', { class: 'num', 'data-label': 'Čistá' }, totals(net))];
+  return panel(null,
+    h('div', { class: 'panel-head' }, h('h2', {}, 'Dividendy'), h('span', { class: 'muted' }, 'Celkem čistě ', h('b', {}, totals(sumTotals(divs, (d) => d.net))))),
+    h('div', { class: 'div-row div-hd', 'aria-hidden': 'true' }, h('span', {}, 'Rok'), h('span', {}, 'Hrubá'), h('span', {}, 'Srážková daň'), h('span', {}, 'Čistá')),
+    h('div', { class: 'acc-list' }, ...years.map((y) => {
+      const list = divs.filter((d) => d.year === y).sort((p, q) => (totalsValue(q.net) ?? 0) - (totalsValue(p.net) ?? 0));
+      return accordion(`d:${y}`, [h('div', { class: 'div-row div-year' },
+        h('span', { class: 'iname' }, h('b', { class: 'num' }, String(y)), h('span', {}, instrumentsCount(list.length))),
+        ...cells(sumTotals(list, (d) => d.gross), sumTotals(list, (d) => d.withholdingTax), sumTotals(list, (d) => d.net)))],
+      () => h('div', { class: 'acc-body' }, ...lazyList(`div:${y}`, h('ul', { class: 'div-list' }), list, (d) => h('li', { class: 'div-row' },
+        h('span', { class: 'iname' }, h('b', { title: d.name ?? d.ticker }, d.name || d.ticker), h('span', {}, h('span', { class: 'ticker' }, d.ticker))),
+        ...cells(d.gross, d.withholdingTax, d.net)))));
+    })),
   );
 }
 

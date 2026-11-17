@@ -37,12 +37,18 @@ transaction(db, () => rebuildT212(db));
 db.close();
 
 console.log(`\nKurzy ČNB: ${report.fxYears.length ? `${report.fxYears.join(', ')} (${report.fxRows} kurzů)` : 'aktuální'}`);
-console.log('Instrumenty:');
+const SOURCE: Record<string, string> = {
+  justetf: 'justETF', yahoo: 'Yahoo Finance', onvista: 'onvista', manual: 'ručně (data/instruments.json)',
+  isin: 'podle kódu země v ISIN', exchange: 'podle burzy', none: 'nestahují se',
+};
+const src = (s: string | null) => (s ? SOURCE[s] ?? s : 'neznámý');
+const czDay = (d: string | null) => (d ? d.split('-').reverse().map((x, k) => (k < 2 ? String(Number(x)) : x)).join('. ') : '—');
+console.log('Instrumenty (odkud jsou data):');
 for (const i of report.instruments) {
-  console.log(
-    `  ${i.ticker.padEnd(9)} ISIN ${(i.isin ?? '—').padEnd(12)}  ceny ${(i.priceSource ?? '—').padEnd(7)} +${String(i.newPrices).padStart(4)} ` +
-      `(poslední ${i.lastPrice ?? '—'})  země: ${i.countrySource ?? '—'}`,
-  );
+  const fresh = i.newPrices ? `staženo ${i.newPrices} denních cen` : 'nic nového nestaženo';
+  console.log(`  ${i.ticker}${i.isin ? ` (ISIN ${i.isin})` : ' (ISIN neznámý)'}`);
+  console.log(`    ceny: ${src(i.priceSource)}, ${fresh}, poslední cena z ${czDay(i.lastPrice)}`);
+  console.log(`    země: ${src(i.countrySource)} · sektory: ${src(i.sectorSource)}`);
 }
 for (const w of report.warnings) console.log(`⚠ ${w}`);
 const unsafe = http.log.filter((e) => e.status === 'unsafe');

@@ -396,6 +396,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   podle systému → světlý → tmavý (přání uživatele). Volba = `data-theme` na `<html>` + `localStorage`
   (`stockera-theme`; jde i u souboru z disku, při zákazu úložiště platí do zavření). Tmavé proměnné jsou v CSS
   dvakrát (media query s `:not([data-theme="light"])` a `[data-theme="dark"]`) – při změně barev upravit obě.
+- **Dividendy** (Prodané): akordeon po letech (rok, počet instrumentů, hrubá / srážková daň / čistá), rozbalení ukáže
+  instrumenty roku přes `lazyList` (`div:<rok>`). **Prodané instrumenty**: vlastní mřížka `.irow.sold` (bez sloupce
+  sparkline/daně), aby se rozpětí dat prodeje nezalamovalo a šipka akordeonu byla na konci řádku.
+- **Brzy bez daně**: pruh `progress(…, 'heat')` odkrývá gradient červená → oranžová → zelená přes celou dráhu
+  (`background-size` = 100 % / podíl), takže barva konce pruhu říká, jak blízko je splnění časového testu.
+- Přepínače (`.seg`) mají vybranou volbu v tokenu `--seg-on` (v tmavém režimu světlejší než panel + stín) – dřív
+  splývala s panelem a přepínač vypadal jako jeden obdélník.
+- Logo instrumentu místo kolečka s tickerem zatím ne: vyžadovalo by nový zdroj obrázků (posílá tickery dalšímu serveru),
+  kontrolu stažených obrázků a jejich vložení do reportu.
 - **Akcie uvnitř ETF** (přání uživatele): přepínač v hlavičce panelu Složení portfolia „Instrumenty | Akcie uvnitř ETF“
   (výchozí Instrumenty, `state.allocView`; dřív samostatný panel pod sektory – uživatel chtěl akcie nahoře u zemí).
   Pod seznamem řádek „Ostatní“ = 100 % − známé pozice (menší a neznámé pozice v ETF). ETF rozložené na jednotlivé akcie a stejná
