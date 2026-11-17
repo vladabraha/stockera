@@ -197,7 +197,16 @@ function assignColors(a: Analysis): void {
   }
 }
 
+// Same pattern as LOGO_DATA_URI in src/net/image.ts (the report bundle cannot import it): only an embedded raster picture.
+const LOGO_URI = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+
 function avatar(ticker: string): HTMLElement {
+  const logo = state.data?.instruments[ticker]?.logo;
+  if (logo && LOGO_URI.test(logo)) {
+    const img = h('img', { alt: '', width: '40', height: '40', decoding: 'async' }) as HTMLImageElement;
+    img.src = logo;
+    return h('span', { class: 'avatar logo', 'aria-hidden': 'true' }, img);
+  }
   const label = ticker.split('.')[0]!.slice(0, 4);
   return paint(h('span', { class: `avatar${label.length > 3 ? ' long' : ''}`, 'aria-hidden': 'true' }, label), { background: colorOf(ticker) });
 }

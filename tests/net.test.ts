@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { BlockedRequestError, Http, HttpError, MAX_BODY_BYTES } from '../src/net/http.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
 import { findThreat, parseSafeJson, UnsafeDataError } from '../src/net/inspect.ts';
+import { inspectImage, LOGO_MAX_BYTES } from '../src/net/image.ts';
+import { fakePng } from './helpers/fakeImage.ts';
 import {
   countryCode, exchangeCountry, parseCnbYear, parseJustEtfProfile, parseXetraInstruments, parseYahooChart, parseYahooSector, pickOnvistaStock, sectorKey,
   yahooSymbol, companySearchQueries, holdingNameKey, pickOnvistaCompany, nameKey, pickYahooSymbol, symbolVariants,
@@ -242,4 +244,34 @@ test('pickOnvistaCompany: ETF position by company name, ADR/CDR ignored, ambiguo
   assert.equal(pickOnvistaCompany(res(['Allegro.eu', 'LU2237380790'], ['Allegro Microsystems', 'US01749D1054']), 'ALLEGRO.EU SA'), 'LU2237380790');
   assert.equal(pickOnvistaCompany(res(['EQT AB', 'SE0012853455'], ['EQT CORP', 'US26884L1098']), 'EQT Corp'), null);
   assert.equal(holdingNameKey('Hartford Insurance Group Inc/The'), 'name:HARTFORD INSURANCE GROUP');
+});
+
+test('inspectImage accepts small PNG/JPEG/WebP by their own bytes and refuses SVG, HTML, huge or odd-sized files', () => {
+  assert.deepEqual(inspectImage(fakePng(100, 100)), { ok: true, mime: 'image/png', width: 100, height: 100 });
+  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 11, 8, 0, 64, 0, 48, 3, 0, 0, 0]);
+  assert.deepEqual(inspectImage(jpeg), { ok: true, mime: 'image/jpeg', width: 48, height: 64 });
+  const webp = new Uint8Array(30);
+  webp.set(Buffer.from('RIFF\0\0\0\0WEBPVP8X'));
+  webp.set([63, 0, 0, 31, 0, 0], 24); // canvas 64 × 32
+  assert.deepEqual(inspectImage(webp), { ok: true, mime: 'image/webp', width: 64, height: 32 });
+
+  const refused = (b: Uint8Array) => { const r = inspectImage(b); return r.ok ? null : r.reason; };
+  assert.match(refused(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'))!, /není to obrázek/);
+  assert.match(refused(Buffer.from('<!doctype html><img src=x onerror=alert(1)>'))!, /není to obrázek/);
+  assert.match(refused(fakePng(8, 8))!, /rozměry 8×8/);
+  assert.match(refused(fakePng(20000, 20000))!, /rozměry/);
+  assert.match(refused(Buffer.concat([fakePng(100, 100), Buffer.alloc(LOGO_MAX_BYTES)]))!, /příliš velký/);
+  assert.match(refused(fakePng(100, 100).subarray(0, 20))!, /poškozený/);
+});
+
+test('Http.getBytes refuses redirects (even to allowed hosts) and caps the body size', async () => {
+  const http = new Http({
+    minIntervalMs: 0,
+    fetch: fakeFetch((u) => (u.includes('moved') ? new Response(null, { status: 302, headers: { location: 'https://assets.parqet.com/other' } })
+      : u.includes('big') ? new Response(new Uint8Array(5000)) : new Response(fakePng(100, 100)))),
+  });
+  assert.equal(inspectImage(await http.getBytes('https://assets.parqet.com/logos/isin/US0378331005', 'image/png', 1000)).ok, true);
+  await assert.rejects(http.getBytes('https://assets.parqet.com/moved', 'image/png', 1000), /Přesměrování odmítnuto/);
+  await assert.rejects(http.getBytes('https://assets.parqet.com/big', 'image/png', 1000), /příliš velká/);
+  assert.ok(!http.log.some((e) => e.url.endsWith('/other')), 'the redirect target is never requested');
 });

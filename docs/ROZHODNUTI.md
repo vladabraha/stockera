@@ -177,8 +177,10 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   přihlašovacích údajů, `credentials: 'omit'`, ruční přesměrování s kontrolou každého skoku (max 5), timeout 60 s,
   throttle 400 ms/host, **limit odpovědi 20 MB**, audit každého požadavku (i zablokovaného) do `data/logs/network.log`.
 - **Allowlist** (`ALLOWED_HOSTS`): `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`,
-  `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`. Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
+  `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`, `assets.parqet.com` (jen loga). Nový zdroj = přidat sem + test + `docs/zdroje-dat.md`.
 - Síť používá **jen `pnpm market`** a volitelně otevřený report (živé ceny, viz §6). Import a výpočty jsou offline.
+- `pnpm market` vypíše u instrumentů jen **jeden řádek** (ticker, ISIN, datum poslední ceny); odkud jsou ceny, země,
+  sektory a logo, zapíše do `data/logs/market.log` (přepisuje se při každém běhu, práva 0600).
 - Zdroje (podrobně `docs/zdroje-dat.md`):
   - kurzy: ČNB roční txt od roku nejstaršího záznamu **jakéhokoli druhu** (i vklad/úrok před prvním obchodem) minus 7 dní
     – úrok z 1. 1. tak má poslední kurz předchozího roku (minulé roky se znovu nestahují, pokud mají kurz z 20.–31. 12.),
@@ -413,8 +415,18 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   v CSS přes `color-mix(in oklch, …)` z proměnné `--p` (0–1); starší prohlížeče dostanou záložní `hsl()`.
 - Přepínače (`.seg`) mají vybranou volbu v tokenu `--seg-on` (v tmavém režimu světlejší než panel + stín) – dřív
   splývala s panelem a přepínač vypadal jako jeden obdélník.
-- Logo instrumentu místo kolečka s tickerem zatím ne: vyžadovalo by nový zdroj obrázků (posílá tickery dalšímu serveru),
-  kontrolu stažených obrázků a jejich vložení do reportu.
+- **Loga instrumentů** (avatar místo kolečka s tickerem, i u prodaných; bez loga zůstává kolečko):
+  - zdroj Parqet `assets.parqet.com/logos/isin/{ISIN}?format=png` (100×100 PNG, ~1 kB, u ETF logo správce); posílá se
+    jen ISIN jako u ostatních zdrojů. `getBytes` nesleduje **žádné přesměrování**, limit **100 kB**.
+  - `src/net/image.ts` (`inspectImage`) pozná formát **jen z bajtů souboru** (PNG/JPEG/WebP, ne z `Content-Type`)
+    a přečte rozměry (16–1024 px). SVG, HTML ani nic jiného neprojde → zahodí se a audituje jako `unsafe`.
+  - Uloží se do tabulky `logos` (`ticker`, `mime`, `data` BLOB, `source` `parqet`|`manual`, `checked_at`), do reportu
+    jde jako `data:image/png;base64,…` (CSP `img-src data:`, nic se nestahuje). Frontend před vložením ověří tvar
+    data URI (`LOGO_URI`) a nastavuje `src` vlastností, `alt=""` (název je vedle), pevné `width`/`height`.
+  - Logo, které zdroj nemá (404), se zapamatuje a zkusí znovu až **po 90 dnech**; síťová chyba se jen zaloguje.
+  - **Ruční logo:** `data/logos/<TICKER>.png|jpg|jpeg|webp` (např. `AAPL.US.png`) má přednost, projde stejnou
+    kontrolou (špatný soubor → varování); po smazání souboru se ruční logo odebere.
+  - Stahování vypne `"$logos": false` v `data/instruments.json` (už stažená loga zůstanou).
 - Pruhy **Složení portfolia** jsou rozdělené podle sektorů instrumentu v barvách a pořadí panelu Podle sektorů
   (`sectorOrder`), nesektorový zbytek = Neznámé. Zvoleny sektory, ne země: většina ETF i akcií by byla skoro celá „USA“,
   takže by barva zemí pruhy nerozlišila. Tooltip/`aria-label` vyjmenuje sektory.

@@ -14,6 +14,7 @@ export const ALLOWED_HOSTS: ReadonlySet<string> = new Set([
   'query2.finance.yahoo.com',
   'api.onvista.de', // ETF country breakdown fallback (when justETF has none)
   'www.pse.cz', // Prague Stock Exchange share list (ticker → ISIN, Yahoo symbol)
+  'assets.parqet.com', // instrument logos by ISIN (only PNG/JPEG/WebP pictures are accepted, see image.ts)
 ]);
 
 const SOURCE_NAMES: Record<string, string> = {
@@ -24,6 +25,7 @@ const SOURCE_NAMES: Record<string, string> = {
   'query2.finance.yahoo.com': 'Yahoo',
   'api.onvista.de': 'onvista',
   'www.pse.cz': 'BCPP',
+  'assets.parqet.com': 'Parqet',
 };
 const sourceName = (url: string) => SOURCE_NAMES[new URL(url).hostname] ?? new URL(url).hostname;
 
@@ -81,10 +83,19 @@ export class Http {
   }
 
   async getText(url: string, accept = '*/*'): Promise<string> {
+    return (await this.getWithRetry(url, accept, MAX_BODY_BYTES, MAX_REDIRECTS)).toString('utf8');
+  }
+
+  /** Raw bytes (pictures): no redirects are followed and the body is capped at `maxBytes`. */
+  async getBytes(url: string, accept: string, maxBytes: number): Promise<Buffer> {
+    return this.getWithRetry(url, accept, maxBytes, 0);
+  }
+
+  private async getWithRetry(url: string, accept: string, maxBytes: number, maxRedirects: number): Promise<Buffer> {
     const delays = this.opts.retryDelaysMs ?? RETRY_DELAYS_MS;
     for (let attempt = 0; ; attempt++) {
       try {
-        return await this.getOnce(url, accept);
+        return await this.getOnce(url, accept, maxBytes, maxRedirects);
       } catch (e) {
         if (!(e instanceof HttpError) || !RETRY_STATUSES.has(e.status) || attempt >= delays.length) throw e;
         await new Promise((r) => setTimeout(r, delays[attempt]));
@@ -92,10 +103,10 @@ export class Http {
     }
   }
 
-  private async getOnce(url: string, accept: string): Promise<string> {
+  private async getOnce(url: string, accept: string, maxBytes: number, maxRedirects: number): Promise<Buffer> {
     const fetchFn = this.opts.fetch ?? fetch;
     let current = url;
-    for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    for (let hop = 0; hop <= maxRedirects; hop++) {
       this.assertAllowed(current);
       await this.throttle(new URL(current).host);
       const started = Date.now();
@@ -118,12 +129,12 @@ export class Http {
         current = new URL(location, current).toString();
         continue;
       }
-      const body = await readLimited(res, current);
-      this.audit({ url: current, status: res.status, bytes: Buffer.byteLength(body), ms: Date.now() - started });
+      const body = await readLimited(res, current, maxBytes);
+      this.audit({ url: current, status: res.status, bytes: body.byteLength, ms: Date.now() - started });
       if (!res.ok) throw new HttpError(current, res.status);
       return body;
     }
-    throw new Error(`Příliš mnoho přesměrování: ${url}`);
+    throw new Error(maxRedirects ? `Příliš mnoho přesměrování: ${url}` : `Přesměrování odmítnuto: ${url}`);
   }
 
   /** Parsed JSON that passed the content check; suspicious responses are discarded with {@link UnsafeDataError}. */
@@ -135,6 +146,12 @@ export class Http {
   /** Content check for values extracted from HTML/CSV/text responses (the raw page may legitimately contain scripts). */
   checkExtracted<T>(url: string, value: T): T {
     return this.checked(url, () => assertSafe(value, sourceName(url)));
+  }
+
+  /** Throws away a response that failed a content check (e.g. not a picture); it is audited as `unsafe`. */
+  reject(url: string, reason: string): never {
+    this.audit({ url, status: 'unsafe', error: reason });
+    throw new UnsafeDataError(sourceName(url), reason);
   }
 
   private checked<T>(url: string, fn: () => T): T {
@@ -179,20 +196,23 @@ export class Http {
   }
 }
 
-/** Reads the body as text, aborting once it exceeds MAX_BODY_BYTES (protects against huge/hostile responses). */
-async function readLimited(res: Response, url: string): Promise<string> {
+/** Reads the body, aborting once it exceeds `max` bytes (protects against huge/hostile responses). */
+async function readLimited(res: Response, url: string, max: number): Promise<Buffer> {
   const declared = Number(res.headers.get('content-length') ?? 0);
-  if (declared > MAX_BODY_BYTES) throw new Error(`Odpověď je příliš velká (${declared} B): ${url}`);
-  if (!res.body) return '';
+  if (declared > max) {
+    await res.body?.cancel().catch(() => {});
+    throw new Error(`Odpověď je příliš velká (${declared} B): ${url}`);
+  }
+  if (!res.body) return Buffer.alloc(0);
   const chunks: Uint8Array[] = [];
   let size = 0;
   for await (const chunk of res.body as AsyncIterable<Uint8Array>) {
     size += chunk.byteLength;
-    if (size > MAX_BODY_BYTES) {
+    if (size > max) {
       await res.body.cancel().catch(() => {});
-      throw new Error(`Odpověď je příliš velká (> ${MAX_BODY_BYTES} B): ${url}`);
+      throw new Error(`Odpověď je příliš velká (> ${max} B): ${url}`);
     }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString('utf8');
+  return Buffer.concat(chunks);
 }

@@ -129,6 +129,8 @@ export function parsePseDetail(html: string): PseCodes {
 
 // ------------------------------------------------------------ justETF ------
 
+/** Logo by ISIN (stocks: the company, ETFs: the fund provider). Only the ISIN is sent. */
+export const logoUrl = (isin: string) => `https://assets.parqet.com/logos/isin/${encodeURIComponent(isin)}?format=png`;
 export const justEtfProfileUrl = (isin: string) => `https://www.justetf.com/en/etf-profile.html?isin=${encodeURIComponent(isin)}`;
 export const justEtfChartUrl = (isin: string, from: string, to: string, currency = 'EUR') =>
   `https://www.justetf.com/api/etfs/${encodeURIComponent(isin)}/performance-chart?locale=en&currency=${currency}` +

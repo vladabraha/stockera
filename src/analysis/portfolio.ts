@@ -179,6 +179,8 @@ export interface InstrumentSeries {
   priceSource: string | null;
   currency: string | null;
   prices: [date: string, close: number][];
+  /** Checked logo as a data URI (src/net/image.ts); absent = coloured circle with the ticker. */
+  logo?: string;
 }
 
 export interface AnalyzeOptions {
@@ -444,6 +446,8 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
       if (!firstOpen.has(l.ticker) || d < firstOpen.get(l.ticker)!) firstOpen.set(l.ticker, d);
     }
     const out: Record<string, InstrumentSeries> = {};
+    const logos = new Map((db.prepare('SELECT ticker, mime, data FROM logos WHERE data IS NOT NULL').all() as { ticker: string; mime: string; data: Uint8Array }[])
+      .map((l) => [l.ticker, `data:${l.mime};base64,${Buffer.from(l.data).toString('base64')}`]));
     for (const [ticker, first] of [...firstOpen.entries()].sort()) {
       const from = addDays(first, -31);
       const m = market.info(ticker);
@@ -453,6 +457,7 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
         priceSource: m.priceSource,
         currency: prices[0]?.currency ?? m.priceCurrency,
         prices: prices.map((p) => [p.date, p.close]),
+        ...(logos.has(ticker) ? { logo: logos.get(ticker)! } : {}),
       };
     }
     return out;

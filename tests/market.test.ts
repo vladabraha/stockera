@@ -11,6 +11,7 @@ import { analyze } from '../src/analysis/portfolio.ts';
 import { geography, sectorBreakdown } from '../src/analysis/market.ts';
 import { fakeXtbExport } from './helpers/fakeXtb.ts';
 import { fakeFetch } from './helpers/fakeFetch.ts';
+import { fakePng } from './helpers/fakeImage.ts';
 import { lookThrough } from '../src/analysis/breakdown.ts';
 
 const ACCOUNT = '98765432';
@@ -454,6 +455,48 @@ test('instruments.json saved by Windows Notepad (UTF-8 BOM) still loads', () => 
     const file = join(dir, 'instruments.json');
     writeFileSync(file, '\uFEFF{"$comment": "x", "CSG.NL": {"country": "CZ"}}');
     assert.deepEqual(loadInstrumentConfig(file), { 'CSG.NL': { country: 'CZ' } });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('logos: hand-picked file wins, downloads are checked, refused files and "no logo" are handled, analysis embeds them', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'stockera-logos-'));
+  try {
+    writeFileSync(join(dir, 'STK.US.png'), fakePng(64, 64));
+    writeFileSync(join(dir, '..png'), fakePng(64, 64)); // never read: not a ticker
+    const db = seed();
+    let logo: Response | undefined = new Response('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+    const calls: string[] = [];
+    const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => (u.includes('parqet') ? logo : routes(u)), calls) });
+    const opts = { today: '2025-01-13', logos: true, logosDir: dir };
+
+    let r = await updateMarketData(db, http, opts);
+    const src = () => Object.fromEntries(r.instruments.map((i) => [i.ticker, i.logoSource]));
+    assert.deepEqual(src(), { 'ETFA.DE': null, 'STK.US': 'manual' });
+    // only the ISIN is sent, and only for the instrument without a hand-picked logo
+    assert.deepEqual(calls.filter((u) => u.includes('parqet')), ['https://assets.parqet.com/logos/isin/IE0000000001?format=png']);
+    assert.ok(http.log.some((e) => e.url.includes('parqet') && e.status === 'unsafe'), 'the disguised SVG is thrown away and audited');
+
+    logo = new Response(fakePng(100, 100));
+    r = await updateMarketData(db, http, opts);
+    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': 'manual' });
+    const a = analyze(db);
+    assert.match(a.instruments['ETFA.DE']!.logo!, /^data:image\/png;base64,iVBORw0KGgo/);
+    assert.ok(a.instruments['STK.US']!.logo);
+
+    // removing the file drops the manual logo; "no logo" (404) is remembered and not asked again for 90 days
+    rmSync(join(dir, 'STK.US.png'));
+    logo = undefined;
+    calls.length = 0;
+    r = await updateMarketData(db, http, opts);
+    r = await updateMarketData(db, http, opts);
+    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': null });
+    assert.deepEqual(calls.filter((u) => u.includes('parqet')), ['https://assets.parqet.com/logos/isin/US0000000002?format=png']);
+
+    writeFileSync(join(dir, 'STK.US.png'), '<svg/>');
+    r = await updateMarketData(db, http, opts);
+    assert.ok(r.warnings.some((w) => w.includes('STK.US') && w.includes('není to obrázek')));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

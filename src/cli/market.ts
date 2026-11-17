@@ -1,12 +1,13 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { fail, paths } from './friendly.ts';
 import { openDatabase, transaction } from '../db/database.ts';
 import { rebuildT212 } from '../t212/store.ts';
 import { Http, ALLOWED_HOSTS } from '../net/http.ts';
-import { loadInstrumentConfig, updateMarketData } from '../market/update.ts';
+import { loadInstrumentConfig, logosEnabled, updateMarketData } from '../market/update.ts';
 import { pragueDate } from '../analysis/calendar.ts';
 
-const { db: dbPath, config: configPath, networkLog: auditLog } = paths;
+const { db: dbPath, config: configPath, networkLog: auditLog, marketLog } = paths;
 
 if (!existsSync(dbPath)) {
   fail('Zatím nejsou načtené žádné výpisy z XTB ani Trading 212.', ['Ulož výpis do složky data/input a spusť 2-vytvorit-report-windows.cmd / 2-vytvorit-report-mac.command.']);
@@ -31,6 +32,8 @@ const report = await updateMarketData(db, http, {
   today: pragueDate(new Date().toISOString()),
   config,
   log: (m) => console.log(`  ${m}`),
+  logos: logosEnabled(configPath),
+  logosDir: paths.logos,
 });
 // ISINs of XTB instruments are known now – the same instrument bought at Trading 212 joins the XTB holding.
 transaction(db, () => rebuildT212(db));
@@ -38,18 +41,27 @@ db.close();
 
 console.log(`\nKurzy ČNB: ${report.fxYears.length ? `${report.fxYears.join(', ')} (${report.fxRows} kurzů)` : 'aktuální'}`);
 const SOURCE: Record<string, string> = {
-  justetf: 'justETF', yahoo: 'Yahoo Finance', onvista: 'onvista', manual: 'ručně (data/instruments.json)',
+  justetf: 'justETF', yahoo: 'Yahoo Finance', onvista: 'onvista', manual: 'ručně', parqet: 'Parqet',
   isin: 'podle kódu země v ISIN', exchange: 'podle burzy', none: 'nestahují se',
 };
 const src = (s: string | null) => (s ? SOURCE[s] ?? s : 'neznámý');
 const czDay = (d: string | null) => (d ? d.split('-').reverse().map((x, k) => (k < 2 ? String(Number(x)) : x)).join('. ') : '—');
-console.log('Instrumenty (odkud jsou data):');
+// Console: one short line per instrument; where each piece of data came from goes to the log only.
+const width = Math.max(0, ...report.instruments.map((i) => i.ticker.length));
+console.log(`Instrumenty (ticker, ISIN, poslední cena; zdroje dat v ${marketLog}):`);
 for (const i of report.instruments) {
-  const fresh = i.newPrices ? `staženo ${i.newPrices} denních cen` : 'nic nového nestaženo';
-  console.log(`  ${i.ticker}${i.isin ? ` (ISIN ${i.isin})` : ' (ISIN neznámý)'}`);
-  console.log(`    ceny: ${src(i.priceSource)}, ${fresh}, poslední cena z ${czDay(i.lastPrice)}`);
-  console.log(`    země: ${src(i.countrySource)} · sektory: ${src(i.sectorSource)}`);
+  console.log(`  ${i.ticker.padEnd(width)}  ${(i.isin ?? 'ISIN neznámý').padEnd(12)}  ${i.lastPrice ? czDay(i.lastPrice) : 'bez ceny'}`);
 }
+mkdirSync(dirname(marketLog), { recursive: true });
+writeFileSync(marketLog, [
+  `Tržní data ${new Date().toISOString()}`,
+  ...report.instruments.map((i) => [
+    `${i.ticker} (ISIN ${i.isin ?? 'neznámý'})`,
+    `  ceny: ${src(i.priceSource)}, staženo ${i.newPrices} denních cen, poslední cena z ${czDay(i.lastPrice)}`,
+    `  země: ${src(i.countrySource)} · sektory: ${src(i.sectorSource)} · logo: ${i.logoSource ? src(i.logoSource) : 'žádné'}`,
+  ].join('\n')),
+  ...report.warnings.map((w) => `⚠ ${w}`),
+].join('\n') + '\n', { mode: 0o600 });
 for (const w of report.warnings) console.log(`⚠ ${w}`);
 const unsafe = http.log.filter((e) => e.status === 'unsafe');
 if (unsafe.length) {

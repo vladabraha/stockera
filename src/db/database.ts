@@ -178,6 +178,16 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (account_number, row_key)
   );
   `,
+  `
+  -- Instrument logos (checked PNG/JPEG/WebP, see src/net/image.ts). data NULL = no logo found (retried later).
+  CREATE TABLE logos (
+    ticker     TEXT PRIMARY KEY,
+    mime       TEXT,
+    data       BLOB,
+    source     TEXT NOT NULL,
+    checked_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

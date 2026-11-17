@@ -272,6 +272,10 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 /* avatars: round, like broker logos */
 .avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; color: #fff; font: 600 .74rem/1 var(--fig); letter-spacing: .02em; }
 .avatar.long { font-size: .64rem; }
+/* logos: white disc so dark and transparent logos stay visible in both themes */
+.avatar.logo { position: relative; background: #fff; overflow: hidden; }
+.avatar.logo img { width: 100%; height: 100%; object-fit: cover; }
+.avatar.logo::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 1px var(--line); }
 
 /* upcoming */
 .upcoming { list-style: none; margin: 0; padding: 0; }

@@ -1,11 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { transaction, type Db } from '../db/database.ts';
 import type { Http } from '../net/http.ts';
 import { UnsafeDataError } from '../net/inspect.ts';
+import { LOGO_MAX_BYTES, inspectImage } from '../net/image.ts';
 import { addDays } from '../analysis/calendar.ts';
 import {
   PSE_SHARE_LIST_URLS, XETRA_INSTRUMENTS_URL, countryCode, parsePseDetail, parsePseShareList, pseDetailUrl, exchangeCountry, fetchCnbYear, fetchJustEtfPrices, fetchYahooPrices,
-  companySearchQueries, holdingNameKey, justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, pickOnvistaCompany, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
+  companySearchQueries, holdingNameKey, logoUrl, justEtfProfileUrl, onvistaBreakdownsUrl, onvistaSearchUrl, pickOnvistaCompany, onvistaStockUrl, parseJustEtfProfile, parseOnvistaCountries, parseOnvistaHoldings, parseOnvistaSectors,
   parseOnvistaStockSector, parseXetraInstruments, pickOnvistaStock, pickOnvistaEtf, onvistaStockCandidates, onvistaHomePrice, sectorKey, SECTORS, yahooSymbol,
   nameKey, parseYahooSector, pickYahooSymbol, symbolVariants, yahooSearchUrl, type YahooSearch,
   type EtfProfile, type FundHolding, type OnvistaBreakdowns, type OnvistaSearch, type OnvistaStock, type PricePoint, type PseCodes, type PseShare, type Sector, type XetraInstrument,
@@ -38,12 +40,22 @@ export function loadInstrumentConfig(path: string): InstrumentConfig {
   return cfg;
 }
 
+/** `"$logos": false` in data/instruments.json turns logo downloads off (hand-picked files in data/logos still work). */
+export function logosEnabled(path: string): boolean {
+  if (!existsSync(path)) return true;
+  return (JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>)['$logos'] !== false;
+}
+
 export interface UpdateOptions {
   today: string;
   config?: InstrumentConfig;
   /** Re-download ETF country data older than this (days). */
   countryMaxAgeDays?: number;
   log?: (msg: string) => void;
+  /** Download logos by ISIN (off in tests unless asked; the CLI turns it on unless "$logos": false). */
+  logos?: boolean;
+  /** Folder with hand-picked logos `<TICKER>.png|jpg|jpeg|webp`; they win over downloaded ones. */
+  logosDir?: string;
 }
 
 export interface InstrumentReport {
@@ -54,6 +66,8 @@ export interface InstrumentReport {
   lastPrice: string | null;
   countrySource: string | null;
   sectorSource: string | null;
+  /** `manual` (data/logos), `parqet` or null (none – the report shows a coloured circle). */
+  logoSource: string | null;
 }
 
 export interface UpdateReport {
@@ -64,6 +78,12 @@ export interface UpdateReport {
 }
 
 const PRICE_OVERLAP_DAYS = 7;
+/** An ISIN for which the logo service had nothing is asked again after this many days. */
+const LOGO_RETRY_DAYS = 90;
+const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
+// Ticker as a file name: no path separators, no leading dot (so "../x" or ".hidden" can never be read).
+const SAFE_FILE_TICKER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+const LOGO_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 const COUNTRY_MAX_AGE_DAYS = 30;
 /** A stock candidate is accepted when its home-exchange price is within 10 % of the XTB price. */
 const PRICE_MATCH_TOLERANCE = 0.1;
@@ -204,6 +224,47 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     if (byName.length === 1) return result(byName[0]!.isin);
     const byPrice = pseShares.filter(priceMatch);
     return byPrice.length === 1 ? result(byPrice[0]!.isin, true) : null;
+  };
+
+  // --- logos: hand-picked file first, then the logo service by ISIN; every picture is checked (image.ts) ---------
+  const logoStmt = db.prepare('SELECT source, checked_at, data IS NOT NULL AS has FROM logos WHERE ticker = ?');
+  const saveLogo = db.prepare(
+    `INSERT INTO logos (ticker, mime, data, source, checked_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (ticker) DO UPDATE SET mime = excluded.mime, data = excluded.data, source = excluded.source, checked_at = excluded.checked_at`,
+  );
+  const updateLogo = async (ticker: string, isin: string | null): Promise<string | null> => {
+    const stored = logoStmt.get(ticker) as { source: string; checked_at: string; has: number } | undefined;
+    const manual = opts.logosDir && SAFE_FILE_TICKER.test(ticker)
+      ? LOGO_EXTENSIONS.map((e) => join(opts.logosDir!, `${ticker}.${e}`)).find((f) => existsSync(f)) : undefined;
+    if (manual) {
+      const bytes = readFileSync(manual);
+      const check = inspectImage(bytes);
+      if (check.ok) {
+        saveLogo.run(ticker, check.mime, bytes, 'manual', opts.today);
+        return 'manual';
+      }
+      warnings.push(`${ticker}: logo ${manual} nejde použít – ${check.reason}.`);
+    } else if (stored?.source === 'manual') {
+      db.prepare('DELETE FROM logos WHERE ticker = ?').run(ticker); // the file was removed
+    }
+    const current = stored?.source === 'manual' ? undefined : stored;
+    if (current?.has) return current.source;
+    if (!opts.logos || !isin || !ISIN_RE.test(isin)) return null;
+    if (current && (Date.parse(opts.today) - Date.parse(current.checked_at)) / 86_400_000 < LOGO_RETRY_DAYS) return null;
+    log(`${ticker}: logo…`);
+    const url = logoUrl(isin);
+    try {
+      const bytes = await http.getBytes(url, 'image/png,image/jpeg,image/webp', LOGO_MAX_BYTES);
+      const check = inspectImage(bytes);
+      if (!check.ok) http.reject(url, check.reason);
+      saveLogo.run(ticker, check.mime, bytes, 'parqet', opts.today);
+      return 'parqet';
+    } catch (e) {
+      // 404 = the service has no logo → remembered; network errors and refused files are retried next time
+      if ((e as { status?: number }).status === 404) saveLogo.run(ticker, null, null, 'parqet', opts.today);
+      else if (!(e instanceof UnsafeDataError)) log(`${ticker}: logo se nepodařilo stáhnout (${(e as Error).message})`);
+      return null;
+    }
   };
 
   for (const { ticker } of tickers) {
@@ -531,8 +592,9 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       warnings.push(`${ticker}: fond ${isin} je podle justETF zrušený nebo sloučený, jeho složení už nikdo nezveřejňuje. `
         + 'Do data/instruments.json doplň "compositionIsin" (ISIN jiného ETF na stejný index) nebo ruční "countries" a "sectors".');
     }
+    const logoSource = await updateLogo(ticker, isin);
     const lastPrice = (db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ?').get(ticker) as { d: string | null }).d;
-    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource });
+    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource, logoSource });
   }
   return report;
 }
