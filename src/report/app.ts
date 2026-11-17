@@ -51,6 +51,8 @@ const state = {
   /** Expanded sale groups of the tax year cards ("2026:free") and the open loss-offset advice. */
   yearParts: new Set<string>(),
   offsetOpen: false,
+  /** Tax years whose open/closed state differs from the default (this and last year open, older closed). */
+  yearsToggled: new Set<number>(),
   /** "Složení portfolia": own instruments, or the stocks inside ETFs (look-through). */
   allocView: 'instruments' as 'instruments' | 'lookThrough',
   /** Long lists: expanded into a scroll box (`open`) and how many rows are loaded there (`n`). */
@@ -1492,40 +1494,95 @@ function soldTab(a: Analysis): HTMLElement {
 }
 
 function taxYearsPanel(a: Analysis): HTMLElement {
-  const years = a.taxYears, holdings = a.holdings;
-  // Same scale for every year card: the year with the highest sales fills the whole bar
+  const years = [...a.taxYears].sort((p, q) => q.year - p.year), holdings = a.holdings;
+  const thisYear = new Date().getFullYear();
+  // Same scale for every year: the year with the highest sales fills the whole bar
   const scaleCzk = Math.max(0, ...years.map((y) => y.proceeds.czk ?? 0));
-  const yearCard = (y: TaxYear) => {
+  const isOpen = (y: number) => (y >= thisYear - 1) !== state.yearsToggled.has(y);
+  const toggle = (y: number) => {
+    if (state.yearsToggled.has(y)) state.yearsToggled.delete(y); else state.yearsToggled.add(y);
+  };
+  const status = (y: TaxYear) => ((y.taxable.taxCzk ?? 0) > 0 ? 'bad' : y.limitStatus === 'unknown' ? 'info' : 'ok');
+  const deadline = (y: TaxYear) => (y.year === thisYear - 1 && new Date().getMonth() < 6 && (y.taxable.taxCzk ?? 0) > 0
+    ? tag(`přiznání do 1. 4. ${thisYear}, elektronicky 1. 5.`, 'wait') : null);
+  const item = (y: TaxYear) => {
+    const open = isOpen(y.year);
+    const tax = y.taxable.taxCzk;
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
-    const open = state.taxGuideYear === y.year;
-    const card = h('div', { class: open ? 'year active tip-host' : 'year tip-host' });
-    const offset = y.year === new Date().getFullYear() && (y.taxable.taxCzk ?? 0) > 0;
-    card.append(
-      h('div', { class: 'year-head' }, h('b', {}, String(y.year)), limit),
-      ...yearSales(a, y, hoverTip(card), scaleCzk),
-      h('dl', {},
-        h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
-        h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(y.taxable.taxCzk, 'CZK'))),
+    const head = button(h('span', { class: 'ytl-head' },
+      h('span', { class: 'ytl-title' }, h('b', {}, String(y.year)), y.year === thisYear ? tag('probíhá', 'info') : null, limit, deadline(y)),
+      h('span', { class: 'ytl-sum' },
+        h('span', { class: tax ? 'strong' : 'muted' }, tax ? `daň ${fmtMoney(tax, 'CZK')}` : tax === 0 ? 'bez daně' : 'daň neznámá'),
+        h('span', { class: 'muted small' }, `${y.salesCount} ${salesWord(y.salesCount)} za ${totals(y.proceeds)}`)),
+      h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')), () => {
+      toggle(y.year);
+      render();
+    }, open ? 'ytl-toggle open' : 'ytl-toggle');
+    head.setAttribute('aria-expanded', String(open));
+    const li = h('li', { class: `ytl-item ${status(y)}${open ? ' open' : ''}`, id: `tax-year-${y.year}` }, head);
+    if (!open) return li;
+    const guide = state.taxGuideYear === y.year;
+    const offset = y.year === thisYear && (tax ?? 0) > 0;
+    const body = h('div', { class: 'year tip-host' });
+    body.append(
+      h('div', { class: 'ytl-cols' },
+        h('div', { class: 'ytl-sales' }, ...yearSales(a, y, hoverTip(body), scaleCzk)),
+        h('dl', {},
+          h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
+          h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(tax, 'CZK')))),
       offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
       h('div', { class: 'year-actions' },
         offset ? button(state.offsetOpen ? 'Skrýt snížení daně' : 'Jak snížit daň', () => {
           state.offsetOpen = !state.offsetOpen;
           render();
         }, 'ghost') : null,
-        button(open ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
-          state.taxGuideYear = open ? null : y.year;
+        button(guide ? 'Skrýt návod k přiznání' : 'Co vyplnit v přiznání', () => {
+          state.taxGuideYear = guide ? null : y.year;
           render();
         }, 'ghost')),
+      guide ? taxGuidePanel(a, y) : '',
     );
-    return card;
+    li.append(body);
+    return li;
   };
-  const guideYear = years.find((y) => y.year === state.taxGuideYear);
   return panel('Daně podle let',
-    keepScroll(h('div', { class: years.length > 1 ? 'years many' : 'years' }, ...[...years].sort((p, q) => q.year - p.year).map(yearCard)), 'years', 'x'),
-    guideYear ? taxGuidePanel(a, guideYear) : null,
+    years.length > 1 ? taxYearsChart(years, (y) => {
+      if (!isOpen(y)) toggle(y);
+      render();
+      document.getElementById(`tax-year-${y}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }) : null,
+    h('ol', { class: 'ytl' }, ...years.map(item)),
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok z prodejů bez časového testu, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
   );
+}
+
+/** Overview of all tax years: one column per year (short-term sales at the bottom, time-tested on top), the dashed line = 100k limit. */
+function taxYearsChart(years: TaxYear[], pick: (year: number) => void): HTMLElement {
+  const asc = [...years].sort((p, q) => p.year - q.year);
+  const max = Math.max(SALES_LIMIT_CZK, ...asc.map((y) => y.proceeds.czk ?? 0));
+  const h100 = (SALES_LIMIT_CZK / max) * 100;
+  const col = (y: TaxYear) => {
+    const short = y.shortTermProceeds.czk ?? 0, free = y.timeTestedProceeds.czk ?? 0;
+    const cls = y.limitStatus === 'exceeded' ? 'taxed' : y.limitStatus === 'within' ? 'short' : 'unknown';
+    const label = `${y.year}: ${y.salesCount} ${salesWord(y.salesCount)} za ${fmtMoney(y.proceeds.czk, 'CZK')}, `
+      + `bez časového testu ${fmtMoney(short, 'CZK')}, daň ${fmtMoney(y.taxable.taxCzk, 'CZK')}`;
+    const b = button(h('span', { class: 'ytc-col' },
+      h('span', { class: 'ytc-stack' },
+        free > 0 ? paint(h('i', { class: 'free' }), { height: `${(free / max) * 100}%` }) : null,
+        short > 0 ? paint(h('i', { class: cls }), { height: `${(short / max) * 100}%` }) : null),
+      h('span', { class: 'ytc-year' }, String(y.year))), () => pick(y.year), 'ytc-btn', label);
+    b.setAttribute('aria-label', label);
+    return b;
+  };
+  return h('div', { class: 'ytc', role: 'group', 'aria-label': 'Prodeje podle let, klik otevře rok' },
+    h('div', { class: 'ytc-plot' },
+      paint(h('div', { class: 'ytc-limit', 'aria-hidden': 'true' }, h('span', {}, '100 tis.')), { bottom: `${h100}%` }),
+      ...asc.map(col)),
+    h('div', { class: 'ytc-legend muted small' },
+      h('span', {}, h('i', { class: 'dot short' }), ' bez časového testu v limitu'),
+      h('span', {}, h('i', { class: 'dot taxed' }), ' ke zdanění'),
+      h('span', {}, h('i', { class: 'dot free' }), ' po časovém testu')));
 }
 
 const salesWord = (n: number) => (n === 1 ? 'prodej' : n >= 2 && n <= 4 ? 'prodeje' : 'prodejů');
@@ -1595,9 +1652,7 @@ function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>, sc
     h('div', { class: 'muted' }, used == null ? 'Chybí kurz ČNB, limit nejde ověřit.' : over
       ? `Překročeno o ${fmtMoney(used - SALES_LIMIT_CZK, 'CZK')} – zdaní se zisk ze všech prodejů bez časového testu.`
       : `Zbývá ${fmtMoney(SALES_LIMIT_CZK - used, 'CZK')}. Počítají se hrubé příjmy z prodejů, ne zisk; prodeje po časovém testu se nepočítají.`)];
-  const out: HTMLElement[] = [
-    h('div', { class: 'year-total' }, 'Celkem ', h('b', {}, `${count(y.salesCount)} za ${totals(y.proceeds)}`)),
-  ];
+  const out: HTMLElement[] = [];
   if (used != null && used > 0) {
     out.push(tip(h('div', { class: 'year-limit', tabindex: '0' },
       'Limit 100 tis. bez časového testu využit na ', h('b', { class: over ? 'neg' : '' }, `${fmtNum((used / SALES_LIMIT_CZK) * 100, 0)} %`)), limitTip));

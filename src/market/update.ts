@@ -239,11 +239,13 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     if (!isin || !ISIN_RE.test(isin)) return cached;
     if (stored && (Date.parse(opts.today) - Date.parse(stored.checked_at)) / 86_400_000 < LOGO_REFRESH_DAYS) return cached;
     const url = logoUrl(isin);
+    log(`${ticker}: logo (Parqet)…`);
     try {
       const bytes = await http.getBytes(url, 'image/png,image/jpeg,image/webp', LOGO_MAX_BYTES);
       const check = inspectImage(bytes);
       if (!check.ok) http.reject(url, check.reason);
       saveLogo.run(ticker, check.mime, bytes, 'parqet', opts.today);
+      log(`${ticker}: logo staženo`);
       return 'downloaded';
     } catch (e) {
       // a failed refresh keeps the cached logo; 404 = the service has no logo → remembered for LOGO_REFRESH_DAYS;
@@ -251,8 +253,10 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       if ((e as { status?: number }).status === 404) {
         if (stored?.has) db.prepare('UPDATE logos SET checked_at = ? WHERE ticker = ?').run(opts.today, ticker);
         else saveLogo.run(ticker, null, null, 'parqet', opts.today);
+        log(`${ticker}: logo není k dispozici${stored?.has ? ' – zůstává uložené' : ''}`);
         return cached;
       }
+      log(`${ticker}: logo se nepodařilo stáhnout (${e instanceof UnsafeDataError ? 'soubor není bezpečný obrázek' : (e as Error).message})${stored?.has ? ' – zůstává uložené' : ''}`);
       return stored?.has ? 'cached' : 'failed';
     }
   };

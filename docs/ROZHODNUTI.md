@@ -344,9 +344,14 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   řádky se dočítají po 10 při posunu k jeho konci (dokud okno není plné, dočtou se hned), „Zobrazit méně“ ho sbalí.
   Dřív kombinace „Zobrazit dalších 10“ + automatického dočítání působila nekonzistentně (tlačítko zmizelo samo).
   Otevřený akordeon se v okně drží nahoře.
-  **Daně podle let** od 2 let v jedné řadě posouvané do strany (na mobilu po jedné kartě, další kartu je vidět
-  okrajem). Posun okna i řady i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
-  Karta roku (`yearSales`): „Celkem N prodejů za X“, pod tím jednou „Limit 100 tis. bez časového testu využit
+  **Daně podle let** jako **svislá časová osa** (vodorovný posun karet se špatně ovládal): nejnovější rok nahoře,
+  tečka na ose podle výsledku (červená = daň, zelená = bez daně, šedá = neověřeno). Řádek roku = rok, štítky
+  („probíhá“, limit, u loňského roku s daní do konce června termín přiznání) a vpravo daň + „N prodejů za X“.
+  Rozbalený je letošní a loňský rok, starší jsou sbalené (`state.yearsToggled` pamatuje přepnutí). Od 2 let je nad
+  osou **přehledový graf** (`taxYearsChart`): sloupec za rok, dole prodeje bez časového testu (barva podle limitu),
+  nahoře po časovém testu, čárkovaná čára = 100 tis.; klik na sloupec rok rozbalí a posune se k němu. Návod k přiznání
+  se otevírá uvnitř roku. Posun okna i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
+  Tělo roku (`yearSales`, na desktopu vlevo, základ a daň vpravo): „Limit 100 tis. bez časového testu využit
   na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (rok s nejvyššími
   prodeji = celá šířka, takže nic nepřeteče a malé prodeje nejsou ztracené vůči pevným 100 tis.; segment má min. 4 px):
   zleva prodeje bez časového testu (červená = ke zdanění, světle zelená = osvobozeno v limitu, šedá = neověřeno),
@@ -429,7 +434,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     zeptá znovu až **po 30 dnech** (`LOGO_REFRESH_DAYS`, logo se mohlo změnit); když obnova selže (síť, 404,
     odmítnutý soubor), zůstane uložené logo. Logo, které zdroj nemá (404), se také zapamatuje na 30 dní.
   - Stahování vypne `"$logos": false` v `data/instruments.json` (už stažená loga zůstanou).
-  - `pnpm market` u každého instrumentu vypíše stav loga (staženo / z cache / není k dispozici / nepodařilo se
+  - Při stahování se v průběhu (i v průvodci `2-vytvorit-report`) vypisuje „TICKER: logo (Parqet)…“ a výsledek
+    (staženo / není k dispozici / nepodařilo se stáhnout – zůstává uložené). Na konci `pnpm market` u každého instrumentu vypíše stav loga (staženo / z cache / není k dispozici / nepodařilo se
     stáhnout / vypnuto) a souhrn. Ruční loga (`data/logos`) byla odebrána – uživatel je nepotřebuje.
 - Pruhy **Složení portfolia** jsou rozdělené podle sektorů instrumentu v barvách a pořadí panelu Podle sektorů
   (`sectorOrder`), nesektorový zbytek = Neznámé. Zvoleny sektory, ne země: většina ETF i akcií by byla skoro celá „USA“,
