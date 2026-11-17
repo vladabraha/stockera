@@ -2,6 +2,7 @@ import type { Db } from '../db/database.ts';
 import { addDays, daysBetween, pragueDate, taxFreeFrom } from './calendar.ts';
 import { checkFifo, type FifoMismatch } from './fifo.ts';
 import { t212Warnings } from '../t212/store.ts';
+import { T212_PREFIX } from '../t212/history.ts';
 import { Converter, DbFxRates, percent, subTotals, sumMoney, type FxRates, type Money, type Percent, type Totals } from './fx.ts';
 import { loadLots, type ValueSource } from './lots.ts';
 import { validatePortfolio, type DataCheck } from './validation.ts';
@@ -480,6 +481,12 @@ export function analyze(db: Db, options: AnalyzeOptions = {}): Analysis {
     missingRates: conv.missing.size,
     fifoMismatches: fifoMismatches.length,
     incompleteAccounts: cashFlows.filter((c) => !c.historyComplete).map((c) => c.accountNumber),
+    // One Trading 212 CSV holds all its currency accounts, so its files form a single sequence.
+    exportPeriods: (db.prepare('SELECT account_number, period_from, period_to FROM imports WHERE period_from IS NOT NULL AND period_to IS NOT NULL')
+      .all() as { account_number: string; period_from: string; period_to: string }[])
+      .map((i) => (i.account_number.startsWith(T212_PREFIX)
+        ? { source: 't212' as const, account: 'Trading 212', from: i.period_from, to: i.period_to }
+        : { source: 'xtb' as const, account: i.account_number, from: i.period_from, to: i.period_to })),
   });
 
   const lastTransaction = (db.prepare(`SELECT max(t) AS t FROM (

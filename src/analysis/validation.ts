@@ -1,4 +1,4 @@
-import { daysBetween, pragueDate } from './calendar.ts';
+import { addDays, daysBetween, pragueDate } from './calendar.ts';
 import type { OpenLot } from './lots.ts';
 import type { PriceQuote } from './market.ts';
 
@@ -22,6 +22,9 @@ export interface ValidationInput {
   missingRates: number;
   fifoMismatches: number;
   incompleteAccounts: string[];
+  /** Period of every imported file (ISO timestamps). XTB states it in the export header; for Trading 212 it is only
+   *  the first/last row, so gaps there are a hint, not proof. `account` groups files that must follow each other. */
+  exportPeriods?: { source: 'xtb' | 't212'; account: string; from: string; to: string }[];
 }
 
 /** XTB rounds to cents; anything beyond this is a real difference, not rounding. */
@@ -31,6 +34,22 @@ const COST_TOLERANCE = (x: number) => Math.max(1, Math.abs(x) * 0.005);
 export const PRICE_TOLERANCE_PCT = 5;
 const STALE_EXPORT_DAYS = 31;
 const BIG_MOVE_PCT = 15;
+/** Trading 212 exports only show days with activity; shorter quiet periods are normal. */
+const T212_GAP_DAYS = 60;
+
+/** Merges file periods (Prague dates) and returns the covered span plus the uncovered gaps longer than `minGap` days. */
+export function periodGaps(periods: { from: string; to: string }[], minGap = 1): { from: string; to: string; gaps: { from: string; to: string }[] } | null {
+  const list = periods.map((p) => ({ from: pragueDate(p.from), to: pragueDate(p.to) })).sort((a, b) => a.from.localeCompare(b.from));
+  if (!list.length) return null;
+  const gaps: { from: string; to: string }[] = [];
+  let end = list[0]!.to;
+  for (const p of list.slice(1)) {
+    // consecutive exports may end and start on the same day or on adjacent days
+    if (daysBetween(end, p.from) > minGap) gaps.push({ from: addDays(end, 1), to: addDays(p.from, -1) });
+    if (p.to > end) end = p.to;
+  }
+  return { from: list[0]!.from, to: end, gaps };
+}
 
 export function validatePortfolio(v: ValidationInput): DataCheck[] {
   const out: DataCheck[] = [];
@@ -136,5 +155,38 @@ export function validatePortfolio(v: ValidationInput): DataCheck[] {
   out.push(v.incompleteAccounts.length
     ? { status: 'warn', title: 'Neúplná historie účtu', detail: `Účet ${v.incompleteAccounts.join(', ')}: peněžní operace začínají až po prvním nákupu – nahraj export za celé období.` }
     : { status: 'ok', title: 'Historie účtu je úplná', detail: 'Peněžní operace pokrývají celé období od prvního nákupu.' });
+
+  const groups = new Map<string, { source: 'xtb' | 't212'; from: string; to: string }[]>();
+  for (const p of v.exportPeriods ?? []) groups.set(`${p.source}|${p.account}`, [...(groups.get(`${p.source}|${p.account}`) ?? []), p]);
+  const xtbAccounts = [...groups.keys()].filter((k) => k.startsWith('xtb|')).length;
+  for (const [key, list] of groups) {
+    const [source, account] = key.split('|') as ['xtb' | 't212', string];
+    const files = `${list.length} ${list.length === 1 ? 'soubor' : list.length < 5 ? 'soubory' : 'souborů'}`;
+    const range = (g: { from: string; to: string }) => (g.from === g.to ? day(g.from) : `${day(g.from)} – ${day(g.to)}`);
+    if (source === 'xtb') {
+      const r = periodGaps(list);
+      if (!r) continue;
+      const acc = xtbAccounts > 1 ? ` (účet ${account})` : '';
+      out.push(r.gaps.length
+        ? {
+          status: 'warn',
+          title: `Mezera ve výpisech XTB${acc}`,
+          detail: `Chybí ${r.gaps.map(range).join(', ')}. Stáhni z xStation export za ${r.gaps.length === 1 ? 'toto období' : 'tato období'} ` +
+            'a nahraj ho – jinak v reportu chybí obchody a dividendy z té doby.',
+        }
+        : { status: 'ok', title: `Výpisy XTB navazují${acc}`, detail: `${files} pokrývá ${range(r)} bez mezer.` });
+    } else {
+      const r = periodGaps(list, T212_GAP_DAYS);
+      if (!r) continue;
+      out.push(r.gaps.length
+        ? {
+          status: 'info',
+          title: 'Možná mezera ve výpisech Trading 212',
+          detail: `V období ${r.gaps.map(range).join(', ')} není v exportech žádný záznam. Pokud jsi tehdy obchodoval nebo dostal dividendy, ` +
+            'nahraj export i za toto období. (Trading 212 do CSV neukládá zvolené období, takže jde jen o odhad.)',
+        }
+        : { status: 'ok', title: 'Výpisy Trading 212 bez delších mezer', detail: `${files} pokrývá ${range(r)}, žádná mezera delší než ${T212_GAP_DAYS} dní.` });
+    }
+  }
   return out;
 }

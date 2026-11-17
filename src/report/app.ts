@@ -853,7 +853,7 @@ function validationPanel(a: Analysis): HTMLElement | null {
       h('summary', {},
         h('h2', {}, 'Kontrola dat'),
         h('span', { class: warns ? 'check-sum warn' : 'check-sum ok' }, warns ? `${warns} upozornění z ${checks.length} kontrol` : `Vše v pořádku, ${checks.length} kontrol`)),
-      h('p', { class: 'muted hint' }, 'Hodnota portfolia je porovnaná se souhrnem a cenami ve výpisu XTB, kurzy ČNB a párováním prodejů (Trading 212 páruje prodeje tento program sám metodou FIFO).'),
+      h('p', { class: 'muted hint' }, 'Hodnota portfolia je porovnaná se souhrnem a cenami ve výpisu XTB, kurzy ČNB, párováním prodejů a návazností nahraných výpisů (Trading 212 páruje prodeje tento program sám metodou FIFO).'),
       h('ul', { class: 'check-list' }, ...checks.map((c) => h('li', { class: c.status },
         h('span', { class: 'check-icon', 'aria-hidden': 'true' }, icon[c.status]),
         h('div', {}, h('b', {}, c.title), h('span', { class: 'muted' }, c.detail)))))));

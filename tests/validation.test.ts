@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validatePortfolio, type ValidationInput } from '../src/analysis/validation.ts';
+import { periodGaps, validatePortfolio, type ValidationInput } from '../src/analysis/validation.ts';
 import type { OpenLot } from '../src/analysis/lots.ts';
 
 const lot = (ticker: string, value: number, cost: number, currentPrice: number): OpenLot => ({
@@ -48,4 +48,38 @@ test('validatePortfolio flags mismatched totals, wrong prices and stale exports'
   assert.equal(s['Velká změna hodnoty od výpisu'], 'warn');
   assert.equal(s['Chybí kurzy ČNB'], 'warn');
   assert.equal(s['Neúplná historie účtu'], 'warn');
+});
+
+test('periodGaps merges overlapping and adjacent exports and reports only uncovered days', () => {
+  const r = periodGaps([
+    { from: '2024-06-01T00:00:00Z', to: '2024-12-31T12:00:00Z' },
+    { from: '2022-12-31T23:00:00Z', to: '2023-12-31T22:00:00Z' }, // Prague 1 Jan 2023 – 31 Dec 2023
+    { from: '2023-06-01T10:00:00Z', to: '2024-02-29T10:00:00Z' }, // overlaps the first one
+    { from: '2025-01-01T10:00:00Z', to: '2025-03-01T10:00:00Z' }, // starts the day after the previous one ends
+  ]);
+  assert.deepEqual(r, { from: '2023-01-01', to: '2025-03-01', gaps: [{ from: '2024-03-01', to: '2024-05-31' }] });
+});
+
+test('export periods: XTB gaps warn per account, Trading 212 gaps are only a hint above 60 days', () => {
+  const checks = validatePortfolio(base({
+    exportPeriods: [
+      { source: 'xtb', account: 'A', from: '2023-01-01T10:00:00Z', to: '2023-12-31T10:00:00Z' },
+      { source: 'xtb', account: 'A', from: '2024-03-01T10:00:00Z', to: '2025-03-10T10:00:00Z' },
+      { source: 'xtb', account: 'B', from: '2024-01-01T10:00:00Z', to: '2025-03-10T10:00:00Z' },
+      { source: 't212', account: 'Trading 212', from: '2024-01-05T10:00:00Z', to: '2024-02-01T10:00:00Z' },
+      { source: 't212', account: 'Trading 212', from: '2024-03-15T10:00:00Z', to: '2024-04-01T10:00:00Z' },
+    ],
+  }));
+  const find = (t: string) => checks.find((c) => c.title === t);
+  assert.equal(find('Mezera ve výpisech XTB (účet A)')?.status, 'warn');
+  assert.match(find('Mezera ve výpisech XTB (účet A)')!.detail, /Chybí 1\. 1\. 2024 – 29\. 2\. 2024\./);
+  assert.equal(find('Výpisy XTB navazují (účet B)')?.status, 'ok');
+  assert.equal(find('Výpisy Trading 212 bez delších mezer')?.status, 'ok'); // 42 days without rows is normal
+
+  const t212 = validatePortfolio(base({ exportPeriods: [
+    { source: 't212', account: 'Trading 212', from: '2024-01-05T10:00:00Z', to: '2024-02-01T10:00:00Z' },
+    { source: 't212', account: 'Trading 212', from: '2024-06-01T10:00:00Z', to: '2024-07-01T10:00:00Z' },
+  ] })).find((c) => c.title === 'Možná mezera ve výpisech Trading 212');
+  assert.equal(t212?.status, 'info');
+  assert.match(t212!.detail, /2\. 2\. 2024 – 31\. 5\. 2024/);
 });

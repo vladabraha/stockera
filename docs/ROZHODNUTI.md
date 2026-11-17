@@ -449,6 +449,10 @@ Vědomě neřešeno: zip bomb (jen DoS vlastního počítače vlastním souborem
   od výpisu (> 15 % ⚠; jen pozice účtů se snapshotem XTB – snapshot vs. tytéž pozice se staženými cenami, T212
   ji nevypíná ani nezkresluje); kurzy ČNB; FIFO; úplnost historie. Stav `info` = jen kontext, ne chyba.
   Párování kusů přes peněžní operace se nedělá – export nemusí mít peněžní operace za celé období.
+  **Návaznost výpisů** (`periodGaps`): z `imports.period_from/to` se po účtech sloučí nahraná období a hledají se
+  nepokryté dny. XTB má období přesně v hlavičce exportu → mezera = ⚠ s chybějícími daty. Trading 212 období do CSV
+  neukládá (známe jen první/poslední řádek a všechny měnové účty jsou v jednom CSV, proto jedna skupina), takže
+  mezera mezi soubory může být i jen období bez obchodů → jen `info` a až nad 60 dní.
 
 - `pnpm check` (typecheck + testy) a `pnpm audit` musí projít před každým commitem.
 - Testy jsou offline: syntetické XLSX (`tests/helpers/xlsxBuilder.ts`, `fakeXtb.ts`), `fakeFetch` místo sítě,
