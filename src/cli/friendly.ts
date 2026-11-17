@@ -14,7 +14,6 @@ export const paths = {
   configExample: join(root, 'config/instruments.example.json'),
   networkLog: join(root, 'data/logs/network.log'),
   marketLog: join(root, 'data/logs/market.log'),
-  logos: join(root, 'data/logos'),
   errorLog: join(root, 'data/logs/chyby.log'),
   report: join(root, 'out/stockera.html'),
 };

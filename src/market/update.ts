@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { transaction, type Db } from '../db/database.ts';
 import type { Http } from '../net/http.ts';
 import { UnsafeDataError } from '../net/inspect.ts';
@@ -40,7 +39,7 @@ export function loadInstrumentConfig(path: string): InstrumentConfig {
   return cfg;
 }
 
-/** `"$logos": false` in data/instruments.json turns logo downloads off (hand-picked files in data/logos still work). */
+/** `"$logos": false` in data/instruments.json turns logo downloads off (already stored logos stay). */
 export function logosEnabled(path: string): boolean {
   if (!existsSync(path)) return true;
   return (JSON.parse(readFileSync(path, 'utf8').replace(/^\uFEFF/, '')) as Record<string, unknown>)['$logos'] !== false;
@@ -54,9 +53,13 @@ export interface UpdateOptions {
   log?: (msg: string) => void;
   /** Download logos by ISIN (off in tests unless asked; the CLI turns it on unless "$logos": false). */
   logos?: boolean;
-  /** Folder with hand-picked logos `<TICKER>.png|jpg|jpeg|webp`; they win over downloaded ones. */
-  logosDir?: string;
 }
+
+/**
+ * downloaded = new or refreshed now, cached = stored one (fresh, or the refresh failed), missing = the source has no logo,
+ * failed = download failed or the file was refused (tried again next run), off = downloads turned off.
+ */
+export type LogoStatus = 'downloaded' | 'cached' | 'missing' | 'failed' | 'off';
 
 export interface InstrumentReport {
   ticker: string;
@@ -66,8 +69,7 @@ export interface InstrumentReport {
   lastPrice: string | null;
   countrySource: string | null;
   sectorSource: string | null;
-  /** `manual` (data/logos), `parqet` or null (none – the report shows a coloured circle). */
-  logoSource: string | null;
+  logo: LogoStatus;
 }
 
 export interface UpdateReport {
@@ -78,13 +80,9 @@ export interface UpdateReport {
 }
 
 const PRICE_OVERLAP_DAYS = 7;
-/** An ISIN for which the logo service had nothing is asked again after this many days. */
 /** Downloaded logos (and "no logo" answers) are reused this long before asking the source again. */
 const LOGO_REFRESH_DAYS = 30;
 const ISIN_RE = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
-// Ticker as a file name: no path separators, no leading dot (so "../x" or ".hidden" can never be read).
-const SAFE_FILE_TICKER = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const LOGO_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 const COUNTRY_MAX_AGE_DAYS = 30;
 /** A stock candidate is accepted when its home-exchange price is within 10 % of the XTB price. */
 const PRICE_MATCH_TOLERANCE = 0.1;
@@ -227,49 +225,38 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
     return byPrice.length === 1 ? result(byPrice[0]!.isin, true) : null;
   };
 
-  // --- logos: hand-picked file first, then the logo service by ISIN; every picture is checked (image.ts) ---------
+  // --- logos: the logo service by ISIN, cached in the DB; every picture is checked (image.ts) -----------------------
+  db.prepare("DELETE FROM logos WHERE source = 'manual'").run(); // hand-picked logos (data/logos) were dropped
   const logoStmt = db.prepare('SELECT source, checked_at, data IS NOT NULL AS has FROM logos WHERE ticker = ?');
   const saveLogo = db.prepare(
     `INSERT INTO logos (ticker, mime, data, source, checked_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT (ticker) DO UPDATE SET mime = excluded.mime, data = excluded.data, source = excluded.source, checked_at = excluded.checked_at`,
   );
-  const updateLogo = async (ticker: string, isin: string | null): Promise<string | null> => {
-    const stored = logoStmt.get(ticker) as { source: string; checked_at: string; has: number } | undefined;
-    const manual = opts.logosDir && SAFE_FILE_TICKER.test(ticker)
-      ? LOGO_EXTENSIONS.map((e) => join(opts.logosDir!, `${ticker}.${e}`)).find((f) => existsSync(f)) : undefined;
-    if (manual) {
-      const bytes = readFileSync(manual);
-      const check = inspectImage(bytes);
-      if (check.ok) {
-        saveLogo.run(ticker, check.mime, bytes, 'manual', opts.today);
-        return 'manual';
-      }
-      warnings.push(`${ticker}: logo ${manual} nejde použít – ${check.reason}.`);
-    } else if (stored?.source === 'manual') {
-      db.prepare('DELETE FROM logos WHERE ticker = ?').run(ticker); // the file was removed
-    }
-    const current = stored?.source === 'manual' ? undefined : stored;
-    const cached = current?.has ? current.source : null;
-    if (!opts.logos || !isin || !ISIN_RE.test(isin)) return cached;
-    if (current && (Date.parse(opts.today) - Date.parse(current.checked_at)) / 86_400_000 < LOGO_REFRESH_DAYS) return cached;
-    log(`${ticker}: logo…`);
+  const updateLogo = async (ticker: string, isin: string | null): Promise<LogoStatus> => {
+    const stored = logoStmt.get(ticker) as { checked_at: string; has: number } | undefined;
+    const cached: LogoStatus = stored?.has ? 'cached' : 'missing';
+    if (!opts.logos) return stored?.has ? 'cached' : 'off';
+    if (!isin || !ISIN_RE.test(isin)) return cached;
+    if (stored && (Date.parse(opts.today) - Date.parse(stored.checked_at)) / 86_400_000 < LOGO_REFRESH_DAYS) return cached;
     const url = logoUrl(isin);
     try {
       const bytes = await http.getBytes(url, 'image/png,image/jpeg,image/webp', LOGO_MAX_BYTES);
       const check = inspectImage(bytes);
       if (!check.ok) http.reject(url, check.reason);
       saveLogo.run(ticker, check.mime, bytes, 'parqet', opts.today);
-      return 'parqet';
+      return 'downloaded';
     } catch (e) {
       // a failed refresh keeps the cached logo; 404 = the service has no logo → remembered for LOGO_REFRESH_DAYS;
       // network errors and refused files are retried next time
       if ((e as { status?: number }).status === 404) {
-        if (cached) db.prepare('UPDATE logos SET checked_at = ? WHERE ticker = ?').run(opts.today, ticker);
+        if (stored?.has) db.prepare('UPDATE logos SET checked_at = ? WHERE ticker = ?').run(opts.today, ticker);
         else saveLogo.run(ticker, null, null, 'parqet', opts.today);
-      } else if (!(e instanceof UnsafeDataError)) log(`${ticker}: logo se nepodařilo stáhnout (${(e as Error).message})`);
-      return cached;
+        return cached;
+      }
+      return stored?.has ? 'cached' : 'failed';
     }
   };
+
 
   for (const { ticker } of tickers) {
     const o = config[ticker] ?? {};
@@ -596,9 +583,9 @@ export async function updateMarketData(db: Db, http: Http, opts: UpdateOptions):
       warnings.push(`${ticker}: fond ${isin} je podle justETF zrušený nebo sloučený, jeho složení už nikdo nezveřejňuje. `
         + 'Do data/instruments.json doplň "compositionIsin" (ISIN jiného ETF na stejný index) nebo ruční "countries" a "sectors".');
     }
-    const logoSource = await updateLogo(ticker, isin);
+    const logo = await updateLogo(ticker, isin);
     const lastPrice = (db.prepare('SELECT MAX(date) AS d FROM prices WHERE ticker = ?').get(ticker) as { d: string | null }).d;
-    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource, logoSource });
+    report.instruments.push({ ticker, isin, priceSource: source, newPrices, lastPrice, countrySource, sectorSource, logo });
   }
   return report;
 }

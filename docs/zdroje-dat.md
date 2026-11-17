@@ -17,7 +17,7 @@ Ven se posílá jen ticker, ISIN, rok nebo datum (živé ceny v reportu: ISIN a 
 | Ceny ETF (EUR) | justETF – `api/etfs/{ISIN}/performance-chart` | ISIN + období | od posledního uloženého dne − 7 dní |
 | Ceny akcií | Yahoo Finance – `v8/finance/chart/{symbol}` | symbol + období | od posledního uloženého dne − 7 dní |
 | Yahoo symbol (záloha) | Yahoo – `v1/finance/search?q={ISIN}` | ISIN | jen když výchozí symbol neexistuje a ceny ještě nejsou |
-| Logo instrumentu | Parqet – `assets.parqet.com/logos/isin/{ISIN}?format=png` (bez přesměrování, max 100 kB, jen ověřené PNG/JPEG/WebP) | ISIN | obnova po 30 dnech (mezitím z databáze, při chybě zůstane staré); „nemá logo“ také po 30 dnech; ruční `data/logos/<TICKER>.png` má přednost; vypne `"$logos": false` v `data/instruments.json` |
+| Logo instrumentu | Parqet – `assets.parqet.com/logos/isin/{ISIN}?format=png` (bez přesměrování, max 100 kB, jen ověřené PNG/JPEG/WebP) | ISIN | obnova po 30 dnech (mezitím z databáze, při chybě zůstane staré); „nemá logo“ také po 30 dnech; vypne `"$logos": false` v `data/instruments.json` |
 
 ## Živé ceny v otevřeném reportu (`out/stockera.html`)
 Prohlížeč po odemknutí stáhne aktuální ceny a kurzy (CSP povoluje jen tyto čtyři hosty). Odchází jen ISIN nebo kódy měn.

@@ -460,53 +460,34 @@ test('instruments.json saved by Windows Notepad (UTF-8 BOM) still loads', () => 
   }
 });
 
-test('logos: hand-picked file wins, downloads are checked, refused files and "no logo" are handled, analysis embeds them', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'stockera-logos-'));
-  try {
-    writeFileSync(join(dir, 'STK.US.png'), fakePng(64, 64));
-    writeFileSync(join(dir, '..png'), fakePng(64, 64)); // never read: not a ticker
-    const db = seed();
-    let logo: Response | undefined = new Response('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
-    const calls: string[] = [];
-    const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => (u.includes('parqet') ? logo : routes(u)), calls) });
-    const opts = { today: '2025-01-13', logos: true, logosDir: dir };
+test('logos: downloads are checked, cached for 30 days, refused files and "no logo" are reported, analysis embeds them', async () => {
+  const db = seed();
+  let logo: (u: string) => Response | undefined = () => new Response('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
+  const calls: string[] = [];
+  const http = new Http({ minIntervalMs: 0, fetch: fakeFetch((u) => (u.includes('parqet') ? logo(u) : routes(u)), calls) });
+  const run = (today: string, logos = true) => updateMarketData(db, http, { today, logos });
+  const status = (r: Awaited<ReturnType<typeof run>>) => Object.fromEntries(r.instruments.map((i) => [i.ticker, i.logo]));
+  const logoCalls = () => calls.filter((u) => u.includes('parqet'));
 
-    let r = await updateMarketData(db, http, opts);
-    const src = () => Object.fromEntries(r.instruments.map((i) => [i.ticker, i.logoSource]));
-    assert.deepEqual(src(), { 'ETFA.DE': null, 'STK.US': 'manual' });
-    // only the ISIN is sent, and only for the instrument without a hand-picked logo
-    assert.deepEqual(calls.filter((u) => u.includes('parqet')), ['https://assets.parqet.com/logos/isin/IE0000000001?format=png']);
-    assert.ok(http.log.some((e) => e.url.includes('parqet') && e.status === 'unsafe'), 'the disguised SVG is thrown away and audited');
+  assert.deepEqual(status(await run('2025-01-13', false)), { 'ETFA.DE': 'off', 'STK.US': 'off' });
+  assert.deepEqual(logoCalls(), []);
 
-    logo = new Response(fakePng(100, 100));
-    r = await updateMarketData(db, http, opts);
-    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': 'manual' });
-    const a = analyze(db);
-    assert.match(a.instruments['ETFA.DE']!.logo!, /^data:image\/png;base64,iVBORw0KGgo/);
-    assert.ok(a.instruments['STK.US']!.logo);
+  // a disguised SVG is thrown away and audited; only the ISIN is sent
+  assert.deepEqual(status(await run('2025-01-13')), { 'ETFA.DE': 'failed', 'STK.US': 'failed' });
+  assert.deepEqual(logoCalls(), ['https://assets.parqet.com/logos/isin/IE0000000001?format=png', 'https://assets.parqet.com/logos/isin/US0000000002?format=png']);
+  assert.ok(http.log.some((e) => e.url.includes('parqet') && e.status === 'unsafe'));
 
-    // removing the file drops the manual logo; "no logo" (404) is remembered and not asked again for 90 days
-    rmSync(join(dir, 'STK.US.png'));
-    logo = undefined;
-    calls.length = 0;
-    r = await updateMarketData(db, http, opts);
-    r = await updateMarketData(db, http, opts);
-    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': null });
-    assert.deepEqual(calls.filter((u) => u.includes('parqet')), ['https://assets.parqet.com/logos/isin/US0000000002?format=png']);
+  logo = (u) => (u.includes('IE0') ? new Response(fakePng(100, 100)) : undefined); // STK: 404 = no logo
+  assert.deepEqual(status(await run('2025-01-13')), { 'ETFA.DE': 'downloaded', 'STK.US': 'missing' });
+  assert.match(analyze(db).instruments['ETFA.DE']!.logo!, /^data:image\/png;base64,iVBORw0KGgo/);
+  assert.equal(analyze(db).instruments['STK.US']!.logo, undefined);
 
-    // cached for 30 days; a failed refresh (here 404) keeps the stored logo
-    calls.length = 0;
-    r = await updateMarketData(db, http, { ...opts, today: '2025-02-11' });
-    assert.equal(calls.filter((u) => u.includes('parqet')).length, 0);
-    r = await updateMarketData(db, http, { ...opts, today: '2025-02-13' });
-    assert.equal(calls.filter((u) => u.includes('parqet')).length, 2);
-    assert.deepEqual(src(), { 'ETFA.DE': 'parqet', 'STK.US': null });
-    assert.ok(analyze(db).instruments['ETFA.DE']!.logo);
-
-    writeFileSync(join(dir, 'STK.US.png'), '<svg/>');
-    r = await updateMarketData(db, http, opts);
-    assert.ok(r.warnings.some((w) => w.includes('STK.US') && w.includes('není to obrázek')));
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
+  // cached for 30 days (nothing is asked), then refreshed; a failed refresh keeps the stored logo
+  calls.length = 0;
+  assert.deepEqual(status(await run('2025-02-11')), { 'ETFA.DE': 'cached', 'STK.US': 'missing' });
+  assert.deepEqual(logoCalls(), []);
+  logo = () => undefined;
+  assert.deepEqual(status(await run('2025-02-13')), { 'ETFA.DE': 'cached', 'STK.US': 'missing' });
+  assert.equal(logoCalls().length, 2);
+  assert.ok(analyze(db).instruments['ETFA.DE']!.logo);
 });

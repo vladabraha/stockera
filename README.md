@@ -85,7 +85,7 @@ pnpm audit        # kontrola zranitelností závislostí
 - Žádné runtime závislosti; vývojové závislosti s přesnými verzemi.
 - `pnpm-workspace.yaml`: zakázané install skripty závislostí, instalace jen verzí starších 3 dnů.
 - Import ani výpočty nekomunikují po síti. Síť používá jen `pnpm market`, výhradně přes `src/net/http.ts`:
-  - povolené servery: `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`, `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`, `assets.parqet.com` (loga podle ISIN, jen ověřené PNG/JPEG/WebP; vypne `"$logos": false` v `data/instruments.json`, vlastní logo `data/logos/<TICKER>.png`) (jiné, i při přesměrování, se zablokují),
+  - povolené servery: `www.cnb.cz`, `www.cashmarket.deutsche-boerse.com`, `www.justetf.com`, `query1/query2.finance.yahoo.com`, `api.onvista.de`, `www.pse.cz`, `assets.parqet.com` (loga podle ISIN, jen ověřené PNG/JPEG/WebP; vypne `"$logos": false` v `data/instruments.json`) (jiné, i při přesměrování, se zablokují),
   - posílá jen tickery, ISINy a data (ověřeno testem `tests/market.test.ts`), bez cookies,
   - každý požadavek se zapíše do `data/logs/network.log`,
   - ceny se stahují od 1. 12. roku před prvním nákupem pro všechny tickery stejně (z požadavků nejde vyčíst, kdy jsi co koupil),

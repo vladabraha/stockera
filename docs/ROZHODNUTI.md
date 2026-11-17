@@ -422,15 +422,15 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
     jen ISIN jako u ostatních zdrojů. `getBytes` nesleduje **žádné přesměrování**, limit **100 kB**.
   - `src/net/image.ts` (`inspectImage`) pozná formát **jen z bajtů souboru** (PNG/JPEG/WebP, ne z `Content-Type`)
     a přečte rozměry (16–1024 px). SVG, HTML ani nic jiného neprojde → zahodí se a audituje jako `unsafe`.
-  - Uloží se do tabulky `logos` (`ticker`, `mime`, `data` BLOB, `source` `parqet`|`manual`, `checked_at`), do reportu
+  - Uloží se do tabulky `logos` (`ticker`, `mime`, `data` BLOB, `source` `parqet`, `checked_at`), do reportu
     jde jako `data:image/png;base64,…` (CSP `img-src data:`, nic se nestahuje). Frontend před vložením ověří tvar
     data URI (`LOGO_URI`) a nastavuje `src` vlastností, `alt=""` (název je vedle), pevné `width`/`height`.
   - **Cache:** stažené logo je v databázi, report ani nová verze aplikace nic nestahují. `pnpm market` se zdroje
     zeptá znovu až **po 30 dnech** (`LOGO_REFRESH_DAYS`, logo se mohlo změnit); když obnova selže (síť, 404,
     odmítnutý soubor), zůstane uložené logo. Logo, které zdroj nemá (404), se také zapamatuje na 30 dní.
-  - **Ruční logo:** `data/logos/<TICKER>.png|jpg|jpeg|webp` (např. `AAPL.US.png`) má přednost, projde stejnou
-    kontrolou (špatný soubor → varování); po smazání souboru se ruční logo odebere.
   - Stahování vypne `"$logos": false` v `data/instruments.json` (už stažená loga zůstanou).
+  - `pnpm market` u každého instrumentu vypíše stav loga (staženo / z cache / není k dispozici / nepodařilo se
+    stáhnout / vypnuto) a souhrn. Ruční loga (`data/logos`) byla odebrána – uživatel je nepotřebuje.
 - Pruhy **Složení portfolia** jsou rozdělené podle sektorů instrumentu v barvách a pořadí panelu Podle sektorů
   (`sectorOrder`), nesektorový zbytek = Neznámé. Zvoleny sektory, ne země: většina ETF i akcií by byla skoro celá „USA“,
   takže by barva zemí pruhy nerozlišila. Tooltip/`aria-label` vyjmenuje sektory.
