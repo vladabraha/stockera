@@ -1530,11 +1530,11 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     const body = h('div', { class: 'year tip-host' });
     body.append(
       h('div', { class: 'ytl-cols' },
-        h('div', { class: 'ytl-sales' }, ...yearSales(a, y, hoverTip(body), scaleCzk)),
+        h('div', { class: 'ytl-sales' }, ...yearSales(a, y, hoverTip(body), scaleCzk),
+          offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : ''),
         h('dl', {},
           h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
           h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(tax, 'CZK')))),
-      offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
       h('div', { class: 'year-actions' },
         offset ? button(state.offsetOpen ? 'Skrýt snížení daně' : 'Jak snížit daň', () => {
           state.offsetOpen = !state.offsetOpen;
@@ -1550,42 +1550,9 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     return li;
   };
   return panel('Daně podle let',
-    years.length > 1 ? taxYearsChart(years, (y) => {
-      if (!isOpen(y)) toggle(y);
-      render();
-      document.getElementById(`tax-year-${y}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    }) : null,
     h('ol', { class: 'ytl' }, ...years.map(item)),
     h('p', { class: 'hint' }, 'Orientační výpočet: časový test 3 roky, limit 100 000 Kč hrubých příjmů za rok z prodejů bez časového testu, ztráty se odečtou od zisků téhož roku, sazba 15 % (při vysokých celkových příjmech část 23 %), kurzy ČNB ke dni obchodu. Nenahrazuje daňové poradenství.'),
   );
-}
-
-/** Overview of all tax years: one column per year (short-term sales at the bottom, time-tested on top), the dashed line = 100k limit. */
-function taxYearsChart(years: TaxYear[], pick: (year: number) => void): HTMLElement {
-  const asc = [...years].sort((p, q) => p.year - q.year);
-  const max = Math.max(SALES_LIMIT_CZK, ...asc.map((y) => y.proceeds.czk ?? 0));
-  const h100 = (SALES_LIMIT_CZK / max) * 100;
-  const col = (y: TaxYear) => {
-    const short = y.shortTermProceeds.czk ?? 0, free = y.timeTestedProceeds.czk ?? 0;
-    const cls = y.limitStatus === 'exceeded' ? 'taxed' : y.limitStatus === 'within' ? 'short' : 'unknown';
-    const label = `${y.year}: ${y.salesCount} ${salesWord(y.salesCount)} za ${fmtMoney(y.proceeds.czk, 'CZK')}, `
-      + `bez časového testu ${fmtMoney(short, 'CZK')}, daň ${fmtMoney(y.taxable.taxCzk, 'CZK')}`;
-    const b = button(h('span', { class: 'ytc-col' },
-      h('span', { class: 'ytc-stack' },
-        free > 0 ? paint(h('i', { class: 'free' }), { height: `${(free / max) * 100}%` }) : null,
-        short > 0 ? paint(h('i', { class: cls }), { height: `${(short / max) * 100}%` }) : null),
-      h('span', { class: 'ytc-year' }, String(y.year))), () => pick(y.year), 'ytc-btn', label);
-    b.setAttribute('aria-label', label);
-    return b;
-  };
-  return h('div', { class: 'ytc', role: 'group', 'aria-label': 'Prodeje podle let, klik otevře rok' },
-    h('div', { class: 'ytc-plot' },
-      paint(h('div', { class: 'ytc-limit', 'aria-hidden': 'true' }, h('span', {}, '100 tis.')), { bottom: `${h100}%` }),
-      ...asc.map(col)),
-    h('div', { class: 'ytc-legend muted small' },
-      h('span', {}, h('i', { class: 'dot short' }), ' bez časového testu v limitu'),
-      h('span', {}, h('i', { class: 'dot taxed' }), ' ke zdanění'),
-      h('span', {}, h('i', { class: 'dot free' }), ' po časovém testu')));
 }
 
 const salesWord = (n: number) => (n === 1 ? 'prodej' : n >= 2 && n <= 4 ? 'prodeje' : 'prodejů');

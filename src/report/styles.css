@@ -364,24 +364,6 @@ tbody tr:hover td { background: var(--sunk); }
 
 /* tax years */
 .years { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
-/* overview: one column per year, the dashed line = 100k limit (measured by the bottom, short-term part) */
-.ytc { margin: 4px 0 18px; }
-.ytc-plot { position: relative; display: flex; align-items: stretch; gap: 10px; height: 120px; border-bottom: 1px solid var(--line); margin-bottom: 26px; }
-.ytc-btn { all: unset; position: relative; flex: 1 1 0; max-width: 64px; cursor: pointer; border-radius: 6px 6px 0 0; }
-.ytc-btn:hover, .ytc-btn:focus-visible { background: var(--sunk); }
-.ytc-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.ytc-col { position: absolute; inset: 0; display: block; }
-.ytc-stack { position: absolute; inset: 0 8px; display: flex; flex-direction: column; justify-content: flex-end; gap: 2px; }
-.ytc-stack i { display: block; min-height: 3px; border-radius: 3px; }
-.ytc-stack .free { background: var(--pos); }
-.ytc-stack .short { background: color-mix(in srgb, var(--pos) 45%, transparent); }
-.ytc-stack .taxed { background: var(--neg); }
-.ytc-stack .unknown { background: var(--muted); }
-.ytc-year { position: absolute; top: calc(100% + 5px); left: 0; right: 0; text-align: center; font: 600 .78rem var(--fig); color: var(--muted); }
-.ytc-limit { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--text); opacity: .55; pointer-events: none; z-index: 1; }
-.ytc-limit span { position: absolute; right: 0; bottom: 2px; font-size: .68rem; }
-.ytc-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.ytc-legend .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 /* vertical timeline: newest year on top, a dot per year coloured by the result (tax due / exempt / unknown) */
 .ytl { list-style: none; margin: 0; padding: 0; }
 .ytl-item { position: relative; padding-left: 26px; scroll-margin-top: calc(var(--header-h, 60px) + 12px); }

@@ -347,9 +347,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   **Daně podle let** jako **svislá časová osa** (vodorovný posun karet se špatně ovládal): nejnovější rok nahoře,
   tečka na ose podle výsledku (červená = daň, zelená = bez daně, šedá = neověřeno). Řádek roku = rok, štítky
   („probíhá“, limit, u loňského roku s daní do konce června termín přiznání) a vpravo daň + „N prodejů za X“.
-  Rozbalený je letošní a loňský rok, starší jsou sbalené (`state.yearsToggled` pamatuje přepnutí). Od 2 let je nad
-  osou **přehledový graf** (`taxYearsChart`): sloupec za rok, dole prodeje bez časového testu (barva podle limitu),
-  nahoře po časovém testu, čárkovaná čára = 100 tis.; klik na sloupec rok rozbalí a posune se k němu. Návod k přiznání
+  Rozbalený je letošní a loňský rok, starší jsou sbalené (`state.yearsToggled` pamatuje přepnutí). Přehledový graf let
+  nad osou byl zkoušen a odebrán (zdvojoval informace z osy). Rada „Jak snížit daň“ je v levém sloupci pod prodeji
+  (stejná šířka jako seznam prodaných). Návod k přiznání
   se otevírá uvnitř roku. Posun okna i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
   Tělo roku (`yearSales`, na desktopu vlevo, základ a daň vpravo): „Limit 100 tis. bez časového testu využit
   na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (rok s nejvyššími
