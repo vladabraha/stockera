@@ -413,6 +413,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
 - **Brzy bez daně**: pruh `progress(…, 'heat')` má celý jednu barvu, která se podle podílu uplynulé doby plynule
   mění z červené (čerstvý nákup) přes oranžovou do zelené (těsně před splněním časového testu). Barva se míchá
   v CSS přes `color-mix(in oklch, …)` z proměnné `--p` (0–1); starší prohlížeče dostanou záložní `hsl()`.
+- Karty pod hlavním grafem (Investováno, Nerealizovaný/Realizovaný zisk, …) jsou **bez barev zisku/ztráty**,
+  stačí znaménko – barevné řádky níže jich mají dost.
 - Přepínače (`.seg`) mají vybranou volbu v tokenu `--seg-on` (v tmavém režimu světlejší než panel + stín) – dřív
   splývala s panelem a přepínač vypadal jako jeden obdélník.
 - **Loga instrumentů** (avatar místo kolečka s tickerem, i u prodaných; bez loga zůstává kolečko):
