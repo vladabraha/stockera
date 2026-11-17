@@ -735,8 +735,6 @@ function holdingRow(x: Holding): HTMLElement {
   ], () => {
     const avg = x.lots.reduce((n, l) => n + l.openPrice * l.quantity, 0) / (x.quantity || 1);
     const last = x.lots.find((l) => l.currentPrice)?.currentPrice;
-    const countries = x.countries.slice().sort((p, q) => q.weight - p.weight).slice(0, 3)
-      .map((c) => `${countryName(c.country)} ${fmtNum(c.weight, 0)} %`).join(', ');
     const platforms = platformsOf(x.lots.map((l) => l.accountNumber));
     const many = platforms.length > 1;
     return h('div', { class: 'acc-body' },
@@ -745,8 +743,6 @@ function holdingRow(x: Holding): HTMLElement {
         x.isin ? h('span', {}, 'ISIN ', h('b', {}, x.isin)) : null,
         h('span', {}, 'Ø nákup ', h('b', {}, x.lots[0] ? price(avg, x.priceCurrency ?? x.lots[0].cost.currency) : '—')),
         last ? h('span', {}, 'Cena ', h('b', {}, fmtMoney(last.close, last.currency)), ` (${czDate(last.date)})`) : null,
-        countries ? h('span', {}, 'Země ', h('b', {}, countries)) : null,
-        x.sectors?.length ? h('span', {}, 'Sektory ', h('b', {}, x.sectors.slice(0, 3).map((c) => `${sectorName(c.sector)} ${fmtNum(c.weight, 0)} %`).join(', '))) : null,
         button('Zobrazit graf', () => showInstrument(x.ticker), 'link'),
       ),
       table(['Nákup', ...(many ? ['Platforma'] : []), 'Ks', 'Nákupní cena', 'Investováno', 'Hodnota', 'Zisk', '%', 'Časový test'],

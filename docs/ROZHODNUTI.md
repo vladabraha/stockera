@@ -402,6 +402,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   sparkline/daně), aby se rozpětí dat prodeje nezalamovalo a šipka akordeonu byla na konci řádku. Výnos a zisk
   jsou v jednom sloupci u sebe – „195 000 Kč (+75 000 Kč)“, pod tím datum(y) prodeje a štítek s % – aby zisk
   nevisel v samostatném sloupci daleko od částky.
+- **Detail pozice** (rozbalení): platforma, ISIN, Ø nákup, cena, graf a nákupy – země a sektory tam nejsou
+  (přání uživatele; jsou v panelech „Podle zemí“ / „Podle sektorů“ a v tooltipu pruhů složení).
 - **Časový test u pozice** (`taxSegments`): pruh složený z dílků – nákupy seskupené podle měsíce, kdy budou bez daně
   (šířka = kusy), zleva už osvobozené kusy zeleně, pak ostatní barvou červená → zelená podle uplynulé části 3 let
   (stejně jako „Brzy bez daně“). Tooltip dílku: kusy, datum osvobození a za kolik dní. Dřív to byl jen podíl
