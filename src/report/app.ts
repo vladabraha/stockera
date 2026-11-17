@@ -1706,12 +1706,14 @@ function realizedRow(r: RealizedInstrument): HTMLElement {
     h('div', { class: 'irow sold' },
       avatar(r.ticker),
       instrumentName(r.ticker, r.name, r.quantity),
-      h('div', { class: 'ival lead' },
-        h('b', { class: 'num' }, totals(r.proceeds)),
-        h('span', { class: 'muted small' }, r.firstSale === r.lastSale ? czDate(r.lastSale) : `${czDate(r.firstSale)} – ${czDate(r.lastSale)}`)),
-      h('div', { class: 'ival' },
-        signed(signedMoney(totals(r.profit), totalsValue(r.profit)), totalsValue(r.profit), 'b'),
-        chip(pct(r.profitPct), pctValue(r.profitPct))),
+      // Proceeds and profit form one value: "195 000 Kč (+75 000 Kč)", dates and % below.
+      h('div', { class: 'ival sold-val' },
+        h('div', { class: 'sold-amt' },
+          h('b', { class: 'num' }, totals(r.proceeds)),
+          signed(`(${signedMoney(totals(r.profit), totalsValue(r.profit))})`, totalsValue(r.profit), 'span', 'sold-profit')),
+        h('div', { class: 'sold-meta' },
+          h('span', { class: 'muted small' }, r.firstSale === r.lastSale ? czDate(r.lastSale) : `${czDate(r.firstSale)} – ${czDate(r.lastSale)}`),
+          chip(pct(r.profitPct), pctValue(r.profitPct)))),
     ),
   ], () => {
     const platforms = platformsOf(r.lots.map((l) => l.accountNumber));

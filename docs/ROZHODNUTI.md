@@ -399,7 +399,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   dvakrát (media query s `:not([data-theme="light"])` a `[data-theme="dark"]`) – při změně barev upravit obě.
 - **Dividendy** (Prodané): akordeon po letech (rok, počet instrumentů, hrubá / srážková daň / čistá), rozbalení ukáže
   instrumenty roku přes `lazyList` (`div:<rok>`). **Prodané instrumenty**: vlastní mřížka `.irow.sold` (bez sloupce
-  sparkline/daně), aby se rozpětí dat prodeje nezalamovalo a šipka akordeonu byla na konci řádku.
+  sparkline/daně), aby se rozpětí dat prodeje nezalamovalo a šipka akordeonu byla na konci řádku. Výnos a zisk
+  jsou v jednom sloupci u sebe – „195 000 Kč (+75 000 Kč)“, pod tím datum(y) prodeje a štítek s % – aby zisk
+  nevisel v samostatném sloupci daleko od částky.
 - **Brzy bez daně**: pruh `progress(…, 'heat')` má celý jednu barvu, která se podle podílu uplynulé doby plynule
   mění z červené (čerstvý nákup) přes oranžovou do zelené (těsně před splněním časového testu). Barva se míchá
   v CSS přes `color-mix(in oklch, …)` z proměnné `--p` (0–1); starší prohlížeče dostanou záložní `hsl()`.
