@@ -441,10 +441,6 @@ tbody tr:hover td { background: var(--sunk); }
 .ypart-list .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ypart-body .lt-more, .offset .lt-more { margin-top: 6px; }
 .year-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
-.year-limit { font-size: .82rem; color: var(--muted); cursor: default; outline: none; align-self: flex-start; }
-.year-limit b { color: var(--text); }
-.year-limit b.neg { color: var(--neg); }
-.year-limit:focus-visible { text-decoration: underline dotted; }
 .year > .ghost { align-self: flex-start; margin-top: auto; }
 .year.active { border-color: var(--accent); }
 .dap-guide { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; font-size: .9rem; }
@@ -560,7 +556,7 @@ noscript { display: block; padding: 40px; text-align: center; }
 
 /* touch screens: every control at least 44 × 44 px */
 @media (pointer: coarse) {
-  .tools .seg button, .tool, .tabs button, .ghost, .seg button, .checks > summary, .date-field input, .sector-list li, .year-limit { min-height: 44px; }
+  .tools .seg button, .tool, .tabs button, .ghost, .seg button, .checks > summary, .date-field input, .sector-list li { min-height: 44px; }
   .tools .seg button, .tool, .theme { min-width: 44px; }
   /* bigger hit area without moving the text around it */
   .live-info { padding: 12px 17px; margin: -12px -13px -12px -15px; }

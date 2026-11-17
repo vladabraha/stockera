@@ -1514,9 +1514,9 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     const limit = y.limitStatus === 'within' ? tag('v limitu 100 tis.', 'ok')
       : y.limitStatus === 'exceeded' ? tag('limit překročen', 'bad') : tag('limit neověřen', 'info');
     const head = button(h('span', { class: 'ytl-head' },
-      h('span', { class: 'ytl-title' }, h('b', {}, String(y.year)), y.year === thisYear ? tag('probíhá', 'info') : null, limit, deadline(y)),
+      h('span', { class: 'ytl-title' }, h('b', {}, String(y.year)), limit, deadline(y)),
       h('span', { class: 'ytl-sum' },
-        h('span', { class: tax ? 'strong' : 'muted' }, tax ? `daň ${fmtMoney(tax, 'CZK')}` : tax === 0 ? 'bez daně' : 'daň neznámá'),
+        h('span', { class: tax ? 'strong neg' : 'muted' }, tax ? `daň ${fmtMoney(tax, 'CZK')}` : tax === 0 ? 'bez daně' : 'daň neznámá'),
         h('span', { class: 'muted small' }, `${y.salesCount} ${salesWord(y.salesCount)} za ${totals(y.proceeds)}`)),
       h('span', { class: 'chev', 'aria-hidden': 'true' }, '›')), () => {
       toggle(y.year);
@@ -1626,13 +1626,9 @@ function yearSales(a: Analysis, y: TaxYear, tip: ReturnType<typeof hoverTip>, sc
       ? `Překročeno o ${fmtMoney(used - SALES_LIMIT_CZK, 'CZK')} – zdaní se zisk ze všech prodejů bez časového testu.`
       : `Zbývá ${fmtMoney(SALES_LIMIT_CZK - used, 'CZK')}. Počítají se hrubé příjmy z prodejů, ne zisk; prodeje po časovém testu se nepočítají.`)];
   const out: HTMLElement[] = [];
-  if (used != null && used > 0) {
-    out.push(tip(h('div', { class: 'year-limit', tabindex: '0' },
-      'Limit 100 tis. bez časového testu využit na ', h('b', { class: over ? 'neg' : '' }, `${fmtNum((used / SALES_LIMIT_CZK) * 100, 0)} %`)), limitTip));
-  }
   if (parts.length) {
     const limitAt = byScale && SALES_LIMIT_CZK <= scaleCzk ? (SALES_LIMIT_CZK / scaleCzk) * 100 : null;
-    const marker = limitAt == null ? null : tip(paint(h('div', { class: limitAt > 80 ? 'ybar-limit end' : 'ybar-limit', tabindex: '-1' },
+    const marker = limitAt == null ? null : tip(paint(h('div', { class: limitAt > 80 ? 'ybar-limit end' : 'ybar-limit', tabindex: '0' },
       h('span', {}, '100 tis.')), { left: `${limitAt}%` }), limitTip);
     out.push(
       h('div', { class: marker ? 'ybar-wrap marked' : 'ybar-wrap' },
@@ -1766,7 +1762,7 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
       s.taxFreeQuantity > 0
         ? h('div', { class: 'muted small' }, `včetně ${fmtNum(s.taxFreeQuantity, 4)} ks s časovým testem – při zpětném nákupu poběží 3letý test znovu`)
         : null), 5) : []),
-    h('p', { class: 'muted small' }, 'Prodává se od nejstaršího nákupu. Ztráta z nákupů, které už splnily časový test, se nezapočítá. Podle aktuálních cen.'),
+    h('p', { class: 'muted small' }, 'Prodávají se nejdřív nejstarší kusy. Kusy držené přes 3 roky jsou osvobozené, takže jejich ztráta daň nesníží. Částky jsou podle aktuálních cen.'),
   );
 }
 
