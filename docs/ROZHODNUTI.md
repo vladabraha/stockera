@@ -348,10 +348,14 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   tečka na ose podle výsledku (červená = daň, zelená = bez daně, šedá = neověřeno). Řádek roku = rok, štítky
   („probíhá“, limit, u loňského roku s daní do konce června termín přiznání) a vpravo daň + „N prodejů za X“.
   Rozbalený je jen letošní rok, ostatní jsou sbalené (`state.yearsToggled` pamatuje přepnutí). Přehledový graf let
-  nad osou byl zkoušen a odebrán (zdvojoval informace z osy). Rada „Jak snížit daň“ je v levém sloupci pod prodeji
-  (stejná šířka jako seznam prodaných). Návod k přiznání
+  nad osou byl zkoušen a odebrán (zdvojoval informace z osy). Souhrn v řádku roku se u rozbaleného roku skrývá
+  (stejná čísla jsou v těle). Tělo roku čte shora dolů jako výpočet: tři dlaždice **Prodáno → Základ daně →
+  Daň 15 %** (daň zvýrazněná rámečkem; na mobilu pod sebou jako řádky popisek–částka), pod nimi pruh limitu
+  a prodeje. Dřívější rozložení se základem a daní vpravo pod „ke zdanění“ bylo nepřehledné (výsledek na konci).
+  Rada „Jak snížit daň“ je podbarvený box ve stejné šířce jako prodeje: nadpis „Daň můžeš snížit o X Kč“
+  (úspora zeleně), věta s tučnými částkami (kolik ztráty pokryjí ze základu, daň z → na), seznam pozic. Návod k přiznání
   se otevírá uvnitř roku. Posun okna i počet načtených řádků se pamatuje přes překreslení (přepnutí měny, živé ceny).
-  Tělo roku (`yearSales`, na desktopu vlevo, základ a daň vpravo): „Limit 100 tis. bez časového testu využit
+  Prodeje (`yearSales`): „Limit 100 tis. bez časového testu využit
   na N %“ (tooltip: částka, zbývá / překročeno o). Jeden pruh na **společném měřítku všech let** (rok s nejvyššími
   prodeji = celá šířka, takže nic nepřeteče a malé prodeje nejsou ztracené vůči pevným 100 tis.; segment má min. 4 px):
   zleva prodeje bez časového testu (červená = ke zdanění, světle zelená = osvobozeno v limitu, šedá = neověřeno),

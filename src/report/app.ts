@@ -1528,13 +1528,16 @@ function taxYearsPanel(a: Analysis): HTMLElement {
     const guide = state.taxGuideYear === y.year;
     const offset = y.year === thisYear && (tax ?? 0) > 0;
     const body = h('div', { class: 'year tip-host' });
+    // The calculation in reading order: what was sold → taxable base → tax
+    const calc = (label: string, value: string, sub: string, cls = '') =>
+      h('div', { class: `ycalc-cell ${cls}` }, h('dt', {}, label), h('dd', {}, h('b', {}, value), h('span', {}, sub)));
     body.append(
-      h('div', { class: 'ytl-cols' },
-        h('div', { class: 'ytl-sales' }, ...yearSales(a, y, hoverTip(body), scaleCzk),
-          offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : ''),
-        h('dl', {},
-          h('dt', {}, 'Základ daně'), h('dd', {}, fmtMoney(y.taxable.baseCzk, 'CZK')),
-          h('dt', {}, 'Daň 15 %'), h('dd', { class: 'strong' }, fmtMoney(tax, 'CZK')))),
+      h('dl', { class: 'ycalc' },
+        calc('Prodáno', totals(y.proceeds), `${y.salesCount} ${salesWord(y.salesCount)}`),
+        calc('Základ daně', fmtMoney(y.taxable.baseCzk, 'CZK'), y.limitStatus === 'exceeded' ? 'zisk po odečtení ztrát' : 'osvobozeno – nic se nedaní'),
+        calc('Daň 15 %', fmtMoney(tax, 'CZK'), tax ? (y.year === thisYear ? 'zatím k zaplacení' : 'k zaplacení') : 'nic k zaplacení', 'total')),
+      h('div', { class: 'ytl-sales' }, ...yearSales(a, y, hoverTip(body), scaleCzk)),
+      offset && state.offsetOpen ? lossOffsetNote(y.taxable.baseCzk!, holdings) : '',
       h('div', { class: 'year-actions' },
         offset ? button(state.offsetOpen ? 'Skrýt snížení daně' : 'Jak snížit daň', () => {
           state.offsetOpen = !state.offsetOpen;
@@ -1744,14 +1747,19 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
   const plan = lossOffsetPlan(baseCzk, lots);
   const manyAccounts = new Set(lots.map((l) => l.account)).size > 1;
   const taxCzk = incomeTax(baseCzk) ?? 0;
-  const saved = fmtMoney(taxCzk - plan.remainingTaxCzk, 'CZK');
+  const kc = (v: number) => h('b', {}, fmtMoney(v, 'CZK'));
+  const head = !plan.sales.length ? null
+    : h('div', { class: 'offset-head' }, 'Daň můžeš snížit o ', h('b', { class: 'pos' }, fmtMoney(taxCzk - plan.remainingTaxCzk, 'CZK')),
+      plan.remainingTaxCzk > 0 ? '' : ' – na nulu');
   const lead = !plan.sales.length
-    ? 'Daň by šlo snížit prodejem pozic ve ztrátě, ale teď žádná ztrátová pozice bez časového testu není.'
+    ? h('p', {}, 'Daň by šlo snížit prodejem pozic ve ztrátě, ale teď žádná ztrátová pozice bez časového testu není.')
     : plan.remainingTaxCzk > 0
-      ? `Ztrátové pozice pokryjí ${fmtMoney(-plan.lossCzk, 'CZK')} ze základu ${fmtMoney(baseCzk, 'CZK')}. Po jejich prodeji klesne daň o ${saved} z ${fmtMoney(taxCzk, 'CZK')} na ${fmtMoney(plan.remainingTaxCzk, 'CZK')}.`
-      : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')} – klesne o ${saved} na 0 Kč. Stačí prodat:`;
+      ? h('p', {}, 'Ztrátové pozice níže pokryjí ', kc(-plan.lossCzk), ' ze základu ', kc(baseCzk), '. Po jejich prodeji klesne daň z ',
+        kc(taxCzk), ' na ', kc(plan.remainingTaxCzk), '.')
+      : h('p', {}, 'Stačí letos prodat se ztrátou alespoň ', kc(baseCzk), ' (celý základ daně), například:');
   return h('div', { class: 'offset' },
-    h('p', {}, lead),
+    head,
+    lead,
     ...(plan.sales.length ? lazyList('offset', h('ul', { class: 'offset-list' }), plan.sales, (s) => h('li', {},
       h('span', { class: 'lname' }, h('b', {}, s.ticker), ` ${fmtNum(s.quantity, 4)} ks`, manyAccounts ? h('span', { class: 'muted' }, ` (účet ${s.account})`) : null),
       h('span', { class: 'num neg', title: 'Ztráta' }, fmtMoney(s.lossCzk, 'CZK')),

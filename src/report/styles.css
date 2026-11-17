@@ -281,8 +281,11 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .upcoming { list-style: none; margin: 0; padding: 0; }
 .tf-date { display: flex; align-items: center; gap: 8px; }
 .tf-sum { margin: 0 0 10px; }
-.offset { font-size: .86rem; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
-.offset p { margin: 0 0 6px; }
+.offset { font-size: .86rem; padding: 14px 16px; border-radius: 12px; background: var(--sunk); }
+.offset-head { font-size: 1rem; margin-bottom: 4px; }
+.offset-head b.pos { color: var(--pos); font-family: var(--fig); font-size: 1.1rem; }
+.offset p { margin: 0 0 8px; }
+.offset p b { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .offset-list { list-style: none; margin: 0 0 6px; padding: 0; }
 .offset-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
 .offset-list li:last-child { border-bottom: 0; }
@@ -368,26 +371,38 @@ tbody tr:hover td { background: var(--sunk); }
 .ytl { list-style: none; margin: 0; padding: 0; }
 .ytl-item { position: relative; padding-left: 26px; scroll-margin-top: calc(var(--header-h, 60px) + 12px); }
 .ytl-item::before { content: ''; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: var(--line); }
-.ytl-item:first-child::before { top: 32px; }
-.ytl-item:last-child::before { bottom: auto; height: 32px; }
+.ytl-item:first-child::before { top: 21px; }
+.ytl-item:last-child::before { bottom: auto; height: 21px; }
 .ytl-item:only-child::before { display: none; }
-.ytl-item::after { content: ''; position: absolute; left: 1px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 3px var(--panel); top: 26px; }
+.ytl-item::after { content: ''; position: absolute; left: 1px; top: 20px; width: 12px; height: 12px; border-radius: 50%; background: var(--pos); box-shadow: 0 0 0 3px var(--panel); top: 15px; }
 .ytl-item.bad::after { background: var(--neg); }
 .ytl-item.info::after { background: var(--muted); }
 .ytl-toggle { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 10px 10px; border-radius: 10px; cursor: pointer; }
 .ytl-toggle:hover, .ytl-toggle:focus-visible { background: var(--sunk); }
 .ytl-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.ytl-head { display: grid; grid-template-columns: minmax(0, 1fr) auto 14px; align-items: center; gap: 12px; }
-.ytl-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ytl-head { display: grid; grid-template-columns: minmax(0, 1fr) auto 14px; align-items: start; gap: 12px; }
+.ytl-head .chev { line-height: 22px; }
+.ytl-title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 22px; }
 .ytl-title b { font: 600 1.25rem/1 var(--fig); margin-right: 4px; }
 .ytl-sum { display: flex; flex-direction: column; align-items: flex-end; text-align: right; font-variant-numeric: tabular-nums; }
 .ytl-head .chev { color: var(--muted); font-size: 1.1rem; transition: transform .15s; }
 .ytl-toggle.open .chev { transform: rotate(90deg); }
-.ytl .year { border: 0; padding: 2px 10px 18px; }
-.ytl-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 260px); gap: 8px 32px; align-items: start; }
+.ytl .year { border: 0; padding: 2px 10px 18px; gap: 14px; }
+.ytl-toggle.open .ytl-sum { display: none; } /* the calculation tiles below repeat it */
+/* the year's calculation: Prodáno → Základ daně → Daň */
+.ycalc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.ycalc-cell { padding: 10px 14px; border-radius: 10px; background: var(--sunk); min-width: 0; }
+.ycalc-cell dt { font-size: .78rem; color: var(--muted); }
+.ycalc-cell dd { margin: 2px 0 0; display: flex; flex-direction: column; }
+.ycalc-cell dd b { font: 600 1.15rem/1.3 var(--fig); font-variant-numeric: tabular-nums; }
+.ycalc-cell dd span { font-size: .75rem; color: var(--muted); }
+.ycalc-cell.total { box-shadow: inset 0 0 0 1.5px var(--text); }
 .ytl-sales { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 @media (max-width: 640px) {
-  .ytl-cols { grid-template-columns: 1fr; }
+  .ycalc { grid-template-columns: 1fr; gap: 4px; }
+  .ycalc-cell { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 12px; }
+  .ycalc-cell dd { align-items: flex-end; text-align: right; margin: 0; }
+  .ycalc-cell dd b { font-size: 1.05rem; }
   .ytl-head { grid-template-columns: minmax(0, 1fr) 14px; }
   .ytl-sum { grid-row: 2; align-items: flex-start; text-align: left; }
 }
@@ -430,9 +445,6 @@ tbody tr:hover td { background: var(--sunk); }
 .year-limit b { color: var(--text); }
 .year-limit b.neg { color: var(--neg); }
 .year-limit:focus-visible { text-decoration: underline dotted; }
-.year dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 4px 0 0; font-size: .86rem; }
-.year dt { color: var(--muted); }
-.year dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .year > .ghost { align-self: flex-start; margin-top: auto; }
 .year.active { border-color: var(--accent); }
 .dap-guide { margin-top: 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; font-size: .9rem; }
