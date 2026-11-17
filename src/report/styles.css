@@ -224,6 +224,9 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .bar { height: 6px; border-radius: 99px; background: var(--accent); }
 .bar.muted { background: var(--muted); opacity: .45; }
 .bars.alloc { gap: 0; }
+.bar.segs { display: flex; gap: 1px; background: none; overflow: hidden; }
+.bar.segs > span { height: 100%; flex: none; }
+.bar.segs > span:last-child { flex: 1; }
 .bars.alloc .bar-row { grid-template-columns: minmax(0, 210px) 1fr auto; padding: 8px 6px; margin: 0 -6px; border-radius: var(--radius-sm); cursor: pointer; }
 .bars.alloc .bar-row:hover, .bars.alloc .bar-row:focus-visible { background: var(--sunk); }
 .bars.alloc .bar-label, .bars.alloc .num { display: flex; flex-direction: column; line-height: 1.3; }

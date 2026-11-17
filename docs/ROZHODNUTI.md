@@ -406,6 +406,9 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   splývala s panelem a přepínač vypadal jako jeden obdélník.
 - Logo instrumentu místo kolečka s tickerem zatím ne: vyžadovalo by nový zdroj obrázků (posílá tickery dalšímu serveru),
   kontrolu stažených obrázků a jejich vložení do reportu.
+- Pruhy **Složení portfolia** jsou rozdělené podle sektorů instrumentu v barvách a pořadí panelu Podle sektorů
+  (`sectorOrder`), nesektorový zbytek = Neznámé. Zvoleny sektory, ne země: většina ETF i akcií by byla skoro celá „USA“,
+  takže by barva zemí pruhy nerozlišila. Tooltip/`aria-label` vyjmenuje sektory.
 - **Akcie uvnitř ETF** (přání uživatele): přepínač v hlavičce panelu Složení portfolia „Instrumenty | Akcie uvnitř ETF“
   (výchozí Instrumenty, `state.allocView`; dřív samostatný panel pod sektory – uživatel chtěl akcie nahoře u zemí).
   Pod seznamem řádek „Ostatní“ = 100 % − známé pozice (menší a neznámé pozice v ETF). ETF rozložené na jednotlivé akcie a stejná

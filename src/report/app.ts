@@ -1272,18 +1272,30 @@ function instrumentBars(a: Analysis): HTMLElement[] {
   const total = a.holdings.reduce((n, x) => n + measure(x.value), 0);
   const items = [...a.holdings].sort((p, q) => measure(q.value) - measure(p.value));
   const max = Math.max(...items.map((x) => measure(x.value)), 1);
+  // Bars are split by the instrument's sectors in the colours (and order) of "Podle sektorů"
+  const order = new Map(sectorOrder(a).map((k, i) => [k, i]));
+  const segments = (x: Holding) => {
+    const known = x.sectors.filter((c) => c.weight > 0);
+    const rest = 100 - known.reduce((n, c) => n + c.weight, 0);
+    const list = rest > 0.5 ? [...known, { sector: '??', weight: rest }] : known;
+    return list.sort((p, q) => (order.get(p.sector) ?? 99) - (order.get(q.sector) ?? 99));
+  };
   return [
     h('div', { class: 'bars alloc' }, ...items.map((x) => {
       const v = measure(x.value);
-      const row = h('div', { class: 'bar-row', tabindex: '0', role: 'button', title: 'Zobrazit graf' },
+      const segs = segments(x);
+      const desc = segs.map((c) => `${sectorName(c.sector)} ${fmtNum(c.weight, 0)} %`).join(', ');
+      const row = h('div', { class: 'bar-row', tabindex: '0', role: 'button', title: `${desc}\nKliknutím zobrazíš graf` },
         h('span', { class: 'bar-label' }, h('b', {}, x.ticker), h('small', {}, x.name ?? '')),
-        h('div', { class: 'bar-track' }, paint(h('div', { class: 'bar' }), { width: `${(v / max) * 100}%`, background: colorOf(x.ticker) })),
+        h('div', { class: 'bar-track' }, paint(h('div', { class: 'bar segs', role: 'img', 'aria-label': `Sektory: ${desc}` },
+          ...segs.map((c) => paint(h('span', {}), { width: `${c.weight}%`, background: SECTOR_COLORS[c.sector] ?? SECTOR_COLORS.other! }))),
+        { width: `${(v / max) * 100}%` })),
         h('span', { class: 'num' }, h('b', {}, `${fmtNum(total ? (v / total) * 100 : 0, 1)} %`), h('small', {}, totals(x.value))));
       row.addEventListener('click', () => showInstrument(x.ticker));
       row.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); showInstrument(x.ticker); } });
       return row;
     })),
-    h('p', { class: 'hint' }, 'Kliknutím na instrument zobrazíš jeho graf.'),
+    h('p', { class: 'hint' }, 'Barvy v pruhu jsou sektory instrumentu (jako v „Podle sektorů“). Kliknutím na instrument zobrazíš jeho graf.'),
   ];
 }
 
@@ -1336,10 +1348,17 @@ function hoverTip(host: HTMLElement): <T extends HTMLElement>(el: T, content: ()
   };
 }
 
+/** Sectors by portfolio share, "other" and unknown last (same order in the sector panel and the composition bars). */
+function sectorOrder(a: Analysis): string[] {
+  const tail = (k: string) => (k === 'other' || k === '??' ? 1 : 0);
+  return [...(a.sectors ?? [])].sort((p, q) => tail(p.sector) - tail(q.sector) || q.share - p.share).map((x) => x.sector);
+}
+
 function sectorsPanel(a: Analysis): HTMLElement | null {
   const items = (a.sectors ?? []).filter((x) => x.share >= 0.05);
   if (!items.length) return null;
-  const sorted = [...items].sort((p, q) => (p.sector === 'other' || p.sector === '??' ? 1 : 0) - (q.sector === 'other' || q.sector === '??' ? 1 : 0) || q.share - p.share);
+  const order = sectorOrder(a);
+  const sorted = [...items].sort((p, q) => order.indexOf(p.sector) - order.indexOf(q.sector));
   const colour = (k: string) => SECTOR_COLORS[k] ?? '#9aa3b2';
   const value = (x: (typeof items)[number]) => { const v = x[state.cur]; return v == null ? null : fmtMoney(v, curCode()); };
   const wrap = h('div', { class: 'tip-host' });
