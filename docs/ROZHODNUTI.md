@@ -415,6 +415,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   (šířka = kusy), zleva už osvobozené kusy zeleně, pak ostatní barvou červená → zelená podle uplynulé části 3 let
   (stejně jako „Brzy bez daně“). Tooltip dílku: kusy, datum osvobození a za kolik dní. Dřív to byl jen podíl
   osvobozených kusů, který byl u většiny pozic prázdný a neříkal nic o zbytku.
+  Text pod pruhem: „vše bez daně“, „N ks bez daně, další od D“, „vše bez daně od D“ (jediný dílek) nebo
+  „první část bez daně od D“ (víc dílků, zatím nic osvobozeno) – samotné „bez daně od D“ vypadalo, že platí pro celou pozici.
 - **Brzy bez daně**: pruh `progress(…, 'heat')` má celý jednu barvu, která se podle podílu uplynulé doby plynule
   mění z červené (čerstvý nákup) přes oranžovou do zelené (těsně před splněním časového testu). Barva se míchá
   v CSS přes `color-mix(in oklch, …)` z proměnné `--p` (0–1); starší prohlížeče dostanou záložní `hsl()`.

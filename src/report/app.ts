@@ -730,7 +730,10 @@ function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
   const taxText = freeShare >= 1 - 1e-9
     ? h('span', { class: 'ok-text' }, 'vše bez daně')
-    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně, další od ` : 'bez daně od ', h('b', {}, czDate(x.nextTaxFreeDate)));
+    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně, další od `
+      // pieces = the same grouping by month as the bar (taxSegments)
+      : new Set(x.lots.map((l) => l.taxFreeFrom.slice(0, 7))).size > 1 ? 'první část bez daně od ' : 'vše bez daně od ',
+    h('b', {}, czDate(x.nextTaxFreeDate)));
   return accordion(`h:${x.ticker}`, [
     h('div', { class: 'irow' },
       avatar(x.ticker),
