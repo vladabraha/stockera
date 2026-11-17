@@ -684,11 +684,42 @@ function lazyList<T>(key: ListKey, box: HTMLElement, items: T[], row: (x: T, i: 
   return [box, bar];
 }
 
+/**
+ * Time-test bar of a position built from its purchases: one piece per month in which lots become tax-free (width =
+ * shares), already tax-free shares first in green, the rest coloured red → green by how far their 3 years have run.
+ */
+function taxSegments(x: Holding, text: HTMLElement): HTMLElement {
+  type Piece = { qty: number; free: boolean; from: string; to: string; days: number; progress: number };
+  const pieces = new Map<string, Piece>();
+  for (const l of x.lots) {
+    const key = l.taxFree ? 'free' : l.taxFreeFrom.slice(0, 7);
+    const p = pieces.get(key) ?? { qty: 0, free: l.taxFree, from: l.taxFreeFrom, to: l.taxFreeFrom, days: l.daysUntilTaxFree, progress: 0 };
+    p.progress = (p.progress * p.qty + lotProgress(l) * l.quantity) / (p.qty + l.quantity || 1);
+    p.qty += l.quantity;
+    if (l.taxFreeFrom < p.from) { p.from = l.taxFreeFrom; p.days = l.daysUntilTaxFree; }
+    if (l.taxFreeFrom > p.to) p.to = l.taxFreeFrom;
+    pieces.set(key, p);
+  }
+  const list = [...pieces.values()].sort((p, q) => Number(q.free) - Number(p.free) || p.from.localeCompare(q.from));
+  const describe = (p: Piece) => (p.free
+    ? `${fmtNum(p.qty, 4)} ks bez daně – časový test splněn`
+    : `${fmtNum(p.qty, 4)} ks bez daně od ${p.from === p.to ? czDate(p.from) : `${czDate(p.from)} – ${czDate(p.to)}`} (za ${fmtNum(p.days, 0)} dní)`);
+  const host = h('div', { class: 'itax tip-host' });
+  const tip = hoverTip(host);
+  host.append(
+    h('div', { class: 'tax-segs', role: 'img', 'aria-label': `Časový test: ${list.map(describe).join('; ')}` },
+      ...list.map((p) => tip(
+        paint(h('span', { class: p.free ? 'free' : '', tabindex: '-1' }), { 'flex-grow': String(p.qty), '--p': p.progress.toFixed(3) }),
+        () => [h('b', {}, p.free ? 'Bez daně' : `Bez daně od ${czDate(p.from)}`), h('div', {}, describe(p))]))),
+    text);
+  return host;
+}
+
 function holdingRow(x: Holding): HTMLElement {
   const freeShare = x.quantity > 0 ? x.taxFreeQuantity / x.quantity : 0;
   const taxText = freeShare >= 1 - 1e-9
     ? h('span', { class: 'ok-text' }, 'vše bez daně')
-    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně, ` : '', 'bez daně od ', h('b', {}, czDate(x.nextTaxFreeDate)));
+    : h('span', {}, x.taxFreeQuantity > 0 ? `${fmtNum(x.taxFreeQuantity, 4)} ks bez daně, další od ` : 'bez daně od ', h('b', {}, czDate(x.nextTaxFreeDate)));
   return accordion(`h:${x.ticker}`, [
     h('div', { class: 'irow' },
       avatar(x.ticker),
@@ -699,7 +730,7 @@ function holdingRow(x: Holding): HTMLElement {
         h('div', { class: 'ipl' },
           signed(signedMoney(totals(x.profit), totalsValue(x.profit)), totalsValue(x.profit)),
           chip(pct(x.profitPct), pctValue(x.profitPct)))),
-      h('div', { class: 'itax' }, progress(freeShare, freeShare >= 1 - 1e-9 ? 'done' : ''), taxText),
+      taxSegments(x, taxText),
     ),
   ], () => {
     const avg = x.lots.reduce((n, l) => n + l.openPrice * l.quantity, 0) / (x.quantity || 1);
