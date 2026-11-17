@@ -250,8 +250,8 @@ const SECTOR_INFO: Record<string, string> = {
 function progress(fraction: number, cls = ''): HTMLElement {
   const f = Math.max(0, Math.min(1, fraction));
   const fill = paint(h('div', { class: 'fill' }), { width: `${(f * 100).toFixed(1)}%` });
-  // "heat": the fill reveals a red → green gradient spanning the whole track, so its end colour shows the progress
-  if (f > 0) paint(fill, { '--span': `${(100 / f).toFixed(1)}%` });
+  // "heat": the whole fill takes one colour that shifts from red (just bought) to green (tax-free)
+  paint(fill, { '--p': f.toFixed(3) });
   return h('div', { class: `progress ${cls}` }, fill);
 }
 

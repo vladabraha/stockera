@@ -263,7 +263,10 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .progress .fill { height: 100%; border-radius: 99px; background: var(--warn); }
 .progress.done .fill { background: var(--pos); }
 .progress.over .fill { background: var(--neg); }
-.progress.heat .fill { background: linear-gradient(90deg, #e5484d, #f5a524 50%, #30a46c) 0 0 / var(--span, 100%) 100% no-repeat; }
+.progress.heat .fill {
+  background: hsl(calc(var(--p, 0) * 140) 65% 45%);
+  background: color-mix(in oklch, #30a46c calc(var(--p, 0) * 100%), #e5484d);
+}
 .ok-text { color: var(--pos); font-weight: 600; }
 
 /* avatars: round, like broker logos */
