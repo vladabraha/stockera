@@ -273,7 +273,13 @@ svg .marker.sell, .dot.sell { fill: var(--neg); background: var(--neg); }
 .tf-sum { margin: 0 0 10px; }
 .offset { font-size: .86rem; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
 .offset p { margin: 0 0 6px; }
-.offset ul { margin: 0 0 6px; padding-left: 18px; }
+.offset-list { list-style: none; margin: 0 0 6px; padding: 0; }
+.offset-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.offset-list li:last-child { border-bottom: 0; }
+.offset-list .lname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.offset-list .num { text-align: right; white-space: nowrap; }
+.offset-list li > .small { grid-column: 1 / -1; }
+.offset-list.scroll-box { max-height: 15rem; padding-right: 6px; }
 .upcoming li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
 .upcoming li:first-child { border-top: 0; padding-top: 0; }
 .upcoming .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }

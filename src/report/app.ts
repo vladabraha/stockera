@@ -1672,9 +1672,9 @@ function lossOffsetNote(baseCzk: number, holdings: Holding[]): HTMLElement {
       : `Daň vyrovnáš, když letos prodáš se ztrátou alespoň ${fmtMoney(baseCzk, 'CZK')} – klesne o ${saved} na 0 Kč. Stačí prodat:`;
   return h('div', { class: 'offset' },
     h('p', {}, lead),
-    ...(plan.sales.length ? lazyList('offset', h('ul', {}), plan.sales, (s) => h('li', {},
-      h('b', {}, s.ticker), ` ${fmtNum(s.quantity, 4)} ks`, manyAccounts ? h('span', { class: 'muted' }, ` (účet ${s.account})`) : null,
-      h('span', { class: 'muted' }, ', ztráta '), h('span', { class: 'neg' }, fmtMoney(s.lossCzk, 'CZK')),
+    ...(plan.sales.length ? lazyList('offset', h('ul', { class: 'offset-list' }), plan.sales, (s) => h('li', {},
+      h('span', { class: 'lname' }, h('b', {}, s.ticker), ` ${fmtNum(s.quantity, 4)} ks`, manyAccounts ? h('span', { class: 'muted' }, ` (účet ${s.account})`) : null),
+      h('span', { class: 'num neg', title: 'Ztráta' }, fmtMoney(s.lossCzk, 'CZK')),
       s.taxFreeQuantity > 0
         ? h('div', { class: 'muted small' }, `včetně ${fmtNum(s.taxFreeQuantity, 4)} ks s časovým testem – při zpětném nákupu poběží 3letý test znovu`)
         : null), 5) : []),

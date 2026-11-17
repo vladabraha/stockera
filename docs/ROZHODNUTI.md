@@ -131,7 +131,8 @@ Pravidla ověřená k 18. 9. 2026 (taxfolio.cz). Není to daňové poradenství 
   **FIFO** per účet a ticker, takže jde prodat jen nejstarší loty; loty se splněným testem se nezapočítají (jejich
   zisk i ztráta jsou osvobozené). Nejdřív pozice s největší ztrátou, poslední jen částečně. Text uvádí, o kolik daň klesne (z → na). Podle aktuálních (i živých) cen.
   Když FIFO prodá i staré loty se splněným testem (`taxFreeQuantity`), doporučení na to upozorní – po zpětném nákupu
-  by časový test běžel znovu. Při více účtech se u doporučení uvádí účet.
+  by časový test běžel znovu. Při více účtech se u doporučení uvádí účet. Seznam je mřížka (ticker a kusy vlevo, ztráta
+  zarovnaná doprava), aby šly částky porovnat pod sebou.
 - **Návod k daňovému přiznání** (tlačítko „Co vyplnit v přiznání“ v kartě roku, `taxReturnGuide` v `tax.ts`), podle
   tiskopisu MFin 5405 a pokynů Finanční správy:
   - zdanitelné prodeje (limit překročen, bez časového testu, i ztrátové) → **Příloha č. 2, oddíl 2**, druh příjmu
